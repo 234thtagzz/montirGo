@@ -1,7 +1,8 @@
 import { View, Text, TextInput, Pressable, StyleSheet, ScrollView, Alert } from 'react-native';
 import { useState } from 'react';
 import { useRouter } from 'expo-router';
-import { useAuth } from '@/lib/api';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { getApiErrorMessage, serviceRequestApi } from '@/lib/api';
 
 export default function NewServiceRequest() {
   const [form, setForm] = useState({
@@ -9,7 +10,7 @@ export default function NewServiceRequest() {
     vehicleModel: '',
     issueDescription: '',
   });
-  const { logout } = useAuth();
+  const [loading, setLoading] = useState(false);
   const router = useRouter();
 
   const submitRequest = async () => {
@@ -17,8 +18,30 @@ export default function NewServiceRequest() {
       Alert.alert('Validasi', 'Harap lengkapi field kendaraan dan masalah');
       return;
     }
-    Alert.alert('Sukses', 'Permintaan dikirim!');
-    router.replace('/(client)');
+    setLoading(true);
+    try {
+      const userStr = await AsyncStorage.getItem('montirgo_user');
+      const user = userStr ? JSON.parse(userStr) : null;
+      if (!user?.id) {
+        Alert.alert('Gagal', 'Sesi habis. Silakan login ulang.');
+        router.replace('/(auth)/login');
+        return;
+      }
+      await serviceRequestApi.create({
+        clientId: user.id,
+        vehicleId: '',
+        issueDescription: `[${form.vehicleBrand} ${form.vehicleModel}] ${form.issueDescription}`,
+        lat: -6.2,
+        lng: 106.816666,
+        address: 'Lokasi client (Expo Go)',
+      });
+      Alert.alert('Sukses', 'Permintaan dikirim!');
+      router.replace('/(client)');
+    } catch (error) {
+      Alert.alert('Gagal', getApiErrorMessage(error, 'Gagal mengirim permintaan.'));
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -57,8 +80,8 @@ export default function NewServiceRequest() {
         </View>
 
         <View style={styles.buttonGroup}>
-          <Pressable onPress={submitRequest} style={styles.button}>
-            <Text style={styles.buttonText}>Kirim</Text>
+          <Pressable onPress={submitRequest} disabled={loading} style={styles.button}>
+            <Text style={styles.buttonText}>{loading ? 'Mengirim...' : 'Kirim'}</Text>
           </Pressable>
         </View>
       </View>

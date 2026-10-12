@@ -1,8 +1,7 @@
 import { View, Text, StyleSheet, ScrollView, Alert, Pressable } from 'react-native';
 import { useState, useEffect } from 'react';
 import { useRouter, useLocalSearchParams } from 'expo-router';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import { useAuth } from '@/lib/api';
+import { getApiErrorMessage, serviceRequestApi, useAuth } from '@/lib/api';
 
 export default function MechanicActiveOrder() {
   const { id: orderId } = useLocalSearchParams<{ id: string }>();
@@ -16,16 +15,13 @@ export default function MechanicActiveOrder() {
 
   const fetchOrderDetail = async () => {
     try {
-      const token = await AsyncStorage.getItem('montirgo_token');
-      const response = await fetch('/api/service-requests/' + orderId, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
-      const data = await response.json();
+      if (!orderId || typeof orderId !== 'string') return;
+      // Pakai axios client (baseURL + Bearer otomatis), bukan fetch('/api/...').
+      const data = await serviceRequestApi.getById(orderId);
       setOrder(data);
     } catch (error) {
       console.error('Gagal fetch order:', error);
+      Alert.alert('Gagal', getApiErrorMessage(error, 'Gagal memuat detail order.'));
     }
   };
 
