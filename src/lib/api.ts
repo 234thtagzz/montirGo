@@ -1,3 +1,7 @@
+// LEGACY — klien backend Express (EXPO_PUBLIC_API_URL).
+// Auth sudah migrasi ke Supabase (src/features/auth). Modul lain (service-request,
+// payment, earnings) masih memakai ini sampai dimigrasi per fitur ke Supabase.
+// Jangan tambah pemakaian baru di sini.
 import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 

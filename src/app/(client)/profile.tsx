@@ -1,6 +1,6 @@
 import { View, Text, Pressable, StyleSheet, Alert } from 'react-native';
 import { useRouter } from 'expo-router';
-import { useAuth } from '@/lib/api';
+import { useAuth } from '@/features/auth/service';
 
 export default function ClientProfileScreen() {
   const { logout } = useAuth();

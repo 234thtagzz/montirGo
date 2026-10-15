@@ -1,7 +1,8 @@
 import { View, Text, StyleSheet, ScrollView, Alert, Pressable } from 'react-native';
 import { useState, useEffect } from 'react';
 import { useRouter, useLocalSearchParams } from 'expo-router';
-import { getApiErrorMessage, serviceRequestApi, useAuth } from '@/lib/api';
+import { getApiErrorMessage, serviceRequestApi } from '@/lib/api';
+import { useAuth } from '@/features/auth/service';
 
 export default function MechanicActiveOrder() {
   const { id: orderId } = useLocalSearchParams<{ id: string }>();

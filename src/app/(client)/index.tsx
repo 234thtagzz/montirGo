@@ -2,7 +2,8 @@ import { View, Text, StyleSheet, ScrollView, RefreshControl, Alert } from 'react
 import { useState, useEffect } from 'react';
 import { useRouter } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { getApiErrorMessage, serviceRequestApi, useAuth } from '@/lib/api';
+import { getApiErrorMessage, serviceRequestApi } from '@/lib/api';
+import { useAuth } from '@/features/auth/service';
 
 export default function ClientDashboard() {
   const [orders, setOrders] = useState<any[]>([]);
