@@ -1,3 +1,7 @@
+// LEGACY — klien backend Express (EXPO_PUBLIC_API_URL).
+// Auth sudah migrasi ke Supabase (src/features/auth). Modul lain (service-request,
+// payment, earnings) masih memakai ini sampai dimigrasi per fitur ke Supabase.
+// Jangan tambah pemakaian baru di sini.
 import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
@@ -39,7 +43,8 @@ export function getApiErrorMessage(error: unknown, fallback: string): string {
     const data = error.response?.data as { message?: string } | undefined;
     if (data?.message) return data.message;
     if (error.code === 'ECONNABORTED') return 'Koneksi ke server timeout. Periksa EXPO_PUBLIC_API_URL.';
-    if (!error.response) return 'Tidak dapat terhubung ke server. Periksa backend sudah jalan.';
+    if (!error.response)
+      return 'Tidak dapat terhubung ke server. Pastikan backend jalan DAN EXPO_PUBLIC_API_URL = IP LAN laptop (mis. http://192.168.1.10:5000), bukan localhost.';
   }
   if (error instanceof Error && error.message) return error.message;
   return fallback;

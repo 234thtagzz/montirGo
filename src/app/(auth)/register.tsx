@@ -1,7 +1,7 @@
 import { View, Text, TextInput, Pressable, StyleSheet, Alert } from 'react-native';
 import { useState } from 'react';
 import { Link, useLocalSearchParams, useRouter } from 'expo-router';
-import { getApiErrorMessage, useAuth, type UserRole } from '@/lib/api';
+import { getAuthErrorMessage, useAuth, type UserRole } from '@/features/auth/service';
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -34,18 +34,28 @@ export default function RegisterScreen() {
     }
     setLoading(true);
     try {
-      // Langsung tersimpan ke MySQL (Railway) lewat POST /auth/register
-      const { user } = await register({
+      // Tersimpan ke Supabase Auth + tabel profiles (via trigger handle_new_user).
+      const { user, needsConfirmation } = await register({
         name: name.trim(),
         email: email.trim().toLowerCase(),
         password,
         phone: phone.trim(),
         role,
       });
-      Alert.alert('Berhasil', `Akun ${user.role === 'MONTIR' ? 'Montir' : 'Client'} berhasil dibuat. Silakan login.`);
+      if (needsConfirmation || !user) {
+        Alert.alert(
+          'Cek Email',
+          'Akun dibuat. Verifikasi email kamu terlebih dahulu, lalu silakan login.',
+        );
+      } else {
+        Alert.alert(
+          'Berhasil',
+          `Akun ${user.role === 'MONTIR' ? 'Montir' : 'Client'} berhasil dibuat. Silakan login.`,
+        );
+      }
       router.replace('/(auth)/login');
     } catch (error) {
-      Alert.alert('Gagal', getApiErrorMessage(error, 'Terjadi kesalahan saat pendaftaran.'));
+      Alert.alert('Gagal', getAuthErrorMessage(error, 'Terjadi kesalahan saat pendaftaran.'));
     } finally {
       setLoading(false);
     }

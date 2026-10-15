@@ -1,8 +1,9 @@
-import { View, Text, StyleSheet, ScrollView, RefreshControl } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, RefreshControl, Alert } from 'react-native';
 import { useState, useEffect } from 'react';
 import { useRouter } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { useAuth } from '@/lib/api';
+import { getApiErrorMessage, serviceRequestApi } from '@/lib/api';
+import { useAuth } from '@/features/auth/service';
 
 export default function ClientDashboard() {
   const [orders, setOrders] = useState<any[]>([]);
@@ -10,29 +11,30 @@ export default function ClientDashboard() {
   const { logout } = useAuth();
   const router = useRouter();
 
-  useEffect(() => {
-    fetchMyOrders();
-  }, []);
-
   const fetchMyOrders = async () => {
     try {
-      const token = await AsyncStorage.getItem('montirgo_token');
       const userStr = await AsyncStorage.getItem('montirgo_user');
       const user = userStr ? JSON.parse(userStr) : null;
       const userId = user ? user.id : null;
-      const response = await fetch('/api/service-requests?clientId=' + userId, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
-      const data = await response.json();
-      setOrders(data);
+      if (!userId) {
+        setOrders([]);
+        return;
+      }
+      // Pakai axios client (baseURL + Bearer otomatis), bukan fetch('/api/...')
+      // yang gagal di Expo Go native karena tanpa host.
+      const data = await serviceRequestApi.listMyRequests(userId);
+      setOrders(Array.isArray(data) ? data : []);
     } catch (error) {
       console.error('Gagal mengambil order:', error);
+      Alert.alert('Gagal', getApiErrorMessage(error, 'Gagal memuat order.'));
     } finally {
       setRefreshing(false);
     }
   };
+
+  useEffect(() => {
+    fetchMyOrders();
+  }, []);
 
   const handleLogout = async () => {
     await logout();
@@ -62,7 +64,7 @@ export default function ClientDashboard() {
                 Kendaraan: {order.vehicleBrand} {order.vehicleModel} ({order.vehicleYear || ''})
               </Text>
               <Text style={styles.orderDetail}>
-                Masalah: {order.vehicleIssueDescription.substring(0, 30)}{order.vehicleIssueDescription.length > 30 ? '...' : ''}
+                Masalah: {(order.vehicleIssueDescription ?? '').substring(0, 30)}{(order.vehicleIssueDescription ?? '').length > 30 ? '...' : ''}
               </Text>
             </View>
             <View style={styles.orderActions}>

@@ -1,7 +1,7 @@
 import { View, Text, TextInput, Pressable, StyleSheet, Alert } from 'react-native';
 import { useState } from 'react';
 import { Link, useRouter } from 'expo-router';
-import { getApiErrorMessage, isAccountNotFound, useAuth } from '@/lib/api';
+import { getAuthErrorMessage, useAuth } from '@/features/auth/service';
 
 export default function LoginScreen() {
   const [email, setEmail] = useState('');
@@ -25,16 +25,7 @@ export default function LoginScreen() {
         router.replace('/(client)');
       }
     } catch (error) {
-      const message = getApiErrorMessage(error, 'Email atau kata sandi salah.');
-      if (isAccountNotFound(error)) {
-        // User belum punya akun -> arahkan ke register
-        Alert.alert('Akun Tidak Ditemukan', message, [
-          { text: 'Coba Lagi', style: 'cancel' },
-          { text: 'Daftar Sekarang', onPress: () => router.push('/(auth)/register') },
-        ]);
-      } else {
-        Alert.alert('Login Gagal', message);
-      }
+      Alert.alert('Login Gagal', getAuthErrorMessage(error, 'Email atau kata sandi salah.'));
     } finally {
       setLoading(false);
     }
