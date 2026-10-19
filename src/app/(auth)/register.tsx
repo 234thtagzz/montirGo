@@ -1,9 +1,34 @@
-import { View, Text, TextInput, Pressable, StyleSheet, Alert } from 'react-native';
+import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useState } from 'react';
 import { Link, useLocalSearchParams, useRouter } from 'expo-router';
+import { Button } from '@/components/ui/button';
+import { Ionicons, type IconName } from '@/components/ui/icon';
+import { AuthField } from '@/features/auth/components/auth-field';
+import { AuthScreen } from '@/features/auth/components/auth-screen';
 import { getAuthErrorMessage, useAuth, type UserRole } from '@/features/auth/service';
+import { Brand, Radius, Space } from '@/constants/brand';
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+const ROLE_OPTIONS: {
+  key: UserRole;
+  title: string;
+  description: string;
+  icon: IconName;
+}[] = [
+  {
+    key: 'CLIENT',
+    title: 'Client',
+    description: 'Butuh bantuan montir',
+    icon: 'car-sport-outline',
+  },
+  {
+    key: 'MONTIR',
+    title: 'Montir',
+    description: 'Tawarkan jasa bantuan',
+    icon: 'construct-outline',
+  },
+];
 
 export default function RegisterScreen() {
   const params = useLocalSearchParams<{ role?: string }>();
@@ -62,162 +87,166 @@ export default function RegisterScreen() {
   };
 
   return (
-    <View style={styles.container}>
-      <View style={styles.card}>
-        <Text style={styles.title}>Daftar MontirGo</Text>
-
-        <Text style={styles.label}>Daftar sebagai</Text>
-        <View style={styles.roleRow}>
-          {(['CLIENT', 'MONTIR'] as const).map((r) => (
+    <AuthScreen
+      showBack
+      title="Buat akun baru"
+      subtitle="Pilih peranmu, lalu lengkapi data untuk mulai menggunakan MontirGo."
+    >
+      <Text style={styles.label}>Daftar sebagai</Text>
+      <View style={styles.roleRow}>
+        {ROLE_OPTIONS.map((option) => {
+          const active = role === option.key;
+          return (
             <Pressable
-              key={r}
-              onPress={() => setRole(r)}
-              style={[styles.roleChip, role === r && styles.roleChipActive]}>
-              <Text style={[styles.roleChipText, role === r && styles.roleChipTextActive]}>
-                {r === 'CLIENT' ? 'Client' : 'Montir'}
+              key={option.key}
+              accessibilityRole="button"
+              accessibilityState={{ selected: active }}
+              accessibilityLabel={`Daftar sebagai ${option.title}`}
+              onPress={() => setRole(option.key)}
+              style={({ pressed }) => [
+                styles.roleCard,
+                active && styles.roleCardActive,
+                pressed && styles.pressed,
+              ]}
+            >
+              <View style={[styles.roleIcon, active && styles.roleIconActive]}>
+                <Ionicons
+                  name={option.icon}
+                  size={18}
+                  color={active ? Brand.primary : Brand.textSecondary}
+                />
+              </View>
+              {active ? (
+                <Ionicons
+                  name="checkmark-circle"
+                  size={16}
+                  color={Brand.primary}
+                  style={styles.roleCheck}
+                />
+              ) : null}
+              <Text style={[styles.roleTitle, active && styles.roleTitleActive]}>
+                {option.title}
               </Text>
+              <Text style={styles.roleDescription}>{option.description}</Text>
             </Pressable>
-          ))}
-        </View>
-
-        <TextInput
-          placeholder="Nama Lengkap"
-          value={name}
-          onChangeText={setName}
-          style={styles.input}
-        />
-        <TextInput
-          placeholder="Email"
-          value={email}
-          onChangeText={setEmail}
-          style={styles.input}
-          autoCapitalize="none"
-          keyboardType="email-address"
-        />
-        <TextInput
-          placeholder="Nomor Telepon"
-          value={phone}
-          onChangeText={setPhone}
-          style={styles.input}
-          keyboardType="phone-pad"
-        />
-        <TextInput
-          placeholder="Kata Sandi (min. 6 karakter)"
-          value={password}
-          onChangeText={setPassword}
-          style={styles.input}
-          secureTextEntry
-        />
-        <Pressable onPress={handleRegister} disabled={loading} style={styles.button}>
-          {loading ? (
-            <Text style={styles.buttonText}>Mendaftar...</Text>
-          ) : (
-            <Text style={styles.buttonText}>Daftar</Text>
-          )}
-        </Pressable>
-
-        <View style={styles.footer}>
-          <Text style={styles.footerText}>Sudah punya akun? </Text>
-          <Link href="/(auth)/login" style={styles.link}>
-            Masuk
-          </Link>
-        </View>
+          );
+        })}
       </View>
-    </View>
+
+      <AuthField
+        label="Nama lengkap"
+        icon="person-outline"
+        placeholder="Contoh: Budi Santoso"
+        value={name}
+        onChangeText={setName}
+        autoComplete="name"
+        textContentType="name"
+        returnKeyType="next"
+      />
+      <AuthField
+        label="Email"
+        icon="mail-outline"
+        placeholder="nama@email.com"
+        value={email}
+        onChangeText={setEmail}
+        autoCapitalize="none"
+        autoComplete="email"
+        keyboardType="email-address"
+        textContentType="emailAddress"
+        returnKeyType="next"
+      />
+      <AuthField
+        label="Nomor telepon (opsional)"
+        icon="call-outline"
+        placeholder="08xx xxxx xxxx"
+        value={phone}
+        onChangeText={setPhone}
+        autoComplete="tel"
+        keyboardType="phone-pad"
+        textContentType="telephoneNumber"
+        returnKeyType="next"
+      />
+      <AuthField
+        label="Kata sandi"
+        icon="lock-closed-outline"
+        placeholder="Minimal 6 karakter"
+        value={password}
+        onChangeText={setPassword}
+        secureTextEntry
+        autoCapitalize="none"
+        autoComplete="new-password"
+        textContentType="newPassword"
+        returnKeyType="done"
+        onSubmitEditing={handleRegister}
+      />
+
+      <Button
+        label="Daftar"
+        icon="person-add-outline"
+        loading={loading}
+        onPress={handleRegister}
+        style={styles.submit}
+      />
+
+      <View style={styles.footer}>
+        <Text style={styles.footerText}>Sudah punya akun?</Text>
+        <Link href="/(auth)/login" style={styles.link}>
+          Masuk
+        </Link>
+      </View>
+    </AuthScreen>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
+  label: { fontSize: 12.5, fontWeight: '700', color: Brand.text, marginBottom: Space.sm },
+  roleRow: { flexDirection: 'row', gap: Space.sm },
+  roleCard: {
     flex: 1,
-    backgroundColor: '#fff',
-    justifyContent: 'center',
-    paddingHorizontal: 24,
-  },
-  card: {
-    backgroundColor: '#fff',
-    padding: 32,
-    borderRadius: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 2,
-  },
-  title: {
-    fontSize: 24,
-    fontWeight: 600,
-    textAlign: 'center',
-    marginBottom: 24,
-    color: '#1a1a1a',
-  },
-  label: {
-    fontSize: 14,
-    fontWeight: 600,
-    color: '#1a1a1a',
-    marginBottom: 8,
-  },
-  roleRow: {
-    flexDirection: 'row',
-    gap: 12,
-    marginBottom: 16,
-  },
-  roleChip: {
-    flex: 1,
-    padding: 14,
-    borderRadius: 12,
-    backgroundColor: '#f5f5f7',
-    alignItems: 'center',
+    padding: Space.md,
+    borderRadius: Radius.md,
     borderWidth: 1,
-    borderColor: 'transparent',
+    borderColor: Brand.border,
+    backgroundColor: '#F7F9FC',
   },
-  roleChipActive: {
-    backgroundColor: '#e8f1fe',
-    borderColor: '#3c87f7',
-  },
-  roleChipText: {
-    fontSize: 15,
-    fontWeight: 600,
-    color: '#60646c',
-  },
-  roleChipTextActive: {
-    color: '#3c87f7',
-  },
-  input: {
-    width: '100%',
-    height: 50,
-    backgroundColor: '#f5f5f7',
-    borderRadius: 12,
-    paddingHorizontal: 16,
-    fontSize: 16,
-    marginBottom: 16,
-    color: '#1a1a1a',
-  },
-  button: {
-    backgroundColor: '#3c87f7',
-    padding: 16,
-    borderRadius: 12,
+  roleCardActive: { borderColor: Brand.primary, backgroundColor: Brand.primarySoft },
+  roleIcon: {
+    width: 34,
+    height: 34,
+    borderRadius: Radius.sm,
+    backgroundColor: Brand.surface,
+    borderWidth: 1,
+    borderColor: Brand.border,
     alignItems: 'center',
-    marginTop: 8,
+    justifyContent: 'center',
   },
-  buttonText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: 600,
+  roleIconActive: { borderColor: Brand.primaryBorder },
+  roleCheck: { position: 'absolute', top: Space.sm, right: Space.sm },
+  roleTitle: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: Brand.text,
+    marginTop: Space.sm,
   },
+  roleTitleActive: { color: Brand.primary },
+  roleDescription: {
+    fontSize: 10.5,
+    lineHeight: 14,
+    color: Brand.textSecondary,
+    marginTop: 2,
+  },
+  pressed: { opacity: 0.8 },
+  submit: { marginTop: Space.xl },
   footer: {
     flexDirection: 'row',
-    justifyContent: 'center',
     alignItems: 'center',
-    marginTop: 20,
+    justifyContent: 'center',
+    gap: 6,
+    marginTop: Space.xxl,
+    paddingTop: Space.lg,
+    borderTopWidth: 1,
+    borderTopColor: Brand.divider,
   },
-  footerText: {
-    color: '#60646c',
-    fontSize: 14,
-  },
-  link: {
-    color: '#3c87f7',
-    fontSize: 14,
-    fontWeight: 600,
-  },
+  footerText: { fontSize: 12.5, color: Brand.textSecondary },
+  link: { fontSize: 12.5, fontWeight: '700', color: Brand.primary },
 });

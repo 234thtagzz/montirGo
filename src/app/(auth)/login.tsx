@@ -1,7 +1,11 @@
-import { View, Text, TextInput, Pressable, StyleSheet, Alert } from 'react-native';
+import { Alert, StyleSheet, Text, View } from 'react-native';
 import { useState } from 'react';
 import { Link, useRouter } from 'expo-router';
+import { Button } from '@/components/ui/button';
+import { AuthField } from '@/features/auth/components/auth-field';
+import { AuthScreen } from '@/features/auth/components/auth-screen';
 import { getAuthErrorMessage, useAuth } from '@/features/auth/service';
+import { Brand, Space } from '@/constants/brand';
 
 export default function LoginScreen() {
   const [email, setEmail] = useState('');
@@ -32,102 +36,66 @@ export default function LoginScreen() {
   };
 
   return (
-    <View style={styles.container}>
-      <View style={styles.card}>
-        <Text style={styles.title}>Login MontirGo</Text>
-        <TextInput
-          placeholder="Email"
-          value={email}
-          onChangeText={setEmail}
-          style={styles.input}
-          autoCapitalize="none"
-          keyboardType="email-address"
-        />
-        <TextInput
-          placeholder="Kata Sandi"
-          value={password}
-          onChangeText={setPassword}
-          style={styles.input}
-          secureTextEntry
-        />
-        <Pressable onPress={handleLogin} disabled={loading} style={styles.button}>
-          {loading ? (
-            <Text style={styles.buttonText}>Sedang login...</Text>
-          ) : (
-            <Text style={styles.buttonText}>Masuk</Text>
-          )}
-        </Pressable>
+    <AuthScreen
+      title="Masuk ke akun"
+      subtitle="Gunakan email dan kata sandi yang terdaftar untuk melanjutkan."
+    >
+      <AuthField
+        label="Email"
+        icon="mail-outline"
+        placeholder="nama@email.com"
+        value={email}
+        onChangeText={setEmail}
+        autoCapitalize="none"
+        autoComplete="email"
+        keyboardType="email-address"
+        textContentType="emailAddress"
+        returnKeyType="next"
+      />
+      <AuthField
+        label="Kata sandi"
+        icon="lock-closed-outline"
+        placeholder="Masukkan kata sandi"
+        value={password}
+        onChangeText={setPassword}
+        secureTextEntry
+        autoCapitalize="none"
+        autoComplete="current-password"
+        textContentType="password"
+        returnKeyType="done"
+        onSubmitEditing={handleLogin}
+      />
 
-        <View style={styles.footer}>
-          <Text style={styles.footerText}>Belum punya akun? </Text>
-          <Link href="/(auth)/register" style={styles.link}>
-            Daftar Sekarang
-          </Link>
-        </View>
+      <Button
+        label="Masuk"
+        icon="log-in-outline"
+        loading={loading}
+        onPress={handleLogin}
+        style={styles.submit}
+      />
+
+      <View style={styles.footer}>
+        <Text style={styles.footerText}>Belum punya akun?</Text>
+        <Link href="/(auth)/register" style={styles.link}>
+          Daftar sekarang
+        </Link>
       </View>
-    </View>
+    </AuthScreen>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#fff',
-    justifyContent: 'center',
-    paddingHorizontal: 24,
-  },
-  card: {
-    backgroundColor: '#fff',
-    padding: 32,
-    borderRadius: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 2,
-  },
-  title: {
-    fontSize: 24,
-    fontWeight: 600,
-    textAlign: 'center',
-    marginBottom: 32,
-    color: '#1a1a1a',
-  },
-  input: {
-    width: '100%',
-    height: 50,
-    backgroundColor: '#f5f5f7',
-    borderRadius: 12,
-    paddingHorizontal: 16,
-    fontSize: 16,
-    marginBottom: 16,
-    color: '#1a1a1a',
-  },
-  button: {
-    backgroundColor: '#3c87f7',
-    padding: 16,
-    borderRadius: 12,
-    alignItems: 'center',
-    marginTop: 8,
-  },
-  buttonText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: 600,
-  },
+  submit: { marginTop: Space.xl },
   footer: {
     flexDirection: 'row',
-    justifyContent: 'center',
     alignItems: 'center',
-    marginTop: 20,
+    justifyContent: 'center',
+    gap: 6,
+    marginTop: Space.xxl,
+    paddingTop: Space.lg,
+    borderTopWidth: 1,
+    borderTopColor: Brand.divider,
   },
-  footerText: {
-    color: '#60646c',
-    fontSize: 14,
-  },
-  link: {
-    color: '#3c87f7',
-    fontSize: 14,
-    fontWeight: 600,
-  },
+  footerText: { fontSize: 12.5, color: Brand.textSecondary },
+  link: { fontSize: 12.5, fontWeight: '700', color: Brand.primary },
 });

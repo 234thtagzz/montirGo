@@ -1,159 +1,424 @@
-import { View, Text, TextInput, Pressable, StyleSheet, ScrollView, Alert } from 'react-native';
-import { useState } from 'react';
-import { useRouter } from 'expo-router';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import { getApiErrorMessage, serviceRequestApi } from '@/lib/api';
+import { useCallback, useMemo, useState } from 'react';
+import {
+  Alert,
+  KeyboardAvoidingView,
+  Platform,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+} from 'react-native';
+import { useLocalSearchParams, useFocusEffect, useRouter } from 'expo-router';
+import * as Location from 'expo-location';
+import { ScreenHeader } from '@/components/ui/screen-header';
+import { Button } from '@/components/ui/button';
+import { LoadingState } from '@/components/ui/state';
+import { Ionicons } from '@/components/ui/icon';
+import { Brand, Radius, ScreenPadding, Space } from '@/constants/brand';
+import { useSessionUser } from '@/hooks/use-session-user';
+import { createServiceRequest, listMyVehicles, type ClientVehicle } from '@/features/client/service';
+import {
+  SERVICE_CATEGORIES,
+  getCategory,
+} from '@/features/service-request/categories';
 
-export default function NewServiceRequest() {
-  const [form, setForm] = useState({
-    vehicleBrand: '',
-    vehicleModel: '',
-    issueDescription: '',
-  });
-  const [loading, setLoading] = useState(false);
+const PRESET_CATEGORIES = SERVICE_CATEGORIES.filter((category) => !category.route);
+
+export default function NewServiceRequestScreen() {
+  const params = useLocalSearchParams<{ category?: string; vehicleId?: string }>();
   const router = useRouter();
+  const { user, loading: sessionLoading } = useSessionUser();
 
-  const submitRequest = async () => {
-    if (!form.vehicleBrand || !form.issueDescription) {
-      Alert.alert('Validasi', 'Harap lengkapi field kendaraan dan masalah');
-      return;
-    }
-    setLoading(true);
+  const initialCategory = getCategory(params.category) ?? PRESET_CATEGORIES[0];
+
+  const [categoryKey, setCategoryKey] = useState(initialCategory.key);
+  const [vehicles, setVehicles] = useState<ClientVehicle[]>([]);
+  const [vehicleId, setVehicleId] = useState<string | null>(params.vehicleId ?? null);
+  const [issue, setIssue] = useState(initialCategory.presetIssue ?? '');
+  const [symptoms, setSymptoms] = useState('');
+  const [address, setAddress] = useState('');
+  const [coords, setCoords] = useState<{ lat: number; lng: number } | null>(null);
+  const [locating, setLocating] = useState(false);
+  const [locationError, setLocationError] = useState<string | null>(null);
+  const [phone, setPhone] = useState<string | null>(null);
+  const [notes, setNotes] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+
+  const activeCategory = useMemo(() => getCategory(categoryKey), [categoryKey]);
+  const contactPhone = phone ?? user?.phoneNumber ?? '';
+
+  const loadVehicles = useCallback(async () => {
     try {
-      const userStr = await AsyncStorage.getItem('montirgo_user');
-      const user = userStr ? JSON.parse(userStr) : null;
-      if (!user?.id) {
-        Alert.alert('Gagal', 'Sesi habis. Silakan login ulang.');
-        router.replace('/(auth)/login');
+      setVehicles(await listMyVehicles());
+    } catch {
+      // Kendaraan opsional — form tetap bisa dikirim tanpa kendaraan tersimpan.
+    }
+  }, []);
+
+  useFocusEffect(
+    useCallback(() => {
+      loadVehicles();
+    }, [loadVehicles]),
+  );
+
+  const selectCategory = (key: string) => {
+    const previousPreset = getCategory(categoryKey)?.presetIssue ?? '';
+    const nextPreset = getCategory(key)?.presetIssue ?? '';
+    setCategoryKey(key);
+    setIssue((current) => (current.trim() === '' || current === previousPreset ? nextPreset : current));
+  };
+
+  const detectLocation = async () => {
+    setLocating(true);
+    setLocationError(null);
+    try {
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== 'granted') {
+        setLocationError('Izin lokasi ditolak. Aktifkan izin lokasi untuk mengirim permintaan.');
         return;
       }
-      await serviceRequestApi.create({
-        clientId: user.id,
-        vehicleId: '',
-        issueDescription: `[${form.vehicleBrand} ${form.vehicleModel}] ${form.issueDescription}`,
-        lat: -6.2,
-        lng: 106.816666,
-        address: 'Lokasi client (Expo Go)',
+      const position = await Location.getCurrentPositionAsync({
+        accuracy: Location.Accuracy.Balanced,
       });
-      Alert.alert('Sukses', 'Permintaan dikirim!');
-      router.replace('/(client)');
-    } catch (error) {
-      Alert.alert('Gagal', getApiErrorMessage(error, 'Gagal mengirim permintaan.'));
+      const { latitude, longitude } = position.coords;
+      setCoords({ lat: latitude, lng: longitude });
+
+      let resolvedAddress = '';
+      if (Platform.OS !== 'web') {
+        try {
+          const [place] = await Location.reverseGeocodeAsync({ latitude, longitude });
+          if (place) {
+            resolvedAddress = [
+              place.street,
+              place.district,
+              place.city,
+              place.region,
+            ]
+              .filter(Boolean)
+              .join(', ');
+          }
+        } catch {
+          // Reverse geocode gagal: koordinat tetap tersimpan, alamat bisa diisi manual.
+        }
+      }
+
+      if (!address.trim()) {
+        setAddress(resolvedAddress || 'Lokasi terdeteksi');
+      }
+    } catch {
+      setLocationError('Gagal mengambil lokasi. Coba lagi atau isi alamat manual.');
     } finally {
-      setLoading(false);
+      setLocating(false);
     }
   };
 
+  const submit = async () => {
+    if (!user?.id) {
+      Alert.alert('Sesi berakhir', 'Silakan login kembali.');
+      router.replace('/(auth)/login');
+      return;
+    }
+    if (issue.trim().length < 5) {
+      Alert.alert('Validasi', 'Jelaskan keluhan kendaraan minimal 5 karakter.');
+      return;
+    }
+    if (!contactPhone.trim() || contactPhone.replace(/\D/g, '').length < 8) {
+      Alert.alert('Validasi', 'Nomor kontak wajib diisi agar montir bisa menghubungi kamu.');
+      return;
+    }
+    if (!coords) {
+      Alert.alert(
+        'Lokasi belum aktif',
+        'Tekan "Gunakan lokasi saat ini" supaya montir tahu titik lokasimu.',
+      );
+      return;
+    }
+
+    setSubmitting(true);
+    try {
+      const { id } = await createServiceRequest({
+        clientId: user.id,
+        vehicleId,
+        issueDescription: issue,
+        symptoms: symptoms || null,
+        lat: coords.lat,
+        lng: coords.lng,
+        address: address || null,
+        contactPhone,
+        additionalNotes: notes || null,
+      });
+      router.replace({ pathname: '/(client)/orders/[id]', params: { id } });
+    } catch (error) {
+      Alert.alert(
+        'Gagal mengirim',
+        error instanceof Error ? error.message : 'Coba lagi beberapa saat lagi.',
+      );
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  if (sessionLoading) {
+    return <LoadingState message="Menyiapkan form..." />;
+  }
+
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.content}>
-      <View style={styles.card}>
-        <Text style={styles.title}>Butuh Bantuan Montir</Text>
-        <Text style={styles.subtitle}>Buat permintaan bantuan</Text>
-        
-        <View style={styles.inputGroup}>
+    <View style={styles.screen}>
+      <ScreenHeader title="Butuh Montir" subtitle={activeCategory?.description} />
+
+      <KeyboardAvoidingView
+        style={styles.flex}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      >
+        <ScrollView
+          contentContainerStyle={styles.content}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+        >
+          <Text style={styles.label}>Jenis bantuan</Text>
+          <View style={styles.chipsWrap}>
+            {PRESET_CATEGORIES.map((category) => {
+              const active = category.key === categoryKey;
+              return (
+                <Pressable
+                  key={category.key}
+                  accessibilityRole="button"
+                  accessibilityState={{ selected: active }}
+                  onPress={() => selectCategory(category.key)}
+                  style={[styles.chip, active && styles.chipActive]}
+                >
+                  <Ionicons
+                    name={category.icon}
+                    size={14}
+                    color={active ? Brand.white : category.color}
+                  />
+                  <Text style={[styles.chipText, active && styles.chipTextActive]}>
+                    {category.label}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </View>
+
+          <Text style={styles.label}>Kendaraan</Text>
+          {vehicles.length === 0 ? (
+            <Pressable
+              accessibilityRole="button"
+              onPress={() => router.push('/(client)/vehicles/new')}
+              style={({ pressed }) => [styles.emptyVehicle, pressed && styles.pressed]}
+            >
+              <Ionicons name="add-circle-outline" size={18} color={Brand.primary} />
+              <Text style={styles.emptyVehicleText}>
+                Belum ada kendaraan tersimpan. Tambah kendaraan (opsional).
+              </Text>
+            </Pressable>
+          ) : (
+            <View style={styles.chipsWrap}>
+              <VehicleChip
+                label="Tanpa kendaraan"
+                active={vehicleId === null}
+                onPress={() => setVehicleId(null)}
+              />
+              {vehicles.map((vehicle) => (
+                <VehicleChip
+                  key={vehicle.id}
+                  label={`${vehicle.brand} ${vehicle.model} • ${vehicle.license_plate}`}
+                  active={vehicleId === vehicle.id}
+                  onPress={() => setVehicleId(vehicle.id)}
+                />
+              ))}
+            </View>
+          )}
+
+          <Text style={styles.label}>Keluhan kendaraan</Text>
           <TextInput
-            placeholder="Merek kendaraan"
-            value={form.vehicleBrand}
-            onChangeText={text => setForm({ ...form, vehicleBrand: text })}
+            value={issue}
+            onChangeText={setIssue}
+            placeholder="Contoh: mesin mati saat di lampu merah, ada suara kasar"
+            placeholderTextColor={Brand.textMuted}
+            multiline
+            style={[styles.input, styles.textarea]}
+          />
+
+          <Text style={styles.label}>Gejala tambahan (opsional)</Text>
+          <TextInput
+            value={symptoms}
+            onChangeText={setSymptoms}
+            placeholder="Contoh: lampu indikator aki menyala"
+            placeholderTextColor={Brand.textMuted}
             style={styles.input}
           />
-        </View>
 
-        <View style={styles.inputGroup}>
-          <TextInput
-            placeholder="Model kendaraan"
-            value={form.vehicleModel}
-            onChangeText={text => setForm({ ...form, vehicleModel: text })}
-            style={styles.input}
-          />
-        </View>
-
-        <View style={styles.inputGroup}>
-          <TextInput
-            placeholder="Deskripsi masalah"
-            value={form.issueDescription}
-            onChangeText={text => setForm({ ...form, issueDescription: text })}
-            multiline={true}
-            numberOfLines={3}
-            style={styles.textarea}
-          />
-        </View>
-
-        <View style={styles.buttonGroup}>
-          <Pressable onPress={submitRequest} disabled={loading} style={styles.button}>
-            <Text style={styles.buttonText}>{loading ? 'Mengirim...' : 'Kirim'}</Text>
+          <Text style={styles.label}>Lokasi</Text>
+          <Pressable
+            accessibilityRole="button"
+            onPress={detectLocation}
+            disabled={locating}
+            style={({ pressed }) => [
+              styles.locationButton,
+              coords && styles.locationButtonActive,
+              pressed && styles.pressed,
+            ]}
+          >
+            <Ionicons
+              name={coords ? 'checkmark-circle' : 'location-outline'}
+              size={18}
+              color={coords ? Brand.green : Brand.primary}
+            />
+            <Text style={[styles.locationText, coords && styles.locationTextActive]}>
+              {locating
+                ? 'Mengambil lokasi…'
+                : coords
+                  ? 'Lokasi terdeteksi'
+                  : 'Gunakan lokasi saat ini'}
+            </Text>
           </Pressable>
-        </View>
-      </View>
-    </ScrollView>
+
+          {locationError ? <Text style={styles.errorText}>{locationError}</Text> : null}
+
+          <TextInput
+            value={address}
+            onChangeText={setAddress}
+            placeholder="Alamat / patokan lokasi (opsional)"
+            placeholderTextColor={Brand.textMuted}
+            style={[styles.input, styles.inputSpaced]}
+          />
+
+          <Text style={styles.label}>Nomor kontak</Text>
+          <TextInput
+            value={contactPhone}
+            onChangeText={setPhone}
+            placeholder="08xxxxxxxxxx"
+            placeholderTextColor={Brand.textMuted}
+            keyboardType="phone-pad"
+            style={styles.input}
+          />
+
+          <Text style={styles.label}>Catatan tambahan (opsional)</Text>
+          <TextInput
+            value={notes}
+            onChangeText={setNotes}
+            placeholder="Contoh: kunci ada di bawah kursi"
+            placeholderTextColor={Brand.textMuted}
+            multiline
+            style={[styles.input, styles.textarea]}
+          />
+
+          <Text style={styles.disclaimer}>
+            Permintaan akan dikirim ke montir terdekat. Montir akan menghubungi nomor kontakmu
+            sebelum berangkat.
+          </Text>
+
+          <Button
+            label="Kirim Permintaan"
+            icon="paper-plane-outline"
+            loading={submitting}
+            onPress={submit}
+            style={styles.submit}
+          />
+        </ScrollView>
+      </KeyboardAvoidingView>
+    </View>
+  );
+}
+
+function VehicleChip({
+  label,
+  active,
+  onPress,
+}: {
+  label: string;
+  active: boolean;
+  onPress: () => void;
+}) {
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityState={{ selected: active }}
+      onPress={onPress}
+      style={[styles.chip, active && styles.chipActive]}
+    >
+      <Text style={[styles.chipText, active && styles.chipTextActive]} numberOfLines={1}>
+        {label}
+      </Text>
+    </Pressable>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#f9f9fb',
-    padding: 24,
+  screen: { flex: 1, backgroundColor: Brand.background },
+  flex: { flex: 1 },
+  content: { padding: ScreenPadding, paddingBottom: Space.xxxl },
+  label: {
+    fontSize: 12.5,
+    fontWeight: '700',
+    color: Brand.text,
+    marginTop: Space.lg,
+    marginBottom: Space.sm,
   },
-  content: {
-    paddingBottom: 32,
-  },
-  card: {
-    backgroundColor: '#fff',
-    padding: 24,
-    borderRadius: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 4,
-    elevation: 1,
-  },
-  title: {
-    fontSize: 20,
-    fontWeight: 600,
-    color: '#1a1a1a',
-    marginBottom: 8,
-    textAlign: 'center',
-  },
-  subtitle: {
-    color: '#60646c',
-    fontSize: 13,
-    textAlign: 'center',
-    marginBottom: 20,
-  },
-  inputGroup: {
-    marginBottom: 16,
-  },
-  input: {
-    width: '100%',
-    height: 50,
-    backgroundColor: '#f5f5f7',
-    borderRadius: 12,
-    paddingHorizontal: 16,
-    fontSize: 14,
-    color: '#1a1a1a',
-    marginBottom: 8,
-  },
-  textarea: {
-    height: 80,
-    padding: 12,
-    backgroundColor: '#f5f5f7',
-    borderRadius: 12,
-    fontSize: 14,
-    color: '#1a1a1a',
-  },
-  buttonGroup: {
-    marginTop: 24,
+  chipsWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: Space.sm },
+  chip: {
+    flexDirection: 'row',
     alignItems: 'center',
+    gap: 5,
+    paddingHorizontal: Space.md,
+    paddingVertical: 8,
+    borderRadius: Radius.pill,
+    borderWidth: 1,
+    borderColor: Brand.border,
+    backgroundColor: Brand.surface,
   },
-  button: {
-    backgroundColor: '#3c87f7',
-    padding: 16,
-    borderRadius: 12,
+  chipActive: { backgroundColor: Brand.primary, borderColor: Brand.primary },
+  chipText: { fontSize: 11.5, fontWeight: '600', color: Brand.textSecondary },
+  chipTextActive: { color: Brand.white },
+  input: {
+    backgroundColor: Brand.surface,
+    borderWidth: 1,
+    borderColor: Brand.border,
+    borderRadius: Radius.md,
+    paddingHorizontal: Space.md,
+    paddingVertical: Space.md,
+    fontSize: 13.5,
+    color: Brand.text,
+    minHeight: 48,
   },
-  buttonText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: 600,
+  inputSpaced: { marginTop: Space.sm },
+  textarea: { minHeight: 92, textAlignVertical: 'top' },
+  emptyVehicle: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Space.sm,
+    padding: Space.md,
+    borderRadius: Radius.md,
+    borderWidth: 1.5,
+    borderStyle: 'dashed',
+    borderColor: Brand.primaryBorder,
+    backgroundColor: '#FAFCFF',
   },
+  emptyVehicleText: { flex: 1, fontSize: 12, color: Brand.primary },
+  locationButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Space.sm,
+    minHeight: 48,
+    paddingHorizontal: Space.md,
+    borderRadius: Radius.md,
+    borderWidth: 1,
+    borderColor: Brand.primaryBorder,
+    backgroundColor: Brand.primarySoft,
+  },
+  locationButtonActive: { borderColor: Brand.greenSoft, backgroundColor: Brand.greenSoft },
+  locationText: { fontSize: 13, fontWeight: '700', color: Brand.primary },
+  locationTextActive: { color: Brand.green },
+  errorText: { fontSize: 11.5, color: Brand.red, marginTop: Space.sm, lineHeight: 16 },
+  disclaimer: {
+    fontSize: 11,
+    color: Brand.textSecondary,
+    lineHeight: 16,
+    marginTop: Space.lg,
+  },
+  submit: { marginTop: Space.lg },
+  pressed: { opacity: 0.75 },
 });
