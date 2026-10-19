@@ -1,22 +1,34 @@
 import { useCallback, useEffect, useState } from 'react';
-import {
-  View, Text, Pressable, StyleSheet, FlatList, RefreshControl, Alert,
-} from 'react-native';
+import { Alert, RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
+import { useRouter } from 'expo-router';
+import { ScreenHeader } from '@/components/ui/screen-header';
+import { EmptyState, ErrorState, LoadingState } from '@/components/ui/state';
+import { Brand, ScreenPadding, Space } from '@/constants/brand';
 import { supabase } from '@/lib/supabase';
 import { acceptOrder, listIncomingOrders, type IncomingOrder } from '@/features/mechanic/service';
-import { EmptyState, LoadingState } from '@/components/ui/state';
+import { OrderCard } from '@/features/mechanic/components/order-card';
+
+const NEW_REQUEST_BADGE = {
+  label: 'Request baru',
+  color: Brand.amber,
+  background: Brand.amberSoft,
+  icon: 'flash-outline' as const,
+};
 
 export default function MechanicRequestsScreen() {
   const [orders, setOrders] = useState<IncomingOrder[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [acceptingId, setAcceptingId] = useState<string | null>(null);
+  const [error, setError] = useState(false);
+  const router = useRouter();
 
   const load = useCallback(async () => {
     try {
       setOrders(await listIncomingOrders());
-    } catch (e) {
-      Alert.alert('Gagal memuat', e instanceof Error ? e.message : 'Coba lagi.');
+      setError(false);
+    } catch {
+      setError(true);
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -28,9 +40,12 @@ export default function MechanicRequestsScreen() {
     (async () => {
       try {
         const rows = await listIncomingOrders();
-        if (!cancelled) setOrders(rows);
-      } catch (e) {
-        if (!cancelled) Alert.alert('Gagal memuat', e instanceof Error ? e.message : 'Coba lagi.');
+        if (!cancelled) {
+          setOrders(rows);
+          setError(false);
+        }
+      } catch {
+        if (!cancelled) setError(true);
       } finally {
         if (!cancelled) {
           setLoading(false);
@@ -52,10 +67,16 @@ export default function MechanicRequestsScreen() {
     setAcceptingId(id);
     try {
       await acceptOrder(id);
-      Alert.alert('Berhasil', 'Order diterima. Lihat di Dashboard > Order Aktif.');
+      Alert.alert('Berhasil', 'Order diterima. Lihat detailnya di Beranda > Order aktif.', [
+        { text: 'Nanti' },
+        { text: 'Lihat Order', onPress: () => router.push(`/(mechanic)/active-order/${id}`) },
+      ]);
       load();
     } catch (e) {
-      Alert.alert('Gagal menerima', e instanceof Error ? e.message : 'Order mungkin sudah diambil montir lain.');
+      Alert.alert(
+        'Gagal menerima',
+        e instanceof Error ? e.message : 'Order mungkin sudah diambil montir lain.',
+      );
       load();
     } finally {
       setAcceptingId(null);
@@ -63,51 +84,76 @@ export default function MechanicRequestsScreen() {
   };
 
   if (loading) {
-    return <LoadingState message="Mencari request masuk..." />;
+    return (
+      <View style={styles.screen}>
+        <ScreenHeader
+          title="Request Masuk"
+          subtitle="Permintaan client di sekitarmu"
+          showBack={false}
+        />
+        <LoadingState message="Mencari request masuk..." />
+      </View>
+    );
   }
 
   return (
-    <View style={styles.container}>
-      <Text style={styles.title}>Request Masuk</Text>
-      <FlatList
-        data={orders}
-        keyExtractor={(o) => o.id}
-        refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); load(); }} />
-        }
-        ListEmptyComponent={
-          <EmptyState message="Belum ada request. Pastikan status kamu Online di Dashboard." />
-        }
-        renderItem={({ item }) => (
-          <View style={styles.card}>
-            <Text style={styles.desc} numberOfLines={2}>{item.issue_description}</Text>
-            <Text style={styles.muted}>
-              {[item.vehicle_brand, item.vehicle_model].filter(Boolean).join(' ') || 'Kendaraan'}
-              {' • '}{item.client_name ?? 'Client'}
-            </Text>
-            {item.address ? <Text style={styles.muted}>{item.address}</Text> : null}
-            <Pressable
-              style={[styles.button, acceptingId === item.id && styles.buttonDisabled]}
-              disabled={acceptingId === item.id}
-              onPress={() => handleAccept(item.id)}>
-              <Text style={styles.buttonText}>
-                {acceptingId === item.id ? 'Memproses...' : 'Terima Order'}
-              </Text>
-            </Pressable>
-          </View>
-        )}
+    <View style={styles.screen}>
+      <ScreenHeader
+        title="Request Masuk"
+        subtitle="Permintaan client di sekitarmu"
+        showBack={false}
       />
+      <ScrollView
+        contentContainerStyle={styles.content}
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={() => {
+              setRefreshing(true);
+              load();
+            }}
+            tintColor={Brand.primary}
+            colors={[Brand.primary]}
+          />
+        }
+      >
+        {error ? (
+          <ErrorState onRetry={load} />
+        ) : orders.length === 0 ? (
+          <EmptyState
+            icon="flash-outline"
+            message="Belum ada request masuk"
+            hint="Pastikan status kamu Online di Beranda supaya client bisa menemukanmu."
+            actionLabel="Buka Beranda"
+            onPressAction={() => router.push('/(mechanic)')}
+          />
+        ) : (
+          orders.map((order) => (
+            <OrderCard
+              key={order.id}
+              issue={order.issue_description}
+              status={order.status}
+              createdAt={order.created_at}
+              vehicle={[order.vehicle_brand, order.vehicle_model].filter(Boolean).join(' ')}
+              clientName={order.client_name}
+              address={order.address}
+              badge={NEW_REQUEST_BADGE}
+              action={{
+                label: acceptingId === order.id ? 'Memproses...' : 'Terima Order',
+                icon: 'checkmark-circle-outline',
+                loading: acceptingId === order.id,
+                onPress: () => handleAccept(order.id),
+              }}
+            />
+          ))
+        )}
+      </ScrollView>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#fff', paddingHorizontal: 20, paddingTop: 56 },
-  title: { fontSize: 22, fontWeight: '700', color: '#1a1a1a', marginBottom: 12 },
-  muted: { fontSize: 13, color: '#60646c', marginTop: 4 },
-  card: { backgroundColor: '#f5f5f7', borderRadius: 14, padding: 16, marginBottom: 12 },
-  desc: { fontSize: 15, fontWeight: '600', color: '#1a1a1a' },
-  button: { backgroundColor: '#16a34a', padding: 13, borderRadius: 12, alignItems: 'center', marginTop: 12 },
-  buttonDisabled: { opacity: 0.6 },
-  buttonText: { color: '#fff', fontSize: 15, fontWeight: '600' },
+  screen: { flex: 1, backgroundColor: Brand.background },
+  content: { padding: ScreenPadding, paddingBottom: Space.xxxl },
 });

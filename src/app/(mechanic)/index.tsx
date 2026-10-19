@@ -1,17 +1,26 @@
 import { useCallback, useEffect, useState } from 'react';
-import {
-  View, Text, Pressable, StyleSheet, ScrollView, RefreshControl, Alert, Switch,
-} from 'react-native';
-import { Link, useRouter } from 'expo-router';
+import { Alert, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { useRouter } from 'expo-router';
+import { StatusBar } from 'expo-status-bar';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { Button } from '@/components/ui/button';
+import { SectionHeader } from '@/components/ui/section-header';
+import { Skeleton } from '@/components/ui/skeleton';
+import { EmptyState, ErrorState } from '@/components/ui/state';
+import { Brand, ScreenPadding, Space } from '@/constants/brand';
+import { useSessionUser } from '@/hooks/use-session-user';
 import { supabase } from '@/lib/supabase';
 import {
-  getEarningsSummary, getMechanicProfile, listMyOrders,
-  setOnlineStatus, type MyOrder,
+  getEarningsSummary,
+  getMechanicProfile,
+  listMyOrders,
+  setOnlineStatus,
+  type MyOrder,
 } from '@/features/mechanic/service';
-import { formatIDR } from '@/utils/format';
-
-import { LoadingState } from '@/components/ui/state';
-import { useSessionUser } from '@/hooks/use-session-user';
+import { DashboardHeader } from '@/features/mechanic/components/dashboard-header';
+import { OnlineCard } from '@/features/mechanic/components/online-card';
+import { OrderCard } from '@/features/mechanic/components/order-card';
+import { StatTiles } from '@/features/mechanic/components/stat-tiles';
 
 export default function MechanicDashboardScreen() {
   const { user: sessionUser, loading: sessionLoading } = useSessionUser();
@@ -22,6 +31,7 @@ export default function MechanicDashboardScreen() {
   const [activeOrders, setActiveOrders] = useState<MyOrder[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [error, setError] = useState(false);
   const router = useRouter();
 
   const load = useCallback(async () => {
@@ -35,8 +45,9 @@ export default function MechanicDashboardScreen() {
       setTodayNet(sum.net);
       setTodayJobs(sum.totalJobs);
       setActiveOrders(await listMyOrders(true));
-    } catch (e) {
-      Alert.alert('Gagal memuat', e instanceof Error ? e.message : 'Coba lagi.');
+      setError(false);
+    } catch {
+      setError(true);
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -58,8 +69,9 @@ export default function MechanicDashboardScreen() {
         setTodayNet(sum.net);
         setTodayJobs(sum.totalJobs);
         setActiveOrders(await listMyOrders(true));
-      } catch (e) {
-        if (!cancelled) Alert.alert('Gagal memuat', e instanceof Error ? e.message : 'Coba lagi.');
+        if (!cancelled) setError(false);
+      } catch {
+        if (!cancelled) setError(true);
       } finally {
         if (!cancelled) {
           setLoading(false);
@@ -89,86 +101,153 @@ export default function MechanicDashboardScreen() {
   };
 
   if (loading || sessionLoading) {
-    return <LoadingState message="Memuat dashboard..." />;
+    return <DashboardSkeleton />;
   }
 
+  const name = sessionUser?.fullName || sessionUser?.email || 'Montir';
+
   return (
-    <ScrollView
-      style={styles.container}
-      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); load(); }} />}>
-      <Text style={styles.greeting}>Halo, {sessionUser?.fullName || sessionUser?.email || 'Montir'}!</Text>
-      {!verified && (
-        <Text style={styles.warn}>Akun belum terverifikasi admin. Kamu tetap bisa menerima order.</Text>
-      )}
+    <View style={styles.screen}>
+      <StatusBar style="light" />
+      <ScrollView
+        style={styles.scroll}
+        contentContainerStyle={styles.content}
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={() => {
+              setRefreshing(true);
+              load();
+            }}
+            tintColor={Brand.primary}
+            colors={[Brand.primary]}
+          />
+        }
+      >
+        <DashboardHeader name={name} isOnline={online} isVerified={verified} />
 
-      {/* Primary CTA: Online / Siap Menerima Order (PRD §8) */}
-      <View style={styles.card}>
-        <View style={styles.row}>
-          <View>
-            <Text style={styles.cardTitle}>{online ? 'Online' : 'Offline'}</Text>
-            <Text style={styles.muted}>{online ? 'Siap menerima order' : 'Tidak menerima order'}</Text>
+        <View style={styles.body}>
+          <OnlineCard online={online} onToggle={toggleOnline} />
+
+          {error ? (
+            <View style={styles.errorCard}>
+              <ErrorState onRetry={load} />
+            </View>
+          ) : (
+            <>
+              <StatTiles
+                netToday={todayNet}
+                jobsToday={todayJobs}
+                activeOrders={activeOrders.length}
+                onPressEarnings={() => router.push('/(mechanic)/earnings')}
+              />
+
+              <SectionHeader
+                title="Order aktif"
+                actionLabel="Lihat semua"
+                onPressAction={() => router.push('/(mechanic)/active-orders')}
+              />
+              {activeOrders.length === 0 ? (
+                <EmptyState
+                  icon="construct-outline"
+                  message="Belum ada order aktif"
+                  hint="Nyalakan status online supaya request client bisa masuk."
+                  actionLabel="Lihat Request"
+                  onPressAction={() => router.push('/(mechanic)/requests')}
+                />
+              ) : (
+                activeOrders
+                  .slice(0, 3)
+                  .map((order) => (
+                    <OrderCard
+                      key={order.id}
+                      issue={order.issue_description}
+                      status={order.status}
+                      createdAt={order.created_at}
+                      vehicle={[order.vehicle_brand, order.vehicle_model].filter(Boolean).join(' ')}
+                      clientName={order.client_name}
+                      address={order.address}
+                      price={order.price_amount}
+                      onPress={() => router.push(`/(mechanic)/active-order/${order.id}`)}
+                    />
+                  ))
+              )}
+
+              <SectionHeader title="Aksi cepat" />
+              <View style={styles.actions}>
+                <Button
+                  label="Lihat Request Masuk"
+                  icon="flash-outline"
+                  onPress={() => router.push('/(mechanic)/requests')}
+                />
+                <Button
+                  label="Rincian Pendapatan"
+                  icon="wallet-outline"
+                  variant="secondary"
+                  onPress={() => router.push('/(mechanic)/earnings')}
+                />
+              </View>
+            </>
+          )}
+        </View>
+      </ScrollView>
+    </View>
+  );
+}
+
+function DashboardSkeleton() {
+  const insets = useSafeAreaInsets();
+  return (
+    <View style={styles.screen}>
+      <StatusBar style="light" />
+      <View style={[styles.skeletonHeader, { paddingTop: insets.top + Space.md }]}>
+        <View style={styles.skeletonRow}>
+          <Skeleton width={44} height={44} radius={22} style={styles.onBlue} />
+          <View style={styles.skeletonUser}>
+            <Skeleton width={80} height={10} style={styles.onBlue} />
+            <Skeleton width={120} height={14} style={styles.onBlue} />
           </View>
-          <Switch value={online} onValueChange={toggleOnline} />
+          <Skeleton width={78} height={30} radius={15} style={styles.onBlue} />
         </View>
+        <Skeleton width={230} height={20} style={[styles.onBlue, { marginTop: Space.lg }]} />
       </View>
 
-      <View style={styles.statsRow}>
-        <View style={styles.stat}>
-          <Text style={styles.statValue}>{formatIDR(todayNet)}</Text>
-          <Text style={styles.muted}>Bersih hari ini</Text>
+      <View style={styles.skeletonBody}>
+        <Skeleton height={104} radius={18} style={{ marginTop: -44 }} />
+        <Skeleton height={84} radius={18} style={{ marginTop: Space.md }} />
+        <View style={styles.skeletonGrid}>
+          <Skeleton height={96} radius={18} style={styles.skeletonHalf} />
+          <Skeleton height={96} radius={18} style={styles.skeletonHalf} />
         </View>
-        <View style={styles.stat}>
-          <Text style={styles.statValue}>{todayJobs}</Text>
-          <Text style={styles.muted}>Job hari ini</Text>
-        </View>
-        <View style={styles.stat}>
-          <Text style={styles.statValue}>{activeOrders.length}</Text>
-          <Text style={styles.muted}>Order aktif</Text>
-        </View>
+        <Skeleton width={120} height={14} />
+        <Skeleton height={96} radius={18} style={{ marginTop: Space.md }} />
       </View>
-
-      <Text style={styles.section}>Order Aktif</Text>
-      {activeOrders.length === 0 ? (
-        <Text style={styles.muted}>Belum ada order aktif. Nyalakan status online untuk menerima request.</Text>
-      ) : (
-        activeOrders.map((o) => (
-          <Pressable
-            key={o.id}
-            style={styles.card}
-            onPress={() => router.push(`/(mechanic)/active-order/${o.id}`)}>
-            <Text style={styles.cardTitle} numberOfLines={1}>{o.issue_description}</Text>
-            <Text style={styles.muted}>{o.client_name ?? 'Client'} • {o.status.replaceAll('_', ' ')}</Text>
-          </Pressable>
-        ))
-      )}
-
-      <View style={styles.actions}>
-        <Link href="/(mechanic)/requests" asChild>
-          <Pressable style={styles.button}><Text style={styles.buttonText}>Lihat Request Masuk</Text></Pressable>
-        </Link>
-        <Link href="/(mechanic)/earnings" asChild>
-          <Pressable style={styles.ghost}><Text style={styles.ghostText}>Rincian Pendapatan</Text></Pressable>
-        </Link>
-      </View>
-    </ScrollView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#fff', paddingHorizontal: 20, paddingTop: 56 },
-  greeting: { fontSize: 22, fontWeight: '700', color: '#1a1a1a', marginBottom: 4 },
-  warn: { color: '#a16207', backgroundColor: '#fef9c3', padding: 10, borderRadius: 10, marginVertical: 8, fontSize: 13 },
-  card: { backgroundColor: '#f5f5f7', borderRadius: 14, padding: 16, marginVertical: 8 },
-  row: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  cardTitle: { fontSize: 16, fontWeight: '600', color: '#1a1a1a' },
-  muted: { fontSize: 13, color: '#60646c', marginTop: 2 },
-  statsRow: { flexDirection: 'row', gap: 10, marginVertical: 8 },
-  stat: { flex: 1, backgroundColor: '#eef4ff', borderRadius: 14, padding: 12, alignItems: 'center' },
-  statValue: { fontSize: 16, fontWeight: '700', color: '#1a1a1a' },
-  section: { fontSize: 16, fontWeight: '700', color: '#1a1a1a', marginTop: 12 },
-  actions: { gap: 10, marginVertical: 16, paddingBottom: 32 },
-  button: { backgroundColor: '#3c87f7', padding: 15, borderRadius: 12, alignItems: 'center' },
-  buttonText: { color: '#fff', fontSize: 15, fontWeight: '600' },
-  ghost: { borderWidth: 1, borderColor: '#3c87f7', padding: 15, borderRadius: 12, alignItems: 'center' },
-  ghostText: { color: '#3c87f7', fontSize: 15, fontWeight: '600' },
+  screen: { flex: 1, backgroundColor: Brand.background },
+  scroll: { flex: 1 },
+  content: { paddingBottom: Space.xxxl },
+  body: { paddingHorizontal: ScreenPadding },
+  errorCard: {
+    backgroundColor: Brand.surface,
+    borderRadius: 18,
+    marginTop: Space.md,
+    paddingVertical: Space.lg,
+  },
+  actions: { gap: Space.md },
+  skeletonHeader: {
+    backgroundColor: Brand.primary,
+    paddingHorizontal: ScreenPadding,
+    paddingBottom: 64,
+  },
+  skeletonRow: { flexDirection: 'row', alignItems: 'center', gap: Space.sm },
+  skeletonUser: { flex: 1, gap: 6 },
+  onBlue: { backgroundColor: 'rgba(255,255,255,0.28)' },
+  skeletonBody: { paddingHorizontal: ScreenPadding },
+  skeletonGrid: { flexDirection: 'row', gap: Space.md, marginTop: Space.md },
+  skeletonHalf: { flex: 1 },
 });

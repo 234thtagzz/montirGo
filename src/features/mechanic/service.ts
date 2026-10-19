@@ -1,7 +1,8 @@
 // Data layer section montir — langsung ke Supabase (RLS menjaga otorisasi, PRD §6/§22).
 import { supabase } from '@/lib/supabase';
 import type {
-  ActivityItem, EarningsSummary, IncomingOrder, MechanicProfile, MyOrder, OrderStatus,
+  ActivityItem, EarningsSummary, IncomingOrder, MechanicOrderDetail, MechanicProfile, MyOrder,
+  OrderStatus, OrderStatusEvent,
 } from './types';
 
 export * from './types';
@@ -107,6 +108,50 @@ export async function listMyOrders(onlyActive = false): Promise<MyOrder[]> {
     client_name: (r.client as { full_name?: string } | null)?.full_name ?? null,
     client_phone: (r.client as { phone_number?: string } | null)?.phone_number ?? null,
   }));
+}
+
+export async function getMyOrder(id: string): Promise<MechanicOrderDetail | null> {
+  const mechanicId = await getMyId();
+  const { data, error } = await supabase
+    .from('service_requests')
+    .select(
+      'id, issue_description, symptoms, address, contact_phone, additional_notes, status, ' +
+        'price_amount, created_at, updated_at, vehicles (brand, model, license_plate), ' +
+        'client:profiles!service_requests_client_id_fkey (full_name, phone_number)',
+    )
+    .eq('id', id)
+    .eq('mechanic_id', mechanicId)
+    .maybeSingle();
+  if (error) throw error;
+  if (!data) return null;
+  const r = data as unknown as Record<string, unknown>;
+  return {
+    id: r.id as string,
+    issue_description: r.issue_description as string,
+    symptoms: r.symptoms as string | null,
+    address: r.address as string | null,
+    contact_phone: r.contact_phone as string,
+    additional_notes: (r.additional_notes as string | null) ?? null,
+    status: r.status as OrderStatus,
+    price_amount: r.price_amount as number | null,
+    created_at: r.created_at as string,
+    updated_at: r.updated_at as string,
+    vehicle_brand: (r.vehicles as { brand?: string } | null)?.brand ?? null,
+    vehicle_model: (r.vehicles as { model?: string } | null)?.model ?? null,
+    vehicle_plate: (r.vehicles as { license_plate?: string } | null)?.license_plate ?? null,
+    client_name: (r.client as { full_name?: string } | null)?.full_name ?? null,
+    client_phone: (r.client as { phone_number?: string } | null)?.phone_number ?? null,
+  };
+}
+
+export async function listOrderStatusHistory(requestId: string): Promise<OrderStatusEvent[]> {
+  const { data, error } = await supabase
+    .from('service_request_status_history')
+    .select('id, from_status, to_status, notes, created_at')
+    .eq('request_id', requestId)
+    .order('created_at', { ascending: true });
+  if (error) throw error;
+  return (data ?? []) as OrderStatusEvent[];
 }
 
 export async function acceptOrder(requestId: string): Promise<void> {

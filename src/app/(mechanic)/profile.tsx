@@ -1,13 +1,29 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useState, type ComponentProps } from 'react';
 import {
-  View, Text, Pressable, StyleSheet, ScrollView, TextInput, Alert, Switch,
+  Alert,
+  KeyboardAvoidingView,
+  Platform,
+  ScrollView,
+  StyleSheet,
+  Switch,
+  Text,
+  TextInput,
+  View,
 } from 'react-native';
 import { useRouter } from 'expo-router';
+import { ScreenHeader } from '@/components/ui/screen-header';
+import { Avatar } from '@/components/ui/avatar';
+import { Button } from '@/components/ui/button';
+import { LoadingState } from '@/components/ui/state';
+import { Ionicons } from '@/components/ui/icon';
+import { Brand, Radius, ScreenPadding, Space } from '@/constants/brand';
 import { useAuth } from '@/features/auth/service';
 import { useSessionUser } from '@/hooks/use-session-user';
-import { LoadingState } from '@/components/ui/state';
 import {
-  getMechanicProfile, setOnlineStatus, updateMechanicProfile, type MechanicProfile,
+  getMechanicProfile,
+  setOnlineStatus,
+  updateMechanicProfile,
+  type MechanicProfile,
 } from '@/features/mechanic/service';
 
 export default function MechanicProfileScreen() {
@@ -61,7 +77,10 @@ export default function MechanicProfileScreen() {
     try {
       await updateMechanicProfile({
         workshop_name: workshop.trim() || undefined,
-        skills: skills.split(',').map((s) => s.trim()).filter(Boolean),
+        skills: skills
+          .split(',')
+          .map((s) => s.trim())
+          .filter(Boolean),
       });
       Alert.alert('Berhasil', 'Profil bengkel tersimpan.');
       load();
@@ -82,84 +101,286 @@ export default function MechanicProfileScreen() {
     }
   };
 
-  const handleLogout = async () => {
-    try {
-      await logout();
-    } catch (error) {
-      Alert.alert('Gagal', error instanceof Error ? error.message : 'Gagal keluar');
-      return;
-    }
-    router.replace('/(auth)/login');
+  const handleLogout = () => {
+    Alert.alert('Keluar dari akun?', 'Kamu perlu login kembali untuk menerima order.', [
+      { text: 'Batal', style: 'cancel' },
+      {
+        text: 'Keluar',
+        style: 'destructive',
+        onPress: async () => {
+          try {
+            await logout();
+            router.replace('/(auth)/login');
+          } catch (error) {
+            Alert.alert('Gagal', error instanceof Error ? error.message : 'Gagal keluar.');
+          }
+        },
+      },
+    ]);
   };
 
   if (loading || sessionLoading) {
-    return <LoadingState message="Memuat profil..." />;
+    return (
+      <View style={styles.screen}>
+        <ScreenHeader title="Profil" showBack={false} />
+        <LoadingState message="Memuat profil..." />
+      </View>
+    );
   }
 
+  const name = sessionUser?.fullName || 'Montir MontirGo';
+  const verified = profile?.is_verified ?? false;
+
   return (
-    <ScrollView style={styles.container}>
-      <Text style={styles.title}>Profil Montir</Text>
-      <Text style={styles.muted}>{sessionUser?.email}</Text>
+    <View style={styles.screen}>
+      <ScreenHeader title="Profil" showBack={false} />
+      <KeyboardAvoidingView
+        style={styles.flex}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      >
+        <ScrollView
+          contentContainerStyle={styles.content}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+        >
+          <View style={styles.identity}>
+            <Avatar name={name} size={60} />
+            <View style={styles.identityCopy}>
+              <Text style={styles.name} numberOfLines={1}>
+                {name}
+              </Text>
+              <Text style={styles.email} numberOfLines={1}>
+                {sessionUser?.email ?? '-'}
+              </Text>
+              <View style={styles.badges}>
+                <View style={styles.roleBadge}>
+                  <Ionicons name="construct" size={11} color={Brand.primary} />
+                  <Text style={styles.roleText}>Akun Montir</Text>
+                </View>
+                <View style={[styles.verifyBadge, verified ? styles.verifyOk : styles.verifyPending]}>
+                  <Ionicons
+                    name={verified ? 'shield-checkmark' : 'alert-circle-outline'}
+                    size={11}
+                    color={verified ? Brand.green : Brand.amber}
+                  />
+                  <Text
+                    style={[
+                      styles.verifyText,
+                      { color: verified ? Brand.green : Brand.amber },
+                    ]}
+                  >
+                    {verified ? 'Terverifikasi' : 'Belum verifikasi'}
+                  </Text>
+                </View>
+              </View>
+            </View>
+          </View>
 
-      <View style={styles.card}>
-        <View style={styles.row}>
-          <Text style={styles.cardTitle}>Rating: {Number(profile?.rating_avg ?? 0).toFixed(1)} ⭐</Text>
-          <Text style={styles.muted}>{profile?.total_jobs ?? 0} job selesai</Text>
-        </View>
-        <Text style={styles.muted}>
-          Status verifikasi: {profile?.is_verified ? 'Terverifikasi' : 'Belum verifikasi'}
-        </Text>
-      </View>
+          <View style={styles.statsRow}>
+            <View style={styles.stat}>
+              <View style={styles.statIcon}>
+                <Ionicons name="star" size={16} color={Brand.amber} />
+              </View>
+              <Text style={styles.statValue}>{Number(profile?.rating_avg ?? 0).toFixed(1)}</Text>
+              <Text style={styles.statLabel}>Rating</Text>
+            </View>
+            <View style={styles.stat}>
+              <View style={styles.statIcon}>
+                <Ionicons name="checkmark-done-outline" size={16} color={Brand.green} />
+              </View>
+              <Text style={styles.statValue}>{profile?.total_jobs ?? 0}</Text>
+              <Text style={styles.statLabel}>Job selesai</Text>
+            </View>
+          </View>
 
-      <View style={styles.card}>
-        <View style={styles.row}>
-          <Text style={styles.cardTitle}>{online ? 'Online' : 'Offline'}</Text>
-          <Switch value={online} onValueChange={toggleOnline} />
-        </View>
-      </View>
+          <View style={styles.onlineCard}>
+            <View style={[styles.onlineIcon, online && styles.onlineIconActive]}>
+              <Ionicons
+                name="power-outline"
+                size={19}
+                color={online ? Brand.primary : Brand.textSecondary}
+              />
+            </View>
+            <View style={styles.onlineCopy}>
+              <Text style={styles.onlineTitle}>{online ? 'Online' : 'Offline'}</Text>
+              <Text style={styles.onlineSub}>
+                {online ? 'Siap menerima order' : 'Tidak menerima order'}
+              </Text>
+            </View>
+            <Switch
+              value={online}
+              onValueChange={toggleOnline}
+              trackColor={{ false: Brand.border, true: Brand.primary }}
+              thumbColor={Brand.white}
+              ios_backgroundColor={Brand.border}
+            />
+          </View>
 
-      <Text style={styles.label}>Nama Bengkel</Text>
+          <Text style={styles.section}>Kelola bengkel</Text>
+          <View style={styles.formCard}>
+            <Field
+              label="Nama bengkel"
+              value={workshop}
+              onChangeText={setWorkshop}
+              placeholder="Contoh: Bengkel Berkah Jaya"
+            />
+            <Field
+              label="Keahlian"
+              value={skills}
+              onChangeText={setSkills}
+              placeholder="Contoh: tune-up, ganti oli, kelistrikan"
+              helper="Pisahkan tiap keahlian dengan koma."
+            />
+          </View>
+
+          <Button
+            label="Simpan Profil"
+            icon="save-outline"
+            loading={saving}
+            onPress={handleSave}
+            style={styles.save}
+          />
+
+          <Button
+            label="Keluar"
+            variant="danger"
+            icon="log-out-outline"
+            onPress={handleLogout}
+            style={styles.logout}
+          />
+        </ScrollView>
+      </KeyboardAvoidingView>
+    </View>
+  );
+}
+
+function Field({
+  label,
+  helper,
+  ...inputProps
+}: { label: string; helper?: string } & ComponentProps<typeof TextInput>) {
+  return (
+    <View style={styles.field}>
+      <Text style={styles.label}>{label}</Text>
       <TextInput
-        value={workshop}
-        onChangeText={setWorkshop}
-        placeholder="cth: Bengkel Berkah Jaya"
+        {...inputProps}
+        placeholderTextColor={Brand.textMuted}
+        selectionColor={Brand.primary}
         style={styles.input}
       />
-      <Text style={styles.label}>Keahlian (pisahkan koma)</Text>
-      <TextInput
-        value={skills}
-        onChangeText={setSkills}
-        placeholder="cth: tune-up, ganti oli, kelistrikan"
-        style={styles.input}
-      />
-      <Pressable style={styles.button} disabled={saving} onPress={handleSave}>
-        <Text style={styles.buttonText}>{saving ? 'Menyimpan...' : 'Simpan Profil'}</Text>
-      </Pressable>
-
-      <Pressable style={styles.logoutButton} onPress={handleLogout}>
-        <Text style={styles.logoutText}>Keluar</Text>
-      </Pressable>
-    </ScrollView>
+      {helper ? <Text style={styles.helper}>{helper}</Text> : null}
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#fff', paddingHorizontal: 20, paddingTop: 56 },
-  title: { fontSize: 22, fontWeight: '700', color: '#1a1a1a' },
-  muted: { fontSize: 13, color: '#60646c', marginTop: 4 },
-  card: { backgroundColor: '#f5f5f7', borderRadius: 14, padding: 16, marginVertical: 10 },
-  row: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  cardTitle: { fontSize: 15, fontWeight: '600', color: '#1a1a1a' },
-  label: { fontSize: 14, fontWeight: '600', color: '#1a1a1a', marginTop: 12, marginBottom: 6 },
+  screen: { flex: 1, backgroundColor: Brand.background },
+  flex: { flex: 1 },
+  content: { padding: ScreenPadding, paddingBottom: Space.xxxl },
+  identity: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Space.lg,
+    backgroundColor: Brand.surface,
+    borderRadius: Radius.lg,
+    padding: Space.lg,
+    borderWidth: 1,
+    borderColor: Brand.divider,
+  },
+  identityCopy: { flex: 1 },
+  name: { fontSize: 17, fontWeight: '700', color: Brand.text },
+  email: { fontSize: 12, color: Brand.textSecondary, marginTop: 2 },
+  badges: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: Space.sm },
+  roleBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: Radius.pill,
+    backgroundColor: Brand.primarySoft,
+  },
+  roleText: { fontSize: 10.5, fontWeight: '700', color: Brand.primary },
+  verifyBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: Radius.pill,
+  },
+  verifyOk: { backgroundColor: Brand.greenSoft },
+  verifyPending: { backgroundColor: Brand.amberSoft },
+  verifyText: { fontSize: 10.5, fontWeight: '700' },
+  statsRow: { flexDirection: 'row', gap: Space.md, marginTop: Space.md },
+  stat: {
+    flex: 1,
+    backgroundColor: Brand.surface,
+    borderRadius: Radius.lg,
+    padding: Space.lg,
+    borderWidth: 1,
+    borderColor: Brand.divider,
+  },
+  statIcon: {
+    width: 34,
+    height: 34,
+    borderRadius: Radius.sm,
+    backgroundColor: Brand.background,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  statValue: { fontSize: 18, fontWeight: '700', color: Brand.text, marginTop: Space.sm },
+  statLabel: { fontSize: 11.5, color: Brand.textSecondary, marginTop: 2 },
+  onlineCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Space.md,
+    backgroundColor: Brand.surface,
+    borderRadius: Radius.lg,
+    padding: Space.lg,
+    marginTop: Space.md,
+    borderWidth: 1,
+    borderColor: Brand.divider,
+  },
+  onlineIcon: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    backgroundColor: Brand.background,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  onlineIconActive: { backgroundColor: Brand.primarySoft },
+  onlineCopy: { flex: 1 },
+  onlineTitle: { fontSize: 14.5, fontWeight: '700', color: Brand.text },
+  onlineSub: { fontSize: 11.5, color: Brand.textSecondary, marginTop: 2 },
+  section: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: Brand.text,
+    marginTop: Space.xxl,
+    marginBottom: Space.md,
+  },
+  formCard: {
+    backgroundColor: Brand.surface,
+    borderRadius: Radius.lg,
+    borderWidth: 1,
+    borderColor: Brand.divider,
+    padding: Space.lg,
+  },
+  field: { marginBottom: Space.lg },
+  label: { fontSize: 12.5, fontWeight: '700', color: Brand.text, marginBottom: Space.sm },
   input: {
-    backgroundColor: '#f5f5f7', borderRadius: 12, paddingHorizontal: 16,
-    height: 50, fontSize: 15, color: '#1a1a1a',
+    backgroundColor: '#F7F9FC',
+    borderWidth: 1,
+    borderColor: Brand.border,
+    borderRadius: Radius.md,
+    paddingHorizontal: Space.md,
+    minHeight: 48,
+    fontSize: 13.5,
+    color: Brand.text,
   },
-  button: { backgroundColor: '#3c87f7', padding: 15, borderRadius: 12, alignItems: 'center', marginTop: 16 },
-  buttonText: { color: '#fff', fontSize: 15, fontWeight: '600' },
-  logoutButton: {
-    backgroundColor: '#fde8ea', padding: 15, borderRadius: 12,
-    alignItems: 'center', marginTop: 12, marginBottom: 32,
-  },
-  logoutText: { color: '#e8112a', fontSize: 15, fontWeight: '600' },
+  helper: { fontSize: 10.5, color: Brand.textMuted, marginTop: 5 },
+  save: { marginTop: Space.xxl },
+  logout: { marginTop: Space.md },
 });

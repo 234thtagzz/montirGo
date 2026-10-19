@@ -1,8 +1,18 @@
 import { useRef, useState } from 'react';
 import {
-  View, Text, Pressable, StyleSheet, FlatList, TextInput,
-  KeyboardAvoidingView, Platform, Alert,
+  Alert,
+  FlatList,
+  KeyboardAvoidingView,
+  Platform,
+  Pressable,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
 } from 'react-native';
+import { ScreenHeader } from '@/components/ui/screen-header';
+import { Ionicons } from '@/components/ui/icon';
+import { Brand, Radius, ScreenPadding, Space } from '@/constants/brand';
 import { AI_DISCLAIMER, AI_SUGGESTIONS } from '@/features/ai-assistant/constants';
 import { askAssistant, type ChatMessage } from '@/features/ai-assistant/service';
 
@@ -32,85 +42,166 @@ export default function MechanicAIAssistantScreen() {
   };
 
   return (
-    <KeyboardAvoidingView
-      style={styles.container}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-      keyboardVerticalOffset={80}>
-      <Text style={styles.title}>AI Asisten Montir</Text>
-      <Text style={styles.disclaimer}>{AI_DISCLAIMER}</Text>
+    <View style={styles.screen}>
+      <ScreenHeader title="AI Asisten" subtitle="Bantu diagnosis awal kerusakan" showBack={false} />
+      <KeyboardAvoidingView
+        style={styles.flex}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        keyboardVerticalOffset={90}
+      >
+        <View style={styles.disclaimer}>
+          <Ionicons name="information-circle-outline" size={15} color={Brand.amber} />
+          <Text style={styles.disclaimerText}>{AI_DISCLAIMER}</Text>
+        </View>
 
-      <FlatList
-        ref={listRef}
-        data={messages}
-        keyExtractor={(_, i) => String(i)}
-        style={styles.list}
-        onContentSizeChange={() => listRef.current?.scrollToEnd({ animated: true })}
-        ListEmptyComponent={
-          <View>
-            <Text style={styles.muted}>Contoh pertanyaan cepat:</Text>
-            <View style={styles.chips}>
-              {AI_SUGGESTIONS.map((s) => (
-                <Pressable key={s} style={styles.chip} onPress={() => send(s)}>
-                  <Text style={styles.chipText}>{s}</Text>
-                </Pressable>
-              ))}
+        <FlatList
+          ref={listRef}
+          data={messages}
+          keyExtractor={(_, i) => String(i)}
+          style={styles.list}
+          contentContainerStyle={styles.listContent}
+          keyboardShouldPersistTaps="handled"
+          onContentSizeChange={() => listRef.current?.scrollToEnd({ animated: true })}
+          ListEmptyComponent={
+            <View>
+              <Text style={styles.hint}>Contoh pertanyaan cepat:</Text>
+              <View style={styles.chips}>
+                {AI_SUGGESTIONS.map((s) => (
+                  <Pressable
+                    key={s}
+                    accessibilityRole="button"
+                    onPress={() => send(s)}
+                    style={({ pressed }) => [styles.chip, pressed && styles.pressed]}
+                  >
+                    <Text style={styles.chipText}>{s}</Text>
+                  </Pressable>
+                ))}
+              </View>
             </View>
-          </View>
-        }
-        renderItem={({ item }) => (
-          <View style={[styles.bubble, item.role === 'user' ? styles.user : styles.assistant]}>
-            <Text style={item.role === 'user' ? styles.userText : styles.assistantText}>
-              {item.content}
-            </Text>
-          </View>
-        )}
-      />
-      {sending && <Text style={styles.muted}>AI sedang mengetik...</Text>}
-
-      <View style={styles.inputRow}>
-        <TextInput
-          value={input}
-          onChangeText={setInput}
-          placeholder="Tanya soal kerusakan..."
-          style={styles.input}
-          multiline
-          editable={!sending}
-          onSubmitEditing={() => send(input)}
+          }
+          renderItem={({ item }) => (
+            <View style={[styles.bubble, item.role === 'user' ? styles.user : styles.assistant]}>
+              <Text style={item.role === 'user' ? styles.userText : styles.assistantText}>
+                {item.content}
+              </Text>
+            </View>
+          )}
         />
-        <Pressable
-          style={[styles.send, sending && styles.sendDisabled]}
-          disabled={sending}
-          onPress={() => send(input)}>
-          <Text style={styles.sendText}>Kirim</Text>
-        </Pressable>
-      </View>
-    </KeyboardAvoidingView>
+
+        {sending ? (
+          <View style={styles.typing}>
+            <Ionicons name="ellipsis-horizontal" size={14} color={Brand.textMuted} />
+            <Text style={styles.typingText}>AI sedang mengetik…</Text>
+          </View>
+        ) : null}
+
+        <View style={styles.inputRow}>
+          <TextInput
+            value={input}
+            onChangeText={setInput}
+            placeholder="Tanya soal kerusakan..."
+            placeholderTextColor={Brand.textMuted}
+            selectionColor={Brand.primary}
+            style={styles.input}
+            multiline
+            editable={!sending}
+            onSubmitEditing={() => send(input)}
+          />
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Kirim pertanyaan"
+            disabled={sending || !input.trim()}
+            onPress={() => send(input)}
+            style={({ pressed }) => [
+              styles.send,
+              (sending || !input.trim()) && styles.sendDisabled,
+              pressed && styles.pressed,
+            ]}
+          >
+            <Ionicons name="send" size={18} color={Brand.white} />
+          </Pressable>
+        </View>
+      </KeyboardAvoidingView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#fff', paddingHorizontal: 16, paddingTop: 56 },
-  title: { fontSize: 22, fontWeight: '700', color: '#1a1a1a' },
+  screen: { flex: 1, backgroundColor: Brand.background },
+  flex: { flex: 1 },
   disclaimer: {
-    fontSize: 12, color: '#a16207', backgroundColor: '#fef9c3',
-    padding: 10, borderRadius: 10, marginVertical: 8,
+    flexDirection: 'row',
+    gap: 6,
+    alignItems: 'center',
+    backgroundColor: Brand.amberSoft,
+    marginHorizontal: ScreenPadding,
+    marginTop: Space.md,
+    borderRadius: Radius.md,
+    paddingHorizontal: Space.md,
+    paddingVertical: Space.sm,
   },
+  disclaimerText: { flex: 1, fontSize: 11, color: Brand.amber, lineHeight: 15 },
   list: { flex: 1 },
-  muted: { fontSize: 13, color: '#60646c', marginVertical: 8 },
-  chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  chip: { backgroundColor: '#eef4ff', paddingVertical: 10, paddingHorizontal: 14, borderRadius: 20 },
-  chipText: { color: '#3c87f7', fontSize: 13, fontWeight: '600' },
-  bubble: { maxWidth: '85%', padding: 12, borderRadius: 14, marginVertical: 4 },
-  user: { alignSelf: 'flex-end', backgroundColor: '#3c87f7' },
-  assistant: { alignSelf: 'flex-start', backgroundColor: '#f5f5f7' },
-  userText: { color: '#fff', fontSize: 14 },
-  assistantText: { color: '#1a1a1a', fontSize: 14 },
-  inputRow: { flexDirection: 'row', gap: 8, paddingVertical: 12, alignItems: 'flex-end' },
-  input: {
-    flex: 1, backgroundColor: '#f5f5f7', borderRadius: 14, paddingHorizontal: 14,
-    paddingVertical: 12, fontSize: 14, color: '#1a1a1a', maxHeight: 100,
+  listContent: { paddingHorizontal: ScreenPadding, paddingTop: Space.md, paddingBottom: Space.sm },
+  hint: { fontSize: 12, color: Brand.textSecondary, marginBottom: Space.sm, marginTop: Space.sm },
+  chips: { flexDirection: 'row', flexWrap: 'wrap', gap: Space.sm },
+  chip: {
+    backgroundColor: Brand.primarySoft,
+    paddingVertical: 9,
+    paddingHorizontal: Space.md,
+    borderRadius: Radius.pill,
   },
-  send: { backgroundColor: '#3c87f7', borderRadius: 14, paddingVertical: 13, paddingHorizontal: 18 },
-  sendDisabled: { opacity: 0.6 },
-  sendText: { color: '#fff', fontWeight: '600' },
+  chipText: { color: Brand.primary, fontSize: 12, fontWeight: '600' },
+  bubble: { maxWidth: '85%', padding: Space.md, borderRadius: Radius.md, marginVertical: 4 },
+  user: { alignSelf: 'flex-end', backgroundColor: Brand.primary, borderBottomRightRadius: 4 },
+  assistant: {
+    alignSelf: 'flex-start',
+    backgroundColor: Brand.surface,
+    borderWidth: 1,
+    borderColor: Brand.divider,
+    borderBottomLeftRadius: 4,
+  },
+  userText: { color: Brand.white, fontSize: 13.5, lineHeight: 19 },
+  assistantText: { color: Brand.text, fontSize: 13.5, lineHeight: 19 },
+  typing: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: ScreenPadding,
+    paddingBottom: Space.sm,
+  },
+  typingText: { fontSize: 11.5, color: Brand.textMuted },
+  inputRow: {
+    flexDirection: 'row',
+    gap: Space.sm,
+    alignItems: 'flex-end',
+    paddingHorizontal: ScreenPadding,
+    paddingTop: Space.sm,
+    paddingBottom: Space.md,
+    borderTopWidth: 1,
+    borderTopColor: Brand.divider,
+    backgroundColor: Brand.surface,
+  },
+  input: {
+    flex: 1,
+    backgroundColor: Brand.background,
+    borderRadius: Radius.md,
+    borderWidth: 1,
+    borderColor: Brand.border,
+    paddingHorizontal: Space.md,
+    paddingVertical: 11,
+    fontSize: 13.5,
+    color: Brand.text,
+    maxHeight: 110,
+  },
+  send: {
+    width: 46,
+    height: 46,
+    borderRadius: 23,
+    backgroundColor: Brand.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  sendDisabled: { opacity: 0.45 },
+  pressed: { opacity: 0.8 },
 });

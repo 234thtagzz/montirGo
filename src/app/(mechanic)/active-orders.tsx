@@ -1,20 +1,25 @@
 import { useCallback, useEffect, useState } from 'react';
-import { View, Text, Pressable, StyleSheet, FlatList, RefreshControl, Alert } from 'react-native';
+import { RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
 import { useRouter } from 'expo-router';
+import { ScreenHeader } from '@/components/ui/screen-header';
+import { EmptyState, ErrorState, LoadingState } from '@/components/ui/state';
+import { Brand, ScreenPadding, Space } from '@/constants/brand';
 import { listMyOrders, type MyOrder } from '@/features/mechanic/service';
-import { EmptyState, LoadingState } from '@/components/ui/state';
+import { OrderCard } from '@/features/mechanic/components/order-card';
 
 export default function MechanicActiveOrdersScreen() {
   const [orders, setOrders] = useState<MyOrder[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [error, setError] = useState(false);
   const router = useRouter();
 
   const load = useCallback(async () => {
     try {
       setOrders(await listMyOrders(true));
-    } catch (e) {
-      Alert.alert('Gagal memuat', e instanceof Error ? e.message : 'Coba lagi.');
+      setError(false);
+    } catch {
+      setError(true);
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -26,9 +31,12 @@ export default function MechanicActiveOrdersScreen() {
     (async () => {
       try {
         const rows = await listMyOrders(true);
-        if (!cancelled) setOrders(rows);
-      } catch (e) {
-        if (!cancelled) Alert.alert('Gagal memuat', e instanceof Error ? e.message : 'Coba lagi.');
+        if (!cancelled) {
+          setOrders(rows);
+          setError(false);
+        }
+      } catch {
+        if (!cancelled) setError(true);
       } finally {
         if (!cancelled) {
           setLoading(false);
@@ -41,37 +49,59 @@ export default function MechanicActiveOrdersScreen() {
     };
   }, []);
 
-  if (loading) {
-    return <LoadingState message="Memuat order aktif..." />;
-  }
-
   return (
-    <View style={styles.container}>
-      <Text style={styles.title}>Order Aktif</Text>
-      <FlatList
-        data={orders}
-        keyExtractor={(o) => o.id}
-        refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); load(); }} />
-        }
-        ListEmptyComponent={<EmptyState message="Belum ada order aktif saat ini." />}
-        renderItem={({ item }) => (
-          <Pressable
-            style={styles.card}
-            onPress={() => router.push(`/(mechanic)/active-order/${item.id}`)}>
-            <Text style={styles.desc} numberOfLines={1}>{item.issue_description}</Text>
-            <Text style={styles.muted}>{item.client_name ?? 'Client'} • {item.status.replaceAll('_', ' ')}</Text>
-          </Pressable>
-        )}
-      />
+    <View style={styles.screen}>
+      <ScreenHeader title="Order Aktif" subtitle="Order yang sedang kamu tangani" />
+      {loading ? (
+        <LoadingState message="Memuat order aktif..." />
+      ) : (
+        <ScrollView
+          contentContainerStyle={styles.content}
+          showsVerticalScrollIndicator={false}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={() => {
+                setRefreshing(true);
+                load();
+              }}
+              tintColor={Brand.primary}
+              colors={[Brand.primary]}
+            />
+          }
+        >
+          {error ? (
+            <ErrorState onRetry={load} />
+          ) : orders.length === 0 ? (
+            <EmptyState
+              icon="construct-outline"
+              message="Belum ada order aktif"
+              hint="Terima request di tab Request untuk mulai mengerjakan order."
+              actionLabel="Lihat Request"
+              onPressAction={() => router.push('/(mechanic)/requests')}
+            />
+          ) : (
+            orders.map((order) => (
+              <OrderCard
+                key={order.id}
+                issue={order.issue_description}
+                status={order.status}
+                createdAt={order.created_at}
+                vehicle={[order.vehicle_brand, order.vehicle_model].filter(Boolean).join(' ')}
+                clientName={order.client_name}
+                address={order.address}
+                price={order.price_amount}
+                onPress={() => router.push(`/(mechanic)/active-order/${order.id}`)}
+              />
+            ))
+          )}
+        </ScrollView>
+      )}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#fff', paddingHorizontal: 20, paddingTop: 56 },
-  title: { fontSize: 22, fontWeight: '700', color: '#1a1a1a', marginBottom: 12 },
-  muted: { fontSize: 13, color: '#60646c', marginTop: 4 },
-  card: { backgroundColor: '#f5f5f7', borderRadius: 14, padding: 16, marginBottom: 12 },
-  desc: { fontSize: 15, fontWeight: '600', color: '#1a1a1a' },
+  screen: { flex: 1, backgroundColor: Brand.background },
+  content: { padding: ScreenPadding, paddingBottom: Space.xxxl },
 });

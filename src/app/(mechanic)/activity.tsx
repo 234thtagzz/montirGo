@@ -1,26 +1,25 @@
 import { useCallback, useEffect, useState } from 'react';
-import { View, Text, StyleSheet, FlatList, RefreshControl, Alert } from 'react-native';
+import { RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ScreenHeader } from '@/components/ui/screen-header';
+import { EmptyState, ErrorState, LoadingState } from '@/components/ui/state';
+import { Ionicons } from '@/components/ui/icon';
+import { Brand, Radius, ScreenPadding, Space } from '@/constants/brand';
+import { getActivityMeta } from '@/features/mechanic/constants';
 import { listMyActivity, type ActivityItem } from '@/features/mechanic/service';
 import { formatDateTime } from '@/utils/format';
-import { EmptyState, LoadingState } from '@/components/ui/state';
-
-const ACTIVITY_LABEL: Record<string, string> = {
-  online_status: 'Status online',
-  order_accepted: 'Order diterima',
-  order_status: 'Update order',
-  login: 'Login',
-};
 
 export default function MechanicActivityScreen() {
   const [items, setItems] = useState<ActivityItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [error, setError] = useState(false);
 
   const load = useCallback(async () => {
     try {
       setItems(await listMyActivity());
-    } catch (e) {
-      Alert.alert('Gagal memuat', e instanceof Error ? e.message : 'Coba lagi.');
+      setError(false);
+    } catch {
+      setError(true);
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -32,9 +31,12 @@ export default function MechanicActivityScreen() {
     (async () => {
       try {
         const rows = await listMyActivity();
-        if (!cancelled) setItems(rows);
-      } catch (e) {
-        if (!cancelled) Alert.alert('Gagal memuat', e instanceof Error ? e.message : 'Coba lagi.');
+        if (!cancelled) {
+          setItems(rows);
+          setError(false);
+        }
+      } catch {
+        if (!cancelled) setError(true);
       } finally {
         if (!cancelled) {
           setLoading(false);
@@ -47,43 +49,96 @@ export default function MechanicActivityScreen() {
     };
   }, []);
 
-  if (loading) {
-    return <LoadingState message="Memuat aktivitas..." />;
-  }
-
   return (
-    <View style={styles.container}>
-      <Text style={styles.title}>Aktivitas</Text>
-      <FlatList
-        data={items}
-        keyExtractor={(i) => i.id}
-        refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); load(); }} />
-        }
-        ListEmptyComponent={<EmptyState message="Belum ada aktivitas tercatat." />}
-        renderItem={({ item }) => (
-          <View style={styles.row}>
-            <View style={styles.dot} />
-            <View style={styles.body}>
-              <Text style={styles.type}>{ACTIVITY_LABEL[item.activity_type] ?? item.activity_type}</Text>
-              {item.description ? <Text style={styles.desc}>{item.description}</Text> : null}
-              <Text style={styles.time}>{formatDateTime(item.created_at)}</Text>
-            </View>
-          </View>
-        )}
+    <View style={styles.screen}>
+      <ScreenHeader
+        title="Aktivitas"
+        subtitle="Jejak aktivitas akun montirmu"
+        showBack={false}
       />
+      {loading ? (
+        <LoadingState message="Memuat aktivitas..." />
+      ) : (
+        <ScrollView
+          contentContainerStyle={styles.content}
+          showsVerticalScrollIndicator={false}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={() => {
+                setRefreshing(true);
+                load();
+              }}
+              tintColor={Brand.primary}
+              colors={[Brand.primary]}
+            />
+          }
+        >
+          {error ? (
+            <ErrorState onRetry={load} />
+          ) : items.length === 0 ? (
+            <EmptyState
+              icon="pulse-outline"
+              message="Belum ada aktivitas"
+              hint="Aktivitas seperti menerima order atau mengubah status akan tampil di sini."
+            />
+          ) : (
+            <View style={styles.card}>
+              {items.map((item, index) => {
+                const meta = getActivityMeta(item.activity_type);
+                return (
+                  <View
+                    key={item.id}
+                    style={[styles.row, index === items.length - 1 && styles.rowLast]}
+                  >
+                    <View style={[styles.iconCircle, { backgroundColor: meta.background }]}>
+                      <Ionicons name={meta.icon} size={17} color={meta.color} />
+                    </View>
+                    <View style={styles.copy}>
+                      <Text style={styles.title}>{meta.label}</Text>
+                      {item.description ? (
+                        <Text style={styles.description}>{item.description}</Text>
+                      ) : null}
+                      <Text style={styles.time}>{formatDateTime(item.created_at)}</Text>
+                    </View>
+                  </View>
+                );
+              })}
+            </View>
+          )}
+        </ScrollView>
+      )}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#fff', paddingHorizontal: 20, paddingTop: 56 },
-  title: { fontSize: 22, fontWeight: '700', color: '#1a1a1a', marginBottom: 12 },
-  muted: { fontSize: 13, color: '#60646c' },
-  row: { flexDirection: 'row', gap: 12, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: '#eee' },
-  dot: { width: 10, height: 10, borderRadius: 5, backgroundColor: '#3c87f7', marginTop: 5 },
-  body: { flex: 1 },
-  type: { fontSize: 14, fontWeight: '600', color: '#1a1a1a' },
-  desc: { fontSize: 13, color: '#60646c', marginTop: 2 },
-  time: { fontSize: 12, color: '#9ca3af', marginTop: 2 },
+  screen: { flex: 1, backgroundColor: Brand.background },
+  content: { padding: ScreenPadding, paddingBottom: Space.xxxl },
+  card: {
+    backgroundColor: Brand.surface,
+    borderRadius: Radius.lg,
+    borderWidth: 1,
+    borderColor: Brand.divider,
+    paddingHorizontal: Space.lg,
+  },
+  row: {
+    flexDirection: 'row',
+    gap: Space.md,
+    paddingVertical: Space.md,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: Brand.divider,
+  },
+  rowLast: { borderBottomWidth: 0 },
+  iconCircle: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  copy: { flex: 1 },
+  title: { fontSize: 13.5, fontWeight: '600', color: Brand.text },
+  description: { fontSize: 11.5, color: Brand.textSecondary, marginTop: 2, lineHeight: 16 },
+  time: { fontSize: 10.5, color: Brand.textMuted, marginTop: 3 },
 });

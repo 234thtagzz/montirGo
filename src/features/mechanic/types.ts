@@ -43,6 +43,20 @@ export interface MyOrder {
   client_phone: string | null;
 }
 
+export interface MechanicOrderDetail extends MyOrder {
+  additional_notes: string | null;
+  vehicle_plate: string | null;
+  updated_at: string;
+}
+
+export interface OrderStatusEvent {
+  id: string;
+  from_status: string | null;
+  to_status: string;
+  notes: string | null;
+  created_at: string;
+}
+
 export interface ActivityItem {
   id: string;
   activity_type: string;
