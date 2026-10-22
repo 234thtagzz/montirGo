@@ -1,6 +1,6 @@
 import { Redirect } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, View } from 'react-native';
+import { AppLoadingScreen } from '@/components/app-loading-screen';
 import { getSessionUser } from '@/features/auth/service';
 
 export default function RootIndex() {
@@ -23,12 +23,9 @@ export default function RootIndex() {
     resolve();
   }, []);
 
+  // Lanjutkan visual splash yang sama supaya transisi ke halaman berikutnya mulus.
   if (!target) {
-    return (
-      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
-        <ActivityIndicator />
-      </View>
-    );
+    return <AppLoadingScreen instant status="Menyiapkan sesi…" />;
   }
 
   return <Redirect href={target} />;

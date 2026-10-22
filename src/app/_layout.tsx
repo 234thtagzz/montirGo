@@ -1,39 +1,70 @@
 import { DarkTheme, DefaultTheme, ThemeProvider } from 'expo-router/react-navigation';
 import { Stack } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
-import { useColorScheme } from 'react-native';
-import { useEffect, useState } from 'react';
-import { View, Text, ActivityIndicator, StyleSheet } from 'react-native';
+import { Platform, useColorScheme } from 'react-native';
+import { useCallback, useEffect, useState } from 'react';
+import { AppLoadingScreen } from '@/components/app-loading-screen';
 import { supabase } from '@/lib/supabase';
 
 SplashScreen.preventAutoHideAsync();
 
+/** Minimal durasi layar loading brand agar animasinya sempat tampil. */
+const MIN_BOOT_MS = 1200;
+/** Samakan dengan durasi animasi keluar AppLoadingScreen. */
+const EXIT_MS = 340;
+
+if (Platform.OS !== 'web') {
+  // Transisi lembut dari splash native ke splash animasi MontirGo.
+  SplashScreen.setOptions({ duration: 300, fade: true });
+}
+
 export default function RootLayout() {
-  const [isLoading, setIsLoading] = useState(true);
+  const [isBooting, setIsBooting] = useState(true);
+  const [isExiting, setIsExiting] = useState(false);
   const colorScheme = useColorScheme();
 
+  // Splash native baru dilepas setelah splash animasi benar-benar tergambar,
+  // sehingga tidak ada kedipan layar kosong di antaranya.
+  const hideNativeSplash = useCallback(() => {
+    SplashScreen.hideAsync().catch(() => {});
+  }, []);
+
   useEffect(() => {
-    const checkAuth = async () => {
+    let cancelled = false;
+    let exitTimer: ReturnType<typeof setTimeout> | undefined;
+    const startedAt = Date.now();
+
+    const boot = async () => {
       try {
         // Pulihkan sesi Supabase (persisted di AsyncStorage oleh supabase-js).
         // Redirect otomatis per-role ditangani di src/app/index.tsx.
         await supabase.auth.getSession();
-      } finally {
-        setIsLoading(false);
-        await SplashScreen.hideAsync();
+      } catch {
+        // Gagal restore sesi tidak boleh menahan aplikasi; index.tsx akan redirect ke login.
       }
+
+      const remaining = MIN_BOOT_MS - (Date.now() - startedAt);
+      if (remaining > 0) {
+        await new Promise((resolve) => setTimeout(resolve, remaining));
+      }
+      if (cancelled) return;
+
+      setIsExiting(true);
+      exitTimer = setTimeout(() => {
+        if (!cancelled) setIsBooting(false);
+      }, EXIT_MS);
     };
 
-    checkAuth();
+    boot();
+
+    return () => {
+      cancelled = true;
+      if (exitTimer) clearTimeout(exitTimer);
+    };
   }, []);
 
-  if (isLoading) {
-    return (
-      <View style={styles.loader}>
-        <ActivityIndicator size="large" />
-        <Text>MontirGo</Text>
-      </View>
-    );
+  if (isBooting) {
+    return <AppLoadingScreen exiting={isExiting} onLayout={hideNativeSplash} />;
   }
 
   return (
@@ -47,12 +78,3 @@ export default function RootLayout() {
     </ThemeProvider>
   );
 }
-
-const styles = StyleSheet.create({
-  loader: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: '#fff',
-  },
-});

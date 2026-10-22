@@ -1,6 +1,6 @@
 import { Redirect, Tabs } from 'expo-router';
 import { Ionicons } from '@/components/ui/icon';
-import { LoadingState } from '@/components/ui/state';
+import { AppLoadingScreen } from '@/components/app-loading-screen';
 import { Brand } from '@/constants/brand';
 import { useSessionUser } from '@/hooks/use-session-user';
 
@@ -8,7 +8,7 @@ import { useSessionUser } from '@/hooks/use-session-user';
 export default function ClientLayout() {
   const { user, loading } = useSessionUser();
 
-  if (loading) return <LoadingState message="Memeriksa akses..." />;
+  if (loading) return <AppLoadingScreen instant status="Memeriksa akses…" />;
   if (!user) return <Redirect href="/(auth)/login" />;
   if (user.role === 'MONTIR') return <Redirect href="/(mechanic)" />;
   if (user.role !== 'CLIENT') return <Redirect href="/(auth)/login" />;

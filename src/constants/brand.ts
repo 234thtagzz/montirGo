@@ -34,6 +34,8 @@ export const Brand = {
 /** Gradient header & kartu promo (minimal 2 stop, sesuai API LinearGradient). */
 export const Gradient = {
   header: ['#2E9BFF', '#0B74E5', '#0A5FC0'] as const,
+  /** Latar layar loading saat aplikasi dibuka (lanjutan dari header, lebih dalam di bawah). */
+  splash: ['#2E9BFF', '#0B74E5', '#0A5FC0', '#073E80'] as const,
   promoBlue: ['#1E90FF', '#0B74E5'] as const,
   promoGreen: ['#00C45A', '#009E45'] as const,
   promoAmber: ['#FBBF24', '#F59E0B'] as const,
