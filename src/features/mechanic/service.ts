@@ -1,11 +1,17 @@
 // Data layer section montir — langsung ke Supabase (RLS menjaga otorisasi, PRD §6/§22).
 import { supabase } from '@/lib/supabase';
+import {
+  mapAiAnalysis,
+  type RawAiAnalysis,
+} from '@/features/service-request/ai';
 import type {
-  ActivityItem, EarningsSummary, IncomingOrder, MechanicOrderDetail, MechanicProfile, MyOrder,
-  OrderStatus, OrderStatusEvent,
+  ActivityItem, EarningsSummary, IncomingOrder, IncomingRequestDetail, MechanicOrderDetail,
+  MechanicProfile, MyOrder, OrderStatus, OrderStatusEvent,
 } from './types';
 
 export * from './types';
+
+const OPEN_REQUEST_STATUSES = ['requested', 'matching'];
 
 const ACTIVE_STATUSES = [
   'mechanic_accepted', 'on_the_way', 'arrived', 'diagnosing', 'repairing', 'completed', 'payment',
@@ -53,19 +59,52 @@ export async function updateMechanicProfile(patch: {
 }
 
 // Order terbuka yang bisa diambil (khusus role mechanic, sesuai RLS).
+// Sumber utama: view `mechanic_open_request_view` (data client + kendaraan +
+// ringkasan AI). Fallback ke query lama bila migration view belum dijalankan.
 export async function listIncomingOrders(): Promise<IncomingOrder[]> {
   const { data, error } = await supabase
+    .from('mechanic_open_request_view')
+    .select(
+      'id, issue_description, symptoms, address, contact_phone, status, created_at, ' +
+        'vehicle_brand, vehicle_model, client_name, ai_analysis',
+    )
+    .order('created_at', { ascending: false })
+    .limit(30);
+
+  // Jangan percaya hasil kosong dari view secara membabi buta: view bisa saja
+  // belum ter-update di database. Fallback ke query langsung tetap benar.
+  if (!error && data && data.length > 0) {
+    return ((data ?? []) as unknown as Record<string, unknown>[]).map((r) => {
+      const analysis = mapAiAnalysis(r.ai_analysis as RawAiAnalysis | null);
+      return {
+        id: r.id as string,
+        issue_description: r.issue_description as string,
+        symptoms: (r.symptoms as string | null) ?? null,
+        address: (r.address as string | null) ?? null,
+        contact_phone: r.contact_phone as string,
+        status: r.status as OrderStatus,
+        created_at: r.created_at as string,
+        vehicle_brand: (r.vehicle_brand as string | null) ?? null,
+        vehicle_model: (r.vehicle_model as string | null) ?? null,
+        client_name: (r.client_name as string | null) ?? null,
+        ai_risk_level: analysis?.riskLevel ?? null,
+        has_analysis: analysis !== null,
+      };
+    });
+  }
+
+  const { data: fallback, error: fallbackError } = await supabase
     .from('service_requests')
     .select(
       'id, issue_description, symptoms, address, contact_phone, status, created_at, ' +
         'vehicles (brand, model), client:profiles!service_requests_client_id_fkey (full_name)',
     )
     .is('mechanic_id', null)
-    .in('status', ['requested', 'matching'])
+    .in('status', OPEN_REQUEST_STATUSES)
     .order('created_at', { ascending: false })
     .limit(30);
-  if (error) throw error;
-  return ((data ?? []) as unknown as Record<string, unknown>[]).map((r) => ({
+  if (fallbackError) throw fallbackError;
+  return ((fallback ?? []) as unknown as Record<string, unknown>[]).map((r) => ({
     id: r.id as string,
     issue_description: r.issue_description as string,
     symptoms: r.symptoms as string | null,
@@ -76,7 +115,100 @@ export async function listIncomingOrders(): Promise<IncomingOrder[]> {
     vehicle_brand: (r.vehicles as { brand?: string } | null)?.brand ?? null,
     vehicle_model: (r.vehicles as { model?: string } | null)?.model ?? null,
     client_name: (r.client as { full_name?: string } | null)?.full_name ?? null,
+    ai_risk_level: null,
+    has_analysis: false,
   }));
+}
+
+/**
+ * Detail request terbuka untuk layar otorisasi montir (sebelum menerima).
+ * Mengembalikan null bila request sudah diambil montir lain / dibatalkan.
+ */
+export async function getIncomingRequestDetail(
+  id: string,
+): Promise<IncomingRequestDetail | null> {
+  const { data, error } = await supabase
+    .from('mechanic_open_request_view')
+    .select(
+      'id, status, issue_description, symptoms, address, lat, lng, contact_phone, ' +
+        'additional_notes, created_at, client_name, vehicle_type, vehicle_brand, ' +
+        'vehicle_model, vehicle_year, vehicle_plate, ai_analysis, ai_created_at',
+    )
+    .eq('id', id)
+    .maybeSingle();
+
+  // Fallback juga ketika view mengembalikan kosong (mis. view lama/belum
+  // ter-sync). Hanya query langsung yang boleh menyimpulkan request hilang.
+  if (!error && data) {
+    return mapIncomingDetail(data as unknown as Record<string, unknown>);
+  }
+
+  // Fallback: view belum ada. Data AI & nama client bisa kosong karena RLS.
+  const { data: fallback, error: fallbackError } = await supabase
+    .from('service_requests')
+    .select(
+      'id, status, issue_description, symptoms, address, lat, lng, contact_phone, ' +
+        'additional_notes, created_at, vehicles ( type, brand, model, year, license_plate ), ' +
+        'client:profiles!service_requests_client_id_fkey ( full_name )',
+    )
+    .eq('id', id)
+    .is('mechanic_id', null)
+    .in('status', OPEN_REQUEST_STATUSES)
+    .maybeSingle();
+  if (fallbackError) throw fallbackError;
+  if (!fallback) return null;
+
+  const r = fallback as unknown as Record<string, unknown>;
+  const vehicle = r.vehicles as {
+    type?: string | null;
+    brand?: string | null;
+    model?: string | null;
+    year?: number | null;
+    license_plate?: string | null;
+  } | null;
+  return {
+    id: r.id as string,
+    status: r.status as OrderStatus,
+    issue_description: r.issue_description as string,
+    symptoms: (r.symptoms as string | null) ?? null,
+    address: (r.address as string | null) ?? null,
+    lat: Number(r.lat),
+    lng: Number(r.lng),
+    contact_phone: r.contact_phone as string,
+    additional_notes: (r.additional_notes as string | null) ?? null,
+    created_at: r.created_at as string,
+    client_name: (r.client as { full_name?: string } | null)?.full_name ?? null,
+    vehicle_type: vehicle?.type ?? null,
+    vehicle_brand: vehicle?.brand ?? null,
+    vehicle_model: vehicle?.model ?? null,
+    vehicle_year: vehicle?.year ?? null,
+    vehicle_plate: vehicle?.license_plate ?? null,
+    ai_analysis: null,
+    ai_created_at: null,
+  };
+}
+
+function mapIncomingDetail(r: Record<string, unknown>): IncomingRequestDetail {
+  return {
+    id: r.id as string,
+    status: r.status as OrderStatus,
+    issue_description: r.issue_description as string,
+    symptoms: (r.symptoms as string | null) ?? null,
+    address: (r.address as string | null) ?? null,
+    lat: Number(r.lat),
+    lng: Number(r.lng),
+    contact_phone: r.contact_phone as string,
+    additional_notes: (r.additional_notes as string | null) ?? null,
+    created_at: r.created_at as string,
+    client_name: (r.client_name as string | null) ?? null,
+    vehicle_type: (r.vehicle_type as string | null) ?? null,
+    vehicle_brand: (r.vehicle_brand as string | null) ?? null,
+    vehicle_model: (r.vehicle_model as string | null) ?? null,
+    vehicle_year: (r.vehicle_year as number | null) ?? null,
+    vehicle_plate: (r.vehicle_plate as string | null) ?? null,
+    ai_analysis: mapAiAnalysis(r.ai_analysis as RawAiAnalysis | null),
+    ai_created_at: (r.ai_created_at as string | null) ?? null,
+  };
 }
 
 export async function listMyOrders(onlyActive = false): Promise<MyOrder[]> {
@@ -154,15 +286,73 @@ export async function listOrderStatusHistory(requestId: string): Promise<OrderSt
   return (data ?? []) as OrderStatusEvent[];
 }
 
+const ACCEPT_RPC = 'accept_service_request';
+
+function isRpcMissing(error: { code?: string; message?: string } | null): boolean {
+  if (!error) return false;
+  return (
+    error.code === 'PGRST202' ||
+    error.code === '42883' ||
+    /could not find the function|function .* does not exist/i.test(error.message ?? '')
+  );
+}
+
+/**
+ * Menerima request secara atomik.
+ *
+ * Utama: RPC `accept_service_request` (SECURITY DEFINER). Fungsi ini mengunci
+ * baris request, memastikan belum diambil montir lain, lalu mengubah
+ * mechanic_id + status dalam satu transaksi. Ini mencegah dua montir menang
+ * bersamaan dan tidak bergantung pada policy RLS dari client.
+ *
+ * Fallback: update langsung dengan syarat `mechanic_id is null` (untuk database
+ * yang belum menjalankan migrasi RPC).
+ */
 export async function acceptOrder(requestId: string): Promise<void> {
   const id = await getMyId();
-  const { error } = await supabase
+
+  const { data, error } = await supabase.rpc(ACCEPT_RPC, { p_request_id: requestId });
+  if (!error) {
+    const row = (Array.isArray(data) ? data[0] : data) as
+      | { id?: string; mechanic_id?: string | null }
+      | null;
+    if (!row?.id || row.mechanic_id !== id) {
+      throw new Error('Request sudah diambil montir lain atau sudah tidak tersedia.');
+    }
+    return;
+  }
+
+  if (!isRpcMissing(error)) {
+    throw new Error(error.message || 'Request sudah diambil montir lain atau tidak tersedia.');
+  }
+
+  const { data: accepted, error: updateError } = await supabase
     .from('service_requests')
     .update({ mechanic_id: id, status: 'mechanic_accepted', accepted_at: new Date().toISOString() })
     .eq('id', requestId)
     .is('mechanic_id', null)
-    .in('status', ['requested', 'matching']);
-  if (error) throw error;
+    .in('status', ['requested', 'matching'])
+    .select('id');
+  if (updateError) throw updateError;
+  if (!accepted || accepted.length === 0) {
+    // Bedakan "sudah diambil montir lain" dari policy database yang belum siap.
+    const { data: current } = await supabase
+      .from('service_requests')
+      .select('mechanic_id, status')
+      .eq('id', requestId)
+      .maybeSingle();
+    const stillOpen =
+      current != null &&
+      (current as { mechanic_id?: string | null }).mechanic_id == null &&
+      ['requested', 'matching'].includes((current as { status?: string }).status ?? '');
+    if (stillOpen) {
+      throw new Error(
+        'Server belum mengizinkan pengambilan order. Jalankan migrasi database ' +
+          '(supabase db push) lalu coba lagi.',
+      );
+    }
+    throw new Error('Request sudah diambil montir lain atau sudah tidak tersedia.');
+  }
   await supabase.from('service_request_status_history').insert({
     request_id: requestId,
     from_status: 'matching',
@@ -180,12 +370,16 @@ export async function updateOrderStatus(requestId: string, toStatus: OrderStatus
     .select('status')
     .eq('id', requestId)
     .single();
-  const { error } = await supabase
+  const { data: updated, error } = await supabase
     .from('service_requests')
     .update({ status: toStatus })
     .eq('id', requestId)
-    .eq('mechanic_id', id);
+    .eq('mechanic_id', id)
+    .select('id');
   if (error) throw error;
+  if (!updated || updated.length === 0) {
+    throw new Error('Status order gagal diubah. Pastikan order masih milikmu.');
+  }
   await supabase.from('service_request_status_history').insert({
     request_id: requestId,
     from_status: (current as { status?: string } | null)?.status ?? null,

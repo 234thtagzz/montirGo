@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Alert, RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useFocusEffect, useRouter } from 'expo-router';
 import { ScreenHeader } from '@/components/ui/screen-header';
 import { EmptyState, ErrorState, LoadingState } from '@/components/ui/state';
 import { Brand, ScreenPadding, Space } from '@/constants/brand';
@@ -35,6 +35,13 @@ export default function MechanicRequestsScreen() {
     }
   }, []);
 
+  // Muat ulang setiap layar difokuskan (mis. kembali dari detail request).
+  useFocusEffect(
+    useCallback(() => {
+      load();
+    }, [load]),
+  );
+
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -55,7 +62,8 @@ export default function MechanicRequestsScreen() {
     })();
     const ch = supabase
       .channel('mechanic-incoming')
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'service_requests' }, load)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'service_requests' }, load)
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'ai_diagnoses' }, load)
       .subscribe();
     return () => {
       cancelled = true;
@@ -67,16 +75,28 @@ export default function MechanicRequestsScreen() {
     setAcceptingId(id);
     try {
       await acceptOrder(id);
-      Alert.alert('Berhasil', 'Order diterima. Lihat detailnya di Beranda > Order aktif.', [
-        { text: 'Nanti' },
-        { text: 'Lihat Order', onPress: () => router.push(`/(mechanic)/active-order/${id}`) },
-      ]);
+      // Request langsung hilang dari daftar semua montir...
+      setOrders((current) => current.filter((order) => order.id !== id));
+      Alert.alert(
+        'Order diterima',
+        'Request sudah berpindah ke Beranda sebagai order aktifmu.',
+        [
+          {
+            text: 'Lihat Beranda',
+            onPress: () => router.replace('/(mechanic)'),
+          },
+        ],
+        { cancelable: false },
+      );
       load();
     } catch (e) {
-      Alert.alert(
-        'Gagal menerima',
-        e instanceof Error ? e.message : 'Order mungkin sudah diambil montir lain.',
-      );
+      const message =
+        e instanceof Error ? e.message : 'Order mungkin sudah diambil montir lain.';
+      Alert.alert('Gagal menerima', message);
+      // Hanya hilangkan dari daftar bila request memang sudah tidak tersedia.
+      if (/diambil montir lain|tidak tersedia/i.test(message)) {
+        setOrders((current) => current.filter((order) => order.id !== id));
+      }
       load();
     } finally {
       setAcceptingId(null);
@@ -124,7 +144,7 @@ export default function MechanicRequestsScreen() {
           <EmptyState
             icon="flash-outline"
             message="Belum ada request masuk"
-            hint="Pastikan status kamu Online di Beranda supaya client bisa menemukanmu."
+            hint="Request client yang masih terbuka akan muncul di sini. Setelah kamu terima, request pindah ke Beranda sebagai order aktif."
             actionLabel="Buka Beranda"
             onPressAction={() => router.push('/(mechanic)')}
           />
@@ -138,7 +158,14 @@ export default function MechanicRequestsScreen() {
               vehicle={[order.vehicle_brand, order.vehicle_model].filter(Boolean).join(' ')}
               clientName={order.client_name}
               address={order.address}
+              aiRisk={order.ai_risk_level}
               badge={NEW_REQUEST_BADGE}
+              onPress={() =>
+                router.push({
+                  pathname: '/(mechanic)/request/[id]',
+                  params: { id: order.id },
+                })
+              }
               action={{
                 label: acceptingId === order.id ? 'Memproses...' : 'Terima Order',
                 icon: 'checkmark-circle-outline',

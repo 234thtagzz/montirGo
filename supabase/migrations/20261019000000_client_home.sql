@@ -10,7 +10,9 @@
 -- hanya untuk montir yang sedang online. View ini dimiliki role pemilik skema
 -- sehingga tidak tunduk RLS tabel, namun kolom yang terekspos sudah dibatasi.
 
-create or replace view public.mechanic_directory
+drop view if exists public.mechanic_directory;
+
+create view public.mechanic_directory
 with (security_invoker = false)
 as
 select

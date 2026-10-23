@@ -19,6 +19,7 @@ import { Ionicons } from '@/components/ui/icon';
 import { Brand, Radius, ScreenPadding, Space } from '@/constants/brand';
 import { useSessionUser } from '@/hooks/use-session-user';
 import { createServiceRequest, listMyVehicles, type ClientVehicle } from '@/features/client/service';
+import { analyzeRequest } from '@/features/service-request/ai';
 import {
   SERVICE_CATEGORIES,
   getCategory,
@@ -149,7 +150,37 @@ export default function NewServiceRequestScreen() {
         contactPhone,
         additionalNotes: notes || null,
       });
-      router.replace({ pathname: '/(client)/orders/[id]', params: { id } });
+
+      // Analisis AI dijalankan setelah request tersimpan. Kegagalan AI tidak
+      // boleh menggagalkan permintaan — client bisa analisis ulang di detail.
+      let analysisFailed = false;
+      let analysisMessage = '';
+      try {
+        await analyzeRequest(id);
+      } catch (analysisError) {
+        analysisFailed = true;
+        analysisMessage =
+          analysisError instanceof Error
+            ? analysisError.message
+            : 'Analisis AI belum tersedia.';
+      }
+
+      if (analysisFailed) {
+        Alert.alert(
+          'Permintaan terkirim',
+          `${analysisMessage}\n\nKamu tetap bisa mencoba analisis ulang dari detail pesanan.`,
+          [
+            {
+              text: 'Lihat Pesanan',
+              onPress: () =>
+                router.replace({ pathname: '/(client)/orders/[id]', params: { id } }),
+            },
+          ],
+          { cancelable: false },
+        );
+      } else {
+        router.replace({ pathname: '/(client)/orders/[id]', params: { id } });
+      }
     } catch (error) {
       Alert.alert(
         'Gagal mengirim',
@@ -307,9 +338,19 @@ export default function NewServiceRequestScreen() {
           />
 
           <Text style={styles.disclaimer}>
-            Permintaan akan dikirim ke montir terdekat. Montir akan menghubungi nomor kontakmu
-            sebelum berangkat.
+            Keluhanmu akan dianalisis AI untuk memberi indikasi awal kepada montir. Permintaan
+            dikirim ke montir terdekat dan montir akan menghubungi nomor kontakmu sebelum
+            berangkat.
           </Text>
+
+          {submitting ? (
+            <View style={styles.analyzingRow}>
+              <Ionicons name="sparkles" size={14} color={Brand.primary} />
+              <Text style={styles.analyzingText}>
+                Mengirim permintaan dan menganalisis keluhan dengan AI…
+              </Text>
+            </View>
+          ) : null}
 
           <Button
             label="Kirim Permintaan"
@@ -419,6 +460,17 @@ const styles = StyleSheet.create({
     lineHeight: 16,
     marginTop: Space.lg,
   },
+  analyzingRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: Brand.primarySoft,
+    borderRadius: Radius.md,
+    paddingHorizontal: Space.md,
+    paddingVertical: Space.sm,
+    marginTop: Space.lg,
+  },
+  analyzingText: { flex: 1, fontSize: 11.5, fontWeight: '600', color: Brand.primary },
   submit: { marginTop: Space.lg },
   pressed: { opacity: 0.75 },
 });

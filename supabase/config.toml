@@ -1,0 +1,10 @@
+# Konfigurasi Supabase CLI untuk project MontirGo.
+# `project_id` hanya identitas lokal; project ref remote diatur oleh `supabase link`.
+
+project_id = "montirgo"
+
+[functions.analyze-request]
+verify_jwt = true
+
+[functions.ai-assistant]
+verify_jwt = true

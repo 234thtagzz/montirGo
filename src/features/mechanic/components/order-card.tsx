@@ -3,6 +3,7 @@ import { Button } from '@/components/ui/button';
 import { Ionicons, type IconName } from '@/components/ui/icon';
 import { Brand, Radius, Space } from '@/constants/brand';
 import { getStatusMeta } from '@/features/service-request/status';
+import { getRiskMeta, type AiRiskLevel } from '@/features/service-request/ai';
 import { formatDateTime, formatIDR } from '@/utils/format';
 
 interface OrderBadge {
@@ -20,6 +21,8 @@ interface OrderCardProps {
   clientName?: string | null;
   address?: string | null;
   price?: number | null;
+  /** Risiko dari analisis AI (ditampilkan sebagai baris meta). */
+  aiRisk?: AiRiskLevel | null;
   /** Ganti chip status default (mis. "Request baru" di tab Request). */
   badge?: OrderBadge;
   onPress?: () => void;
@@ -35,11 +38,13 @@ export function OrderCard({
   clientName,
   address,
   price,
+  aiRisk,
   badge,
   onPress,
   action,
 }: OrderCardProps) {
   const meta = getStatusMeta(status);
+  const riskMeta = aiRisk ? getRiskMeta(aiRisk) : null;
   const chip = badge ?? {
     label: meta.shortLabel,
     color: meta.color,
@@ -65,6 +70,14 @@ export function OrderCard({
         {vehicle ? <MetaRow icon="car-outline" text={vehicle} /> : null}
         {clientName ? <MetaRow icon="person-outline" text={clientName} /> : null}
         {address ? <MetaRow icon="location-outline" text={address} /> : null}
+        {riskMeta ? (
+          <View style={styles.metaRow}>
+            <Ionicons name="sparkles-outline" size={13} color={riskMeta.color} />
+            <Text style={[styles.metaText, { color: riskMeta.color, fontWeight: '600' }]}>
+              AI: {riskMeta.label.toLowerCase()}
+            </Text>
+          </View>
+        ) : null}
       </View>
 
       {price != null ? (

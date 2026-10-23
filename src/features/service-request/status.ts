@@ -140,7 +140,8 @@ export function isCancellable(status: string): boolean {
 export function getProgressLabel(status: string): string {
   const step = getStatusMeta(status).step;
   if (step === 0) return 'Pesanan dibatalkan';
-  if (step <= 2) return 'Mencari montir terdekat';
+  if (step === 1) return 'Mencari montir terdekat';
+  if (step === 2) return 'Montir menerima pesananmu';
   if (step === 3) return 'Montir sedang menuju lokasi';
   if (step === 4) return 'Montir sudah tiba di lokasi';
   if (step === 5) return 'Kendaraan sedang ditangani';

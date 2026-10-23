@@ -1,3 +1,5 @@
+import type { AiAnalysis, AiRiskLevel } from '@/features/service-request/ai';
+
 export type OrderStatus =
   | 'requested' | 'matching' | 'mechanic_assigned' | 'mechanic_accepted'
   | 'on_the_way' | 'arrived' | 'diagnosing' | 'repairing'
@@ -26,6 +28,31 @@ export interface IncomingOrder {
   vehicle_brand: string | null;
   vehicle_model: string | null;
   client_name: string | null;
+  /** Tingkat risiko dari analisis AI terbaru (null bila belum ada). */
+  ai_risk_level: AiRiskLevel | null;
+  has_analysis: boolean;
+}
+
+/** Detail request terbuka (sebelum diterima) untuk layar otorisasi montir. */
+export interface IncomingRequestDetail {
+  id: string;
+  status: OrderStatus;
+  issue_description: string;
+  symptoms: string | null;
+  address: string | null;
+  lat: number;
+  lng: number;
+  contact_phone: string;
+  additional_notes: string | null;
+  created_at: string;
+  client_name: string | null;
+  vehicle_type: string | null;
+  vehicle_brand: string | null;
+  vehicle_model: string | null;
+  vehicle_year: number | null;
+  vehicle_plate: string | null;
+  ai_analysis: AiAnalysis | null;
+  ai_created_at: string | null;
 }
 
 export interface MyOrder {

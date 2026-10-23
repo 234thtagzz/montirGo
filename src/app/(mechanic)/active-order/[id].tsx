@@ -24,6 +24,12 @@ import {
   type MechanicOrderDetail,
   type OrderStatusEvent,
 } from '@/features/mechanic/service';
+import {
+  analyzeRequest,
+  getRequestAnalysis,
+  type AiAnalysis,
+} from '@/features/service-request/ai';
+import { AiAnalysisCard } from '@/features/service-request/components/ai-analysis-card';
 import { getStatusMeta } from '@/features/service-request/status';
 import { getMechanicProgressLabel, getNextAction } from '@/features/mechanic/constants';
 import { formatDateTime, formatIDR } from '@/utils/format';
@@ -34,10 +40,23 @@ export default function MechanicOrderDetailScreen() {
 
   const [order, setOrder] = useState<MechanicOrderDetail | null>(null);
   const [history, setHistory] = useState<OrderStatusEvent[]>([]);
+  const [analysis, setAnalysis] = useState<AiAnalysis | null>(null);
+  const [analysisError, setAnalysisError] = useState<string | null>(null);
+  const [analyzing, setAnalyzing] = useState(false);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState(false);
   const [updating, setUpdating] = useState(false);
+
+  const loadAnalysis = useCallback(async () => {
+    if (!id) return;
+    try {
+      setAnalysis(await getRequestAnalysis(id));
+      setAnalysisError(null);
+    } catch {
+      setAnalysisError('Analisis AI gagal dimuat. Periksa koneksi lalu coba lagi.');
+    }
+  }, [id]);
 
   const load = useCallback(async () => {
     if (!id) return;
@@ -46,13 +65,14 @@ export default function MechanicOrderDetailScreen() {
       setOrder(detail);
       setHistory(events);
       setError(false);
+      await loadAnalysis();
     } catch {
       setError(true);
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [id]);
+  }, [id, loadAnalysis]);
 
   useFocusEffect(
     useCallback(() => {
@@ -60,7 +80,7 @@ export default function MechanicOrderDetailScreen() {
     }, [load]),
   );
 
-  // Realtime: perubahan status order (mis. pembayaran client) ikut ter-refresh.
+  // Realtime: perubahan status order + hasil analisis AI.
   useEffect(() => {
     if (!id) return;
     const channel = supabase
@@ -70,11 +90,31 @@ export default function MechanicOrderDetailScreen() {
         { event: '*', schema: 'public', table: 'service_requests', filter: `id=eq.${id}` },
         () => load(),
       )
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'ai_diagnoses', filter: `request_id=eq.${id}` },
+        () => loadAnalysis(),
+      )
       .subscribe();
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [id, load]);
+  }, [id, load, loadAnalysis]);
+
+  const retryAnalysis = async () => {
+    if (!id || analyzing) return;
+    setAnalyzing(true);
+    try {
+      await analyzeRequest(id);
+      await loadAnalysis();
+    } catch (e) {
+      setAnalysisError(
+        e instanceof Error ? e.message : 'Analisis AI gagal. Coba lagi beberapa saat lagi.',
+      );
+    } finally {
+      setAnalyzing(false);
+    }
+  };
 
   const callClient = () => {
     const phone = order?.client_phone ?? order?.contact_phone;
@@ -219,6 +259,17 @@ export default function MechanicOrderDetailScreen() {
             <DetailRow label="Biaya" value={formatIDR(order.price_amount)} highlight />
           ) : null}
         </View>
+
+        <Text style={styles.section}>Analisis AI</Text>
+        <AiAnalysisCard
+          analysis={analysis}
+          error={analysisError}
+          retrying={analyzing}
+          onRetry={
+            order.status !== 'cancelled' && order.status !== 'paid' ? retryAnalysis : undefined
+          }
+          subtitle="Indikasi awal — lakukan pemeriksaan langsung"
+        />
 
         {history.length > 0 ? (
           <>

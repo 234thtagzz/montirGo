@@ -37,6 +37,9 @@ yarn-error.*
 # typescript
 *.tsbuildinfo
 
+# supabase cli cache
+supabase/.temp/
+
 example
 
 # generated native folders

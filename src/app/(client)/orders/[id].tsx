@@ -25,6 +25,12 @@ import {
   type OrderStatusEvent,
 } from '@/features/client/service';
 import {
+  analyzeRequest,
+  getRequestAnalysis,
+  type AiAnalysis,
+} from '@/features/service-request/ai';
+import { AiAnalysisCard } from '@/features/service-request/components/ai-analysis-card';
+import {
   getProgressLabel,
   getStatusMeta,
   isCancellable,
@@ -37,10 +43,23 @@ export default function ClientOrderDetailScreen() {
 
   const [order, setOrder] = useState<ClientOrder | null>(null);
   const [history, setHistory] = useState<OrderStatusEvent[]>([]);
+  const [analysis, setAnalysis] = useState<AiAnalysis | null>(null);
+  const [analysisError, setAnalysisError] = useState<string | null>(null);
+  const [analyzing, setAnalyzing] = useState(false);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState(false);
   const [cancelling, setCancelling] = useState(false);
+
+  const loadAnalysis = useCallback(async () => {
+    if (!id) return;
+    try {
+      setAnalysis(await getRequestAnalysis(id));
+      setAnalysisError(null);
+    } catch {
+      setAnalysisError('Analisis AI gagal dimuat. Periksa koneksi lalu coba lagi.');
+    }
+  }, [id]);
 
   const load = useCallback(async () => {
     if (!id) return;
@@ -52,13 +71,14 @@ export default function ClientOrderDetailScreen() {
       setOrder(detail);
       setHistory(events);
       setError(false);
+      await loadAnalysis();
     } catch {
       setError(true);
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [id]);
+  }, [id, loadAnalysis]);
 
   useFocusEffect(
     useCallback(() => {
@@ -66,7 +86,7 @@ export default function ClientOrderDetailScreen() {
     }, [load]),
   );
 
-  // Realtime: detail mengikuti perubahan status dari montir.
+  // Realtime: detail mengikuti perubahan status dari montir + hasil analisis AI.
   useEffect(() => {
     if (!id) return;
     const channel = supabase
@@ -76,11 +96,31 @@ export default function ClientOrderDetailScreen() {
         { event: '*', schema: 'public', table: 'service_requests', filter: `id=eq.${id}` },
         () => load(),
       )
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'ai_diagnoses', filter: `request_id=eq.${id}` },
+        () => loadAnalysis(),
+      )
       .subscribe();
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [id, load]);
+  }, [id, load, loadAnalysis]);
+
+  const retryAnalysis = async () => {
+    if (!id || analyzing) return;
+    setAnalyzing(true);
+    try {
+      await analyzeRequest(id);
+      await loadAnalysis();
+    } catch (e) {
+      setAnalysisError(
+        e instanceof Error ? e.message : 'Analisis AI gagal. Coba lagi beberapa saat lagi.',
+      );
+    } finally {
+      setAnalyzing(false);
+    }
+  };
 
   const confirmCancel = () => {
     Alert.alert('Batalkan pesanan?', 'Montir tidak akan datang jika pesanan dibatalkan.', [
@@ -239,6 +279,16 @@ export default function ClientOrderDetailScreen() {
             <DetailRow label="Biaya" value={formatIDR(order.price_amount)} highlight />
           ) : null}
         </View>
+
+        <Text style={styles.section}>Analisis AI</Text>
+        <AiAnalysisCard
+          analysis={analysis}
+          error={analysisError}
+          retrying={analyzing}
+          onRetry={
+            order.status !== 'cancelled' && order.status !== 'paid' ? retryAnalysis : undefined
+          }
+        />
 
         {history.length > 0 ? (
           <>

@@ -43,8 +43,7 @@ serve(async (req) => {
 
     const apiKey = Deno.env.get('AI_PROVIDER_API_KEY');
     if (!apiKey) return json({ error: 'AI_PROVIDER_API_KEY belum di-set di server' }, 500);
-    const model = Deno.env.get('AI_PROVIDER_MODEL') ?? 'grok-4.7';
-    const baseUrl = Deno.env.get('AI_PROVIDER_BASE_URL') ?? 'https://api.x.ai/v1';
+    const { baseUrl, model } = resolveProvider(apiKey);
 
     const chatMessages = [
       { role: 'system', content: SYSTEM_PROMPT },
@@ -58,7 +57,8 @@ serve(async (req) => {
     const aiRes = await fetch(`${baseUrl}/chat/completions`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
-      body: JSON.stringify({ model, messages: chatMessages, temperature: 0.4, max_tokens: 800 }),
+      body: JSON.stringify({ model, messages: chatMessages, temperature: 0.4, max_tokens: 1000 }),
+      signal: AbortSignal.timeout(30_000),
     });
     if (!aiRes.ok) {
       const t = await aiRes.text();
@@ -69,15 +69,24 @@ serve(async (req) => {
     if (!reply) return json({ error: 'Respons AI kosong' }, 502);
 
     // Simpan sebagai ai_diagnoses bila terkait order (validasi partisipan dulu).
+    // INSERT hanya boleh via service_role (RLS), jadi pakai client terpisah.
     if (requestId) {
       try {
+        const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
         const { data: sr } = await sb
           .from('service_requests')
           .select('id, client_id, mechanic_id')
           .eq('id', requestId)
           .single();
-        if (sr && (sr.client_id === user.id || sr.mechanic_id === user.id)) {
-          await sb.from('ai_diagnoses').insert({
+        if (
+          serviceRoleKey &&
+          sr &&
+          (sr.client_id === user.id || sr.mechanic_id === user.id)
+        ) {
+          const admin = createClient(supabaseUrl, serviceRoleKey, {
+            auth: { persistSession: false, autoRefreshToken: false },
+          });
+          await admin.from('ai_diagnoses').insert({
             request_id: requestId,
             possible_issues: [{ summary: reply.slice(0, 2000) }],
             disclaimer:
@@ -95,6 +104,28 @@ serve(async (req) => {
     return json({ error: e instanceof Error ? e.message : 'unknown error' }, 500);
   }
 });
+
+/**
+ * Tentukan endpoint + model AI dari secret.
+ * Key Groq (`gsk_`) otomatis diarahkan ke api.groq.com/openai/v1.
+ */
+function resolveProvider(apiKey: string): { baseUrl: string; model: string } {
+  const configuredBase = Deno.env.get('AI_PROVIDER_BASE_URL')?.trim();
+  const isGroq = apiKey.startsWith('gsk_') || /groq\.com/i.test(configuredBase ?? '');
+  const baseUrl = configuredBase || (isGroq ? 'https://api.groq.com/openai/v1' : 'https://api.x.ai/v1');
+
+  const configuredModel = Deno.env.get('AI_PROVIDER_MODEL')?.trim();
+  const invalidForGroq =
+    !configuredModel ||
+    configuredModel === 'groq-ai' ||
+    configuredModel === 'grok-4.7' ||
+    configuredModel === 'gpt-4o-mini';
+  const model = isGroq && invalidForGroq
+    ? 'openai/gpt-oss-120b'
+    : configuredModel || 'grok-4.7';
+
+  return { baseUrl, model };
+}
 
 function json(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), { status, headers: cors });
