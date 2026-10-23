@@ -55,6 +55,25 @@ npx supabase functions deploy ai-assistant
 
 Cek cepat bahwa function sudah hidup:
 
+```bash
+npm run supabase:verify
+```
+
+Harus muncul `OK ... aktif` untuk kedua fungsi. Selama masih `404 NOT_FOUND`,
+aplikasi akan menampilkan *"Fitur AI belum aktif di server (Edge Function tidak
+ditemukan)"*.
+
+Alternatif tanpa CLI (kalau `supabase login` tidak bisa):
+
+1. Dashboard → **Edge Functions** → **Deploy a new function**.
+2. Slug: `analyze-request`, tempel isi
+   `supabase/functions/analyze-request/index.ts`, deploy.
+3. Ulangi untuk slug `ai-assistant` dengan file
+   `supabase/functions/ai-assistant/index.ts`.
+4. Pastikan **Verify JWT** aktif untuk keduanya.
+
+Setelah deploy, uji ulang:
+
 - Analisis: buat request baru dari akun client; kartu "Analisis AI" harus terisi.
 - Chat: buka tab **AI Asisten** sebagai montir, kirim pertanyaan.
 
@@ -66,6 +85,11 @@ npx expo start --clear
 
 ## Troubleshooting
 
+- **Muncul "Edge Function returned a non-2xx status code"** — ini bukan bug kode
+  AI, melainkan respons server. Cek dulu `npm run supabase:verify`:
+  - `404` → fungsi belum dideploy (penyebab paling umum).
+  - `401` → fungsi sudah ada, tapi sesi login di aplikasi kedaluwarsa.
+  - `500` dengan pesan `AI_PROVIDER_API_KEY` → secret belum di-set.
 - **VS Code menandai error `Deno` / import `npm:` di `supabase/functions`**
   Folder itu berjalan di Deno, bukan bundler React Native. Install ekstensi
   **Deno** (`denoland.vscode-deno`); pengaturan `deno.enablePaths` sudah ada di

@@ -2,6 +2,7 @@
 // Pemanggilan AI tetap lewat Edge Function `analyze-request` (PRD §11):
 // API key tidak pernah ada di aplikasi, dan penyimpanan hasil dilakukan server-side.
 import { supabase } from '@/lib/supabase';
+import { describeFunctionError } from '@/lib/edge-functions';
 import { Brand } from '@/constants/brand';
 import type { IconName } from '@/components/ui/icon';
 
@@ -188,23 +189,7 @@ export async function analyzeRequest(requestId: string): Promise<AiAnalysis> {
   });
 
   if (error) {
-    let message = error.message ?? '';
-    try {
-      const context = (error as unknown as { context?: Response }).context;
-      if (context && typeof context.json === 'function') {
-        const body = (await context.json()) as { error?: string };
-        if (body?.error) message = body.error;
-      }
-    } catch {
-      // Respons bukan JSON — pakai pesan bawaan.
-    }
-
-    if (/not found|404|failed to send a request/i.test(message)) {
-      throw new Error(
-        'Layanan analisis AI belum aktif. Deploy dulu: supabase functions deploy analyze-request',
-      );
-    }
-    throw new Error(message || 'Analisis AI tidak tersedia. Coba lagi nanti.');
+    throw await describeFunctionError(error, 'analyze-request', 'Analisis AI tidak tersedia.');
   }
 
   const analysis = mapAiAnalysis((data as { analysis?: RawAiAnalysis } | null)?.analysis);
