@@ -55,7 +55,9 @@
     "web": "expo start --web",
     "lint": "expo lint",
     "supabase:push": "npx supabase db push",
-    "supabase:deploy": "npx supabase functions deploy analyze-request && npx supabase functions deploy ai-assistant"
+    "supabase:deploy": "npx supabase functions deploy analyze-request && npx supabase functions deploy ai-assistant",
+    "supabase:check": "npx -y deno@2 check supabase/functions/analyze-request/index.ts supabase/functions/ai-assistant/index.ts",
+    "supabase:fmt": "npx -y deno@2 fmt supabase/functions"
   },
   "private": true
 }

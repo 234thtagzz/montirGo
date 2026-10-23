@@ -64,6 +64,18 @@ Cek cepat bahwa function sudah hidup:
 npx expo start --clear
 ```
 
+## Troubleshooting
+
+- **VS Code menandai error `Deno` / import `npm:` di `supabase/functions`**
+  Folder itu berjalan di Deno, bukan bundler React Native. Install ekstensi
+  **Deno** (`denoland.vscode-deno`); pengaturan `deno.enablePaths` sudah ada di
+  `.vscode/settings.json`, dan `supabase/functions/deno.json` menyediakan
+  compiler options-nya. Cek tipe dengan `npm run supabase:check`.
+- **Fungsi balas 404** berarti belum dideploy (atau salah nama project).
+- **Fungsi balas 500 "AI_PROVIDER_API_KEY belum di-set"** berarti secret belum
+  terpasang — ulangi langkah 3.
+- **`db push` menolak riwayat migrasi** — pakai SQL Editor seperti di langkah 2.
+
 ## Verifikasi alur request
 
 1. Client membuat request baru → status **Mencari montir**.
