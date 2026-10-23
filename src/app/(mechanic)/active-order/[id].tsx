@@ -1,4 +1,37 @@
-import { useCallback, useEffect, useState } from 'react';
+import { Avatar } from "@/components/ui/avatar";
+import { Button } from "@/components/ui/button";
+import { Ionicons } from "@/components/ui/icon";
+import { ScreenHeader } from "@/components/ui/screen-header";
+import { EmptyState, ErrorState, LoadingState } from "@/components/ui/state";
+import {
+  Brand,
+  CardShadow,
+  Radius,
+  ScreenPadding,
+  Space,
+} from "@/constants/brand";
+import {
+  getMechanicProgressLabel,
+  getNextAction,
+} from "@/features/mechanic/constants";
+import {
+  getMyOrder,
+  listOrderStatusHistory,
+  updateOrderStatus,
+  type MechanicOrderDetail,
+  type OrderStatusEvent,
+} from "@/features/mechanic/service";
+import {
+  analyzeRequest,
+  getRequestAnalysis,
+  type AiAnalysis,
+} from "@/features/service-request/ai";
+import { AiAnalysisCard } from "@/features/service-request/components/ai-analysis-card";
+import { getStatusMeta } from "@/features/service-request/status";
+import { supabase } from "@/lib/supabase";
+import { formatDateTime, formatIDR } from "@/utils/format";
+import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
+import { useCallback, useEffect, useState } from "react";
 import {
   Alert,
   Linking,
@@ -8,31 +41,7 @@ import {
   StyleSheet,
   Text,
   View,
-} from 'react-native';
-import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
-import { ScreenHeader } from '@/components/ui/screen-header';
-import { Avatar } from '@/components/ui/avatar';
-import { Button } from '@/components/ui/button';
-import { EmptyState, ErrorState, LoadingState } from '@/components/ui/state';
-import { Ionicons } from '@/components/ui/icon';
-import { Brand, CardShadow, Radius, ScreenPadding, Space } from '@/constants/brand';
-import { supabase } from '@/lib/supabase';
-import {
-  getMyOrder,
-  listOrderStatusHistory,
-  updateOrderStatus,
-  type MechanicOrderDetail,
-  type OrderStatusEvent,
-} from '@/features/mechanic/service';
-import {
-  analyzeRequest,
-  getRequestAnalysis,
-  type AiAnalysis,
-} from '@/features/service-request/ai';
-import { AiAnalysisCard } from '@/features/service-request/components/ai-analysis-card';
-import { getStatusMeta } from '@/features/service-request/status';
-import { getMechanicProgressLabel, getNextAction } from '@/features/mechanic/constants';
-import { formatDateTime, formatIDR } from '@/utils/format';
+} from "react-native";
 
 export default function MechanicOrderDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -54,14 +63,19 @@ export default function MechanicOrderDetailScreen() {
       setAnalysis(await getRequestAnalysis(id));
       setAnalysisError(null);
     } catch {
-      setAnalysisError('Analisis AI gagal dimuat. Periksa koneksi lalu coba lagi.');
+      setAnalysisError(
+        "Analisis AI gagal dimuat. Periksa koneksi lalu coba lagi.",
+      );
     }
   }, [id]);
 
   const load = useCallback(async () => {
     if (!id) return;
     try {
-      const [detail, events] = await Promise.all([getMyOrder(id), listOrderStatusHistory(id)]);
+      const [detail, events] = await Promise.all([
+        getMyOrder(id),
+        listOrderStatusHistory(id),
+      ]);
       setOrder(detail);
       setHistory(events);
       setError(false);
@@ -86,13 +100,23 @@ export default function MechanicOrderDetailScreen() {
     const channel = supabase
       .channel(`mechanic-order-${id}`)
       .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'service_requests', filter: `id=eq.${id}` },
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "service_requests",
+          filter: `id=eq.${id}`,
+        },
         () => load(),
       )
       .on(
-        'postgres_changes',
-        { event: 'INSERT', schema: 'public', table: 'ai_diagnoses', filter: `request_id=eq.${id}` },
+        "postgres_changes",
+        {
+          event: "INSERT",
+          schema: "public",
+          table: "ai_diagnoses",
+          filter: `request_id=eq.${id}`,
+        },
         () => loadAnalysis(),
       )
       .subscribe();
@@ -109,7 +133,9 @@ export default function MechanicOrderDetailScreen() {
       await loadAnalysis();
     } catch (e) {
       setAnalysisError(
-        e instanceof Error ? e.message : 'Analisis AI gagal. Coba lagi beberapa saat lagi.',
+        e instanceof Error
+          ? e.message
+          : "Analisis AI gagal. Coba lagi beberapa saat lagi.",
       );
     } finally {
       setAnalyzing(false);
@@ -120,7 +146,7 @@ export default function MechanicOrderDetailScreen() {
     const phone = order?.client_phone ?? order?.contact_phone;
     if (!phone) return;
     Linking.openURL(`tel:${phone}`).catch(() =>
-      Alert.alert('Gagal', 'Tidak dapat membuka aplikasi telepon.'),
+      Alert.alert("Gagal", "Tidak dapat membuka aplikasi telepon."),
     );
   };
 
@@ -128,23 +154,30 @@ export default function MechanicOrderDetailScreen() {
 
   const advance = () => {
     if (!order || !nextAction) return;
-    Alert.alert('Ubah status order?', `Status akan menjadi "${nextAction.label}".`, [
-      { text: 'Batal', style: 'cancel' },
-      {
-        text: 'Ya, lanjutkan',
-        onPress: async () => {
-          setUpdating(true);
-          try {
-            await updateOrderStatus(order.id, nextAction.next);
-            await load();
-          } catch (e) {
-            Alert.alert('Gagal', e instanceof Error ? e.message : 'Tidak bisa mengubah status.');
-          } finally {
-            setUpdating(false);
-          }
+    Alert.alert(
+      "Ubah status order?",
+      `Status akan menjadi "${nextAction.label}".`,
+      [
+        { text: "Batal", style: "cancel" },
+        {
+          text: "lanjutkan",
+          onPress: async () => {
+            setUpdating(true);
+            try {
+              await updateOrderStatus(order.id, nextAction.next);
+              await load();
+            } catch (e) {
+              Alert.alert(
+                "Gagal",
+                e instanceof Error ? e.message : "Tidak bisa mengubah status.",
+              );
+            } finally {
+              setUpdating(false);
+            }
+          },
         },
-      },
-    ]);
+      ],
+    );
   };
 
   if (loading) {
@@ -174,18 +207,23 @@ export default function MechanicOrderDetailScreen() {
           message="Order tidak ditemukan"
           hint="Order mungkin sudah selesai atau bukan milikmu."
           actionLabel="Kembali ke Beranda"
-          onPressAction={() => router.replace('/(mechanic)')}
+          onPressAction={() => router.replace("/(mechanic)")}
         />
       </View>
     );
   }
 
   const meta = getStatusMeta(order.status);
-  const vehicle = [order.vehicle_brand, order.vehicle_model].filter(Boolean).join(' ');
+  const vehicle = [order.vehicle_brand, order.vehicle_model]
+    .filter(Boolean)
+    .join(" ");
 
   return (
     <View style={styles.screen}>
-      <ScreenHeader title="Detail Order" subtitle={`#${order.id.slice(0, 8).toUpperCase()}`} />
+      <ScreenHeader
+        title="Detail Order"
+        subtitle={`#${order.id.slice(0, 8).toUpperCase()}`}
+      />
       <ScrollView
         contentContainerStyle={styles.content}
         showsVerticalScrollIndicator={false}
@@ -205,11 +243,17 @@ export default function MechanicOrderDetailScreen() {
           <View style={styles.statusTop}>
             <View style={[styles.chip, { backgroundColor: meta.background }]}>
               <Ionicons name={meta.icon} size={13} color={meta.color} />
-              <Text style={[styles.chipText, { color: meta.color }]}>{meta.shortLabel}</Text>
+              <Text style={[styles.chipText, { color: meta.color }]}>
+                {meta.shortLabel}
+              </Text>
             </View>
-            <Text style={styles.statusTime}>{formatDateTime(order.created_at)}</Text>
+            <Text style={styles.statusTime}>
+              {formatDateTime(order.created_at)}
+            </Text>
           </View>
-          <Text style={styles.statusTitle}>{getMechanicProgressLabel(order.status)}</Text>
+          <Text style={styles.statusTitle}>
+            {getMechanicProgressLabel(order.status)}
+          </Text>
           <Text style={styles.statusSub}>{meta.label}</Text>
 
           {meta.step > 0 ? (
@@ -217,7 +261,10 @@ export default function MechanicOrderDetailScreen() {
               {Array.from({ length: 7 }).map((_, index) => (
                 <View
                   key={index}
-                  style={[styles.segment, index < meta.step && styles.segmentActive]}
+                  style={[
+                    styles.segment,
+                    index < meta.step && styles.segmentActive,
+                  ]}
                 />
               ))}
             </View>
@@ -225,10 +272,10 @@ export default function MechanicOrderDetailScreen() {
         </View>
 
         <View style={styles.clientCard}>
-          <Avatar name={order.client_name ?? 'Client'} size={46} />
+          <Avatar name={order.client_name ?? "Client"} size={46} />
           <View style={styles.clientCopy}>
             <Text style={styles.clientName} numberOfLines={1}>
-              {order.client_name ?? 'Client MontirGo'}
+              {order.client_name ?? "Client MontirGo"}
             </Text>
             <Text style={styles.clientRole}>Pelanggan yang kamu tangani</Text>
           </View>
@@ -237,7 +284,10 @@ export default function MechanicOrderDetailScreen() {
               accessibilityRole="button"
               accessibilityLabel="Hubungi pelanggan"
               onPress={callClient}
-              style={({ pressed }) => [styles.callButton, pressed && styles.pressed]}
+              style={({ pressed }) => [
+                styles.callButton,
+                pressed && styles.pressed,
+              ]}
             >
               <Ionicons name="call" size={17} color={Brand.white} />
             </Pressable>
@@ -247,16 +297,27 @@ export default function MechanicOrderDetailScreen() {
         <Text style={styles.section}>Detail permintaan</Text>
         <View style={styles.detailCard}>
           <DetailRow label="Keluhan" value={order.issue_description} />
-          {order.symptoms ? <DetailRow label="Gejala" value={order.symptoms} /> : null}
-          <DetailRow label="Kendaraan" value={vehicle || 'Tidak dicantumkan'} />
-          {order.vehicle_plate ? <DetailRow label="Nomor polisi" value={order.vehicle_plate} /> : null}
-          <DetailRow label="Lokasi" value={order.address || 'Lokasi GPS terdeteksi'} />
+          {order.symptoms ? (
+            <DetailRow label="Gejala" value={order.symptoms} />
+          ) : null}
+          <DetailRow label="Kendaraan" value={vehicle || "Tidak dicantumkan"} />
+          {order.vehicle_plate ? (
+            <DetailRow label="Nomor polisi" value={order.vehicle_plate} />
+          ) : null}
+          <DetailRow
+            label="Lokasi"
+            value={order.address || "Lokasi GPS terdeteksi"}
+          />
           <DetailRow label="Kontak" value={order.contact_phone} />
           {order.additional_notes ? (
             <DetailRow label="Catatan" value={order.additional_notes} />
           ) : null}
           {order.price_amount != null ? (
-            <DetailRow label="Biaya" value={formatIDR(order.price_amount)} highlight />
+            <DetailRow
+              label="Biaya"
+              value={formatIDR(order.price_amount)}
+              highlight
+            />
           ) : null}
         </View>
 
@@ -266,7 +327,9 @@ export default function MechanicOrderDetailScreen() {
           error={analysisError}
           retrying={analyzing}
           onRetry={
-            order.status !== 'cancelled' && order.status !== 'paid' ? retryAnalysis : undefined
+            order.status !== "cancelled" && order.status !== "paid"
+              ? retryAnalysis
+              : undefined
           }
           subtitle="Indikasi awal — lakukan pemeriksaan langsung"
         />
@@ -280,13 +343,26 @@ export default function MechanicOrderDetailScreen() {
                 return (
                   <View key={event.id} style={styles.timelineRow}>
                     <View style={styles.timelineLeft}>
-                      <View style={[styles.timelineDot, { backgroundColor: eventMeta.color }]} />
-                      {index < history.length - 1 ? <View style={styles.timelineLine} /> : null}
+                      <View
+                        style={[
+                          styles.timelineDot,
+                          { backgroundColor: eventMeta.color },
+                        ]}
+                      />
+                      {index < history.length - 1 ? (
+                        <View style={styles.timelineLine} />
+                      ) : null}
                     </View>
                     <View style={styles.timelineCopy}>
-                      <Text style={styles.timelineTitle}>{eventMeta.label}</Text>
-                      {event.notes ? <Text style={styles.timelineNote}>{event.notes}</Text> : null}
-                      <Text style={styles.timelineTime}>{formatDateTime(event.created_at)}</Text>
+                      <Text style={styles.timelineTitle}>
+                        {eventMeta.label}
+                      </Text>
+                      {event.notes ? (
+                        <Text style={styles.timelineNote}>{event.notes}</Text>
+                      ) : null}
+                      <Text style={styles.timelineTime}>
+                        {formatDateTime(event.created_at)}
+                      </Text>
                     </View>
                   </View>
                 );
@@ -305,11 +381,15 @@ export default function MechanicOrderDetailScreen() {
           />
         ) : (
           <View style={styles.doneCard}>
-            <Ionicons name="checkmark-done-outline" size={16} color={Brand.green} />
+            <Ionicons
+              name="checkmark-done-outline"
+              size={16}
+              color={Brand.green}
+            />
             <Text style={styles.doneText}>
-              {order.status === 'paid'
-                ? 'Order selesai dan pembayaran sudah lunas.'
-                : 'Tidak ada aksi lanjutan untuk status ini.'}
+              {order.status === "paid"
+                ? "Order selesai dan pembayaran sudah lunas."
+                : "Tidak ada aksi lanjutan untuk status ini."}
             </Text>
           </View>
         )}
@@ -330,7 +410,11 @@ function DetailRow({
   return (
     <View style={styles.detailRow}>
       <Text style={styles.detailLabel}>{label}</Text>
-      <Text style={[styles.detailValue, highlight && styles.detailValueHighlight]}>{value}</Text>
+      <Text
+        style={[styles.detailValue, highlight && styles.detailValueHighlight]}
+      >
+        {value}
+      </Text>
     </View>
   );
 }
@@ -344,25 +428,39 @@ const styles = StyleSheet.create({
     padding: Space.lg,
     ...CardShadow,
   },
-  statusTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  statusTop: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
   chip: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     gap: 4,
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: Radius.pill,
   },
-  chipText: { fontSize: 10.5, fontWeight: '700' },
+  chipText: { fontSize: 10.5, fontWeight: "700" },
   statusTime: { fontSize: 11, color: Brand.textMuted },
-  statusTitle: { fontSize: 17, fontWeight: '700', color: Brand.text, marginTop: Space.md },
+  statusTitle: {
+    fontSize: 17,
+    fontWeight: "700",
+    color: Brand.text,
+    marginTop: Space.md,
+  },
   statusSub: { fontSize: 12, color: Brand.textSecondary, marginTop: 2 },
-  progress: { flexDirection: 'row', gap: 4, marginTop: Space.md },
-  segment: { flex: 1, height: 4, borderRadius: 2, backgroundColor: Brand.divider },
+  progress: { flexDirection: "row", gap: 4, marginTop: Space.md },
+  segment: {
+    flex: 1,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: Brand.divider,
+  },
   segmentActive: { backgroundColor: Brand.primary },
   clientCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     gap: Space.md,
     backgroundColor: Brand.surface,
     borderRadius: Radius.lg,
@@ -372,19 +470,19 @@ const styles = StyleSheet.create({
     borderColor: Brand.divider,
   },
   clientCopy: { flex: 1 },
-  clientName: { fontSize: 14, fontWeight: '700', color: Brand.text },
+  clientName: { fontSize: 14, fontWeight: "700", color: Brand.text },
   clientRole: { fontSize: 11.5, color: Brand.textSecondary, marginTop: 2 },
   callButton: {
     width: 42,
     height: 42,
     borderRadius: 21,
     backgroundColor: Brand.green,
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: "center",
+    justifyContent: "center",
   },
   section: {
     fontSize: 14,
-    fontWeight: '700',
+    fontWeight: "700",
     color: Brand.text,
     marginTop: Space.xxl,
     marginBottom: Space.md,
@@ -402,27 +500,51 @@ const styles = StyleSheet.create({
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: Brand.divider,
   },
-  detailLabel: { fontSize: 11, color: Brand.textMuted, fontWeight: '600' },
-  detailValue: { fontSize: 13, color: Brand.text, marginTop: 3, lineHeight: 18 },
-  detailValueHighlight: { fontSize: 15, fontWeight: '700', color: Brand.primary },
-  timelineRow: { flexDirection: 'row', gap: Space.md, paddingVertical: Space.sm },
-  timelineLeft: { alignItems: 'center', width: 12 },
+  detailLabel: { fontSize: 11, color: Brand.textMuted, fontWeight: "600" },
+  detailValue: {
+    fontSize: 13,
+    color: Brand.text,
+    marginTop: 3,
+    lineHeight: 18,
+  },
+  detailValueHighlight: {
+    fontSize: 15,
+    fontWeight: "700",
+    color: Brand.primary,
+  },
+  timelineRow: {
+    flexDirection: "row",
+    gap: Space.md,
+    paddingVertical: Space.sm,
+  },
+  timelineLeft: { alignItems: "center", width: 12 },
   timelineDot: { width: 10, height: 10, borderRadius: 5, marginTop: 4 },
-  timelineLine: { flex: 1, width: 2, backgroundColor: Brand.divider, marginTop: 2 },
+  timelineLine: {
+    flex: 1,
+    width: 2,
+    backgroundColor: Brand.divider,
+    marginTop: 2,
+  },
   timelineCopy: { flex: 1, paddingBottom: Space.sm },
-  timelineTitle: { fontSize: 13, fontWeight: '600', color: Brand.text },
+  timelineTitle: { fontSize: 13, fontWeight: "600", color: Brand.text },
   timelineNote: { fontSize: 11.5, color: Brand.textSecondary, marginTop: 2 },
   timelineTime: { fontSize: 10.5, color: Brand.textMuted, marginTop: 3 },
   action: { marginTop: Space.xxl },
   doneCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     gap: Space.sm,
     backgroundColor: Brand.greenSoft,
     borderRadius: Radius.md,
     padding: Space.md,
     marginTop: Space.xxl,
   },
-  doneText: { flex: 1, fontSize: 12, color: Brand.green, fontWeight: '600', lineHeight: 17 },
+  doneText: {
+    flex: 1,
+    fontSize: 12,
+    color: Brand.green,
+    fontWeight: "600",
+    lineHeight: 17,
+  },
   pressed: { opacity: 0.7 },
 });
