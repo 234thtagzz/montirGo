@@ -29,6 +29,18 @@ const ACTIVITY_META: Record<string, ActivityMeta> = {
     color: Brand.primary,
     background: Brand.primarySoft,
   },
+  payment_received: {
+    label: 'Pembayaran diterima',
+    icon: 'cash-outline',
+    color: Brand.green,
+    background: Brand.greenSoft,
+  },
+  withdrawal: {
+    label: 'Pencairan saldo',
+    icon: 'wallet-outline',
+    color: Brand.primary,
+    background: Brand.primarySoft,
+  },
   login: {
     label: 'Masuk aplikasi',
     icon: 'log-in-outline',

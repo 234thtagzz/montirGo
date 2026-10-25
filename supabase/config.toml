@@ -8,3 +8,16 @@ verify_jwt = true
 
 [functions.ai-assistant]
 verify_jwt = true
+
+[functions.xendit-create-payment]
+verify_jwt = true
+
+[functions.xendit-request-withdrawal]
+verify_jwt = true
+
+# Webhook Xendit tidak mengirim JWT Supabase; keamanan dijaga x-callback-token.
+[functions.xendit-webhook]
+verify_jwt = false
+
+[functions.xendit-payout-webhook]
+verify_jwt = false

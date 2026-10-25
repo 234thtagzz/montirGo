@@ -10,6 +10,7 @@ import {
   View,
 } from 'react-native';
 import { useLocalSearchParams, useFocusEffect, useRouter } from 'expo-router';
+import { openBrowserAsync } from 'expo-web-browser';
 import { ScreenHeader } from '@/components/ui/screen-header';
 import { Avatar } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
@@ -29,6 +30,11 @@ import {
   getRequestAnalysis,
   type AiAnalysis,
 } from '@/features/service-request/ai';
+import {
+  createPaymentSession,
+  getPaymentForRequest,
+  type OrderPayment,
+} from '@/features/finance/service';
 import { AiAnalysisCard } from '@/features/service-request/components/ai-analysis-card';
 import {
   getProgressLabel,
@@ -50,6 +56,8 @@ export default function ClientOrderDetailScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState(false);
   const [cancelling, setCancelling] = useState(false);
+  const [payment, setPayment] = useState<OrderPayment | null>(null);
+  const [paying, setPaying] = useState(false);
 
   const loadAnalysis = useCallback(async () => {
     if (!id) return;
@@ -70,6 +78,7 @@ export default function ClientOrderDetailScreen() {
       ]);
       setOrder(detail);
       setHistory(events);
+      setPayment(await getPaymentForRequest(id).catch(() => null));
       setError(false);
       await loadAnalysis();
     } catch {
@@ -94,6 +103,11 @@ export default function ClientOrderDetailScreen() {
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'service_requests', filter: `id=eq.${id}` },
+        () => load(),
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'payments', filter: `request_id=eq.${id}` },
         () => load(),
       )
       .on(
@@ -152,6 +166,30 @@ export default function ClientOrderDetailScreen() {
     Linking.openURL(`tel:${order.mechanic_phone}`).catch(() =>
       Alert.alert('Gagal', 'Tidak dapat membuka aplikasi telepon.'),
     );
+  };
+
+  const payOrder = async () => {
+    if (!id || paying) return;
+    setPaying(true);
+    try {
+      const session = await createPaymentSession(id);
+      if (session.alreadyPaid) {
+        await load();
+        Alert.alert('Sudah lunas', 'Pembayaran order ini sudah diterima.');
+        return;
+      }
+      await openBrowserAsync(session.paymentUrl);
+      // Setelah kembali dari halaman checkout, status mungkin sudah berubah
+      // lewat webhook. Muat ulang agar UI mengikuti data server.
+      await load();
+    } catch (e) {
+      Alert.alert(
+        'Gagal membuka pembayaran',
+        e instanceof Error ? e.message : 'Coba lagi beberapa saat lagi.',
+      );
+    } finally {
+      setPaying(false);
+    }
   };
 
   if (loading) {
@@ -263,6 +301,68 @@ export default function ClientOrderDetailScreen() {
             </Text>
           </View>
         )}
+
+        {order.status === 'payment' || order.status === 'paid' ? (
+          <>
+            <Text style={styles.section}>Pembayaran</Text>
+            <View style={styles.paymentCard}>
+              <View style={styles.paymentTop}>
+                <View>
+                  <Text style={styles.paymentLabel}>Total tagihan</Text>
+                  <Text style={styles.paymentAmount}>
+                    {formatIDR(order.price_amount ?? payment?.amount ?? 0)}
+                  </Text>
+                </View>
+                <View
+                  style={[
+                    styles.paymentBadge,
+                    order.status === 'paid' ? styles.paymentBadgePaid : styles.paymentBadgePending,
+                  ]}
+                >
+                  <Text
+                    style={[
+                      styles.paymentBadgeText,
+                      order.status === 'paid'
+                        ? styles.paymentBadgeTextPaid
+                        : styles.paymentBadgeTextPending,
+                    ]}
+                  >
+                    {order.status === 'paid' ? 'Lunas' : 'Belum dibayar'}
+                  </Text>
+                </View>
+              </View>
+
+              {order.status === 'paid' ? (
+                <View style={styles.paymentStatusRow}>
+                  <Ionicons name="checkmark-circle" size={16} color={Brand.green} />
+                  <Text style={styles.paymentStatusText}>
+                    Pembayaran diterima
+                    {payment?.paid_at ? ` · ${formatDateTime(payment.paid_at)}` : ''}.
+                  </Text>
+                </View>
+              ) : (
+                <>
+                  <Text style={styles.paymentHint}>
+                    Bayar dengan QRIS, GoPay, OVO, DANA, atau ShopeePay di halaman aman Xendit.
+                    Status pesanan diperbarui otomatis setelah pembayaran berhasil.
+                  </Text>
+                  {payment?.expires_at ? (
+                    <Text style={styles.paymentMeta}>
+                      Link pembayaran berlaku sampai {formatDateTime(payment.expires_at)}
+                    </Text>
+                  ) : null}
+                  <Button
+                    label="Bayar Sekarang"
+                    icon="card-outline"
+                    loading={paying}
+                    onPress={payOrder}
+                    style={styles.payButton}
+                  />
+                </>
+              )}
+            </View>
+          </>
+        ) : null}
 
         <Text style={styles.section}>Detail permintaan</Text>
         <View style={styles.detailCard}>
@@ -435,5 +535,53 @@ const styles = StyleSheet.create({
   timelineNote: { fontSize: 11.5, color: Brand.textSecondary, marginTop: 2 },
   timelineTime: { fontSize: 10.5, color: Brand.textMuted, marginTop: 3 },
   cancel: { marginTop: Space.xxl },
+  paymentCard: {
+    backgroundColor: Brand.surface,
+    borderRadius: Radius.lg,
+    borderWidth: 1,
+    borderColor: Brand.divider,
+    padding: Space.lg,
+  },
+  paymentTop: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    gap: Space.md,
+  },
+  paymentLabel: { fontSize: 11.5, color: Brand.textMuted, fontWeight: '600' },
+  paymentAmount: {
+    fontSize: 24,
+    fontWeight: '700',
+    color: Brand.text,
+    marginTop: 2,
+    letterSpacing: -0.4,
+  },
+  paymentBadge: { borderRadius: Radius.pill, paddingHorizontal: 10, paddingVertical: 5 },
+  paymentBadgePaid: { backgroundColor: Brand.greenSoft },
+  paymentBadgePending: { backgroundColor: Brand.amberSoft },
+  paymentBadgeText: { fontSize: 10.5, fontWeight: '700' },
+  paymentBadgeTextPaid: { color: Brand.green },
+  paymentBadgeTextPending: { color: Brand.amber },
+  paymentHint: {
+    fontSize: 11.5,
+    color: Brand.textSecondary,
+    lineHeight: 17,
+    marginTop: Space.md,
+  },
+  paymentMeta: { fontSize: 10.5, color: Brand.textMuted, marginTop: 6 },
+  paymentStatusRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Space.sm,
+    marginTop: Space.md,
+  },
+  paymentStatusText: {
+    flex: 1,
+    fontSize: 12,
+    color: Brand.green,
+    fontWeight: '600',
+    lineHeight: 17,
+  },
+  payButton: { marginTop: Space.lg },
   pressed: { opacity: 0.7 },
 });

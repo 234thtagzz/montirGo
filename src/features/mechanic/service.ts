@@ -389,6 +389,34 @@ export async function updateOrderStatus(requestId: string, toStatus: OrderStatus
   await logActivity('order_status', `Order ${requestId.slice(0, 8)} -> ${toStatus}.`);
 }
 
+const PRICE_ERROR_MESSAGES: Record<string, string> = {
+  INVALID_STATUS: 'Harga hanya bisa diisi saat pekerjaan sedang berjalan atau selesai.',
+  INVALID_PRICE: 'Nominal tagihan tidak valid atau di luar batas yang diizinkan.',
+  ALREADY_PAID: 'Order ini sudah dibayar.',
+  NOT_YOUR_ORDER: 'Order ini bukan milikmu.',
+  REQUEST_NOT_FOUND: 'Order tidak ditemukan.',
+  UNAUTHORIZED: 'Sesi berakhir. Silakan login kembali.',
+};
+
+/**
+ * Montir menetapkan tagihan final. RPC memindahkan status order ke `payment`
+ * sehingga client bisa membayar lewat Xendit.
+ */
+export async function setOrderPrice(requestId: string, price: number): Promise<void> {
+  const { error } = await supabase.rpc('set_order_price', {
+    p_request_id: requestId,
+    p_price: Math.round(price),
+  });
+  if (error) {
+    const code = (error.message ?? '').trim();
+    throw new Error(PRICE_ERROR_MESSAGES[code] ?? code ?? 'Gagal menyimpan tagihan.');
+  }
+  await logActivity(
+    'order_status',
+    `Mengirim tagihan order ${requestId.slice(0, 8)} sebesar ${price}.`,
+  );
+}
+
 export async function listMyActivity(limit = 30): Promise<ActivityItem[]> {
   const id = await getMyId();
   const { data, error } = await supabase

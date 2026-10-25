@@ -21,6 +21,8 @@ import { DashboardHeader } from '@/features/mechanic/components/dashboard-header
 import { OnlineCard } from '@/features/mechanic/components/online-card';
 import { OrderCard } from '@/features/mechanic/components/order-card';
 import { StatTiles } from '@/features/mechanic/components/stat-tiles';
+import { BalanceCard } from '@/features/finance/components/balance-card';
+import { getWallet, type MechanicWallet } from '@/features/finance/service';
 
 export default function MechanicDashboardScreen() {
   const { user: sessionUser, loading: sessionLoading } = useSessionUser();
@@ -29,6 +31,7 @@ export default function MechanicDashboardScreen() {
   const [todayNet, setTodayNet] = useState(0);
   const [todayJobs, setTodayJobs] = useState(0);
   const [activeOrders, setActiveOrders] = useState<MyOrder[]>([]);
+  const [wallet, setWallet] = useState<MechanicWallet | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState(false);
@@ -45,6 +48,7 @@ export default function MechanicDashboardScreen() {
       setTodayNet(sum.net);
       setTodayJobs(sum.totalJobs);
       setActiveOrders(await listMyOrders(true));
+      setWallet(await getWallet());
       setError(false);
     } catch {
       setError(true);
@@ -77,6 +81,7 @@ export default function MechanicDashboardScreen() {
         setTodayNet(sum.net);
         setTodayJobs(sum.totalJobs);
         setActiveOrders(await listMyOrders(true));
+        setWallet(await getWallet());
         if (!cancelled) setError(false);
       } catch {
         if (!cancelled) setError(true);
@@ -91,6 +96,8 @@ export default function MechanicDashboardScreen() {
     const ch = supabase
       .channel('mechanic-dashboard')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'service_requests' }, load)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'mechanic_wallets' }, load)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'withdrawals' }, load)
       .subscribe();
     return () => {
       cancelled = true;
@@ -137,6 +144,12 @@ export default function MechanicDashboardScreen() {
 
         <View style={styles.body}>
           <OnlineCard online={online} onToggle={toggleOnline} />
+
+          <BalanceCard
+            wallet={wallet}
+            onPressWithdraw={() => router.push('/(mechanic)/withdraw')}
+            onPressAccounts={() => router.push('/(mechanic)/payout-accounts')}
+          />
 
           {error ? (
             <View style={styles.errorCard}>

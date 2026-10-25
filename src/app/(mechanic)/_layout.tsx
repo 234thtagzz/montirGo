@@ -79,6 +79,11 @@ export default function MechanicLayout() {
         options={{ href: null, tabBarStyle: { display: 'none' } }}
       />
       <Tabs.Screen name="earnings" options={{ href: null, tabBarStyle: { display: 'none' } }} />
+      <Tabs.Screen name="withdraw" options={{ href: null, tabBarStyle: { display: 'none' } }} />
+      <Tabs.Screen
+        name="payout-accounts"
+        options={{ href: null, tabBarStyle: { display: 'none' } }}
+      />
       <Tabs.Screen
         name="active-order/[id]"
         options={{ href: null, tabBarStyle: { display: 'none' } }}

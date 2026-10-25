@@ -17,10 +17,15 @@ import {
 import {
   getMyOrder,
   listOrderStatusHistory,
+  setOrderPrice,
   updateOrderStatus,
   type MechanicOrderDetail,
   type OrderStatusEvent,
 } from "@/features/mechanic/service";
+import {
+  getFinanceSettings,
+  type FinanceSettings,
+} from "@/features/finance/service";
 import {
   analyzeRequest,
   getRequestAnalysis,
@@ -40,6 +45,7 @@ import {
   ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   View,
 } from "react-native";
 
@@ -56,6 +62,9 @@ export default function MechanicOrderDetailScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState(false);
   const [updating, setUpdating] = useState(false);
+  const [settings, setSettings] = useState<FinanceSettings | null>(null);
+  const [priceDraft, setPriceDraft] = useState<string | null>(null);
+  const [sendingPrice, setSendingPrice] = useState(false);
 
   const loadAnalysis = useCallback(async () => {
     if (!id) return;
@@ -124,6 +133,77 @@ export default function MechanicOrderDetailScreen() {
       supabase.removeChannel(channel);
     };
   }, [id, load, loadAnalysis]);
+
+  useEffect(() => {
+    let cancelled = false;
+    getFinanceSettings()
+      .then((value) => {
+        if (!cancelled) setSettings(value);
+      })
+      .catch(() => {
+        // Batas harga memakai default UI bila pengaturan gagal dimuat.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const existingPrice = order?.price_amount ?? null;
+  // Selama mekanik mengetik, pakai draft lokal. Bila belum mengetik, input
+  // mengikuti harga terakhir dari server tanpa perlu efek sinkronisasi.
+  const priceText = priceDraft ?? (existingPrice != null ? String(existingPrice) : "");
+
+  const priceValue = Number(priceText.replace(/[^0-9]/g, "")) || 0;
+  const minPrice = settings?.minOrderPrice ?? 10000;
+  const maxPrice = settings?.maxOrderPrice ?? 10000000;
+  const feePercent = settings?.feePercent ?? 10;
+  const platformFee = Math.round((priceValue * feePercent) / 100);
+  const netPrice = priceValue - platformFee;
+  const priceError =
+    priceValue === 0
+      ? null
+      : priceValue < minPrice
+        ? `Minimal ${formatIDR(minPrice)}.`
+        : priceValue > maxPrice
+          ? `Maksimal ${formatIDR(maxPrice)}.`
+          : null;
+  const canSendPrice =
+    !sendingPrice &&
+    priceValue >= minPrice &&
+    priceValue <= maxPrice &&
+    !priceError;
+  const canEditPrice =
+    order != null && ["diagnosing", "repairing", "completed"].includes(order.status);
+
+  const submitPrice = () => {
+    if (!order || !canSendPrice) return;
+    Alert.alert(
+      "Kirim tagihan?",
+      `Client akan menerima tagihan ${formatIDR(priceValue)}. ` +
+        `Pendapatan bersihmu ${formatIDR(netPrice)} setelah fee ${feePercent}%.`,
+      [
+        { text: "Batal", style: "cancel" },
+        {
+          text: "Kirim tagihan",
+          onPress: async () => {
+            setSendingPrice(true);
+            try {
+              await setOrderPrice(order.id, priceValue);
+              setPriceDraft(null);
+              await load();
+            } catch (e) {
+              Alert.alert(
+                "Gagal mengirim tagihan",
+                e instanceof Error ? e.message : "Coba lagi.",
+              );
+            } finally {
+              setSendingPrice(false);
+            }
+          },
+        },
+      ],
+    );
+  };
 
   const retryAnalysis = async () => {
     if (!id || analyzing) return;
@@ -321,6 +401,91 @@ export default function MechanicOrderDetailScreen() {
           ) : null}
         </View>
 
+        <Text style={styles.section}>Tagihan & pembayaran</Text>
+        {canEditPrice ? (
+          <View style={styles.billingCard}>
+            <Text style={styles.billingLabel}>Nominal tagihan ke client</Text>
+            <View style={styles.priceInputRow}>
+              <Text style={styles.priceCurrency}>Rp</Text>
+              <TextInput
+                value={priceValue ? priceValue.toLocaleString("id-ID") : ""}
+                onChangeText={(text) =>
+                  setPriceDraft(text.replace(/[^0-9]/g, ""))
+                }
+                placeholder="0"
+                placeholderTextColor={Brand.textMuted}
+                keyboardType="number-pad"
+                selectionColor={Brand.primary}
+                style={styles.priceInput}
+              />
+            </View>
+            {priceError ? (
+              <Text style={styles.priceError}>{priceError}</Text>
+            ) : null}
+            <View style={styles.priceMeta}>
+              <View style={styles.priceMetaItem}>
+                <Text style={styles.priceMetaLabel}>
+                  Fee platform ({feePercent}%)
+                </Text>
+                <Text style={styles.priceMetaValue}>
+                  - {formatIDR(platformFee)}
+                </Text>
+              </View>
+              <View style={styles.priceMetaItem}>
+                <Text style={styles.priceMetaLabel}>Kamu terima</Text>
+                <Text style={styles.priceMetaValueNet}>
+                  {formatIDR(netPrice)}
+                </Text>
+              </View>
+            </View>
+            <Button
+              label="Kirim Tagihan ke Client"
+              icon="receipt-outline"
+              loading={sendingPrice}
+              disabled={!canSendPrice}
+              onPress={submitPrice}
+              style={styles.sendPrice}
+            />
+            <Text style={styles.billingHint}>
+              Client membayar lewat QRIS / e-wallet Xendit. Saldo masuk sebagai
+              pending dan bisa ditarik setelah masa hold.
+            </Text>
+          </View>
+        ) : order.status === "payment" ? (
+          <View style={styles.pendingCard}>
+            <Ionicons name="time-outline" size={18} color={Brand.amber} />
+            <Text style={styles.pendingText}>
+              Tagihan {formatIDR(order.price_amount ?? 0)} sudah dikirim. Menunggu
+              pembayaran client.
+            </Text>
+          </View>
+        ) : order.status === "paid" ? (
+          <View style={styles.doneCard}>
+            <Ionicons
+              name="checkmark-done-outline"
+              size={16}
+              color={Brand.green}
+            />
+            <Text style={styles.doneText}>
+              Pembayaran Rp
+              {(order.price_amount ?? 0).toLocaleString("id-ID")} sudah lunas.
+              Pendapatan masuk ke saldo pending.
+            </Text>
+          </View>
+        ) : (
+          <View style={styles.infoCard}>
+            <Ionicons
+              name="information-circle-outline"
+              size={18}
+              color={Brand.primary}
+            />
+            <Text style={styles.infoText}>
+              Tagihan bisa dikirim saat pekerjaan memasuki tahap diagnosis,
+              perbaikan, atau selesai.
+            </Text>
+          </View>
+        )}
+
         <Text style={styles.section}>Analisis AI</Text>
         <AiAnalysisCard
           analysis={analysis}
@@ -379,7 +544,7 @@ export default function MechanicOrderDetailScreen() {
             onPress={advance}
             style={styles.action}
           />
-        ) : (
+        ) : canEditPrice ? null : (
           <View style={styles.doneCard}>
             <Ionicons
               name="checkmark-done-outline"
@@ -530,6 +695,101 @@ const styles = StyleSheet.create({
   timelineNote: { fontSize: 11.5, color: Brand.textSecondary, marginTop: 2 },
   timelineTime: { fontSize: 10.5, color: Brand.textMuted, marginTop: 3 },
   action: { marginTop: Space.xxl },
+  billingCard: {
+    backgroundColor: Brand.surface,
+    borderRadius: Radius.lg,
+    borderWidth: 1,
+    borderColor: Brand.divider,
+    padding: Space.lg,
+  },
+  billingLabel: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: Brand.text,
+    marginBottom: Space.sm,
+  },
+  priceInputRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: Space.xs,
+    borderWidth: 1,
+    borderColor: Brand.border,
+    borderRadius: Radius.md,
+    backgroundColor: "#F7F9FC",
+    paddingHorizontal: Space.md,
+  },
+  priceCurrency: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: Brand.textSecondary,
+  },
+  priceInput: {
+    flex: 1,
+    minHeight: 46,
+    fontSize: 20,
+    fontWeight: "700",
+    color: Brand.text,
+    paddingVertical: 0,
+  },
+  priceError: { fontSize: 11, color: Brand.red, marginTop: 6 },
+  priceMeta: {
+    flexDirection: "row",
+    gap: Space.md,
+    marginTop: Space.md,
+    paddingTop: Space.md,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: Brand.divider,
+  },
+  priceMetaItem: { flex: 1 },
+  priceMetaLabel: { fontSize: 10.5, color: Brand.textMuted, fontWeight: "600" },
+  priceMetaValue: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: Brand.text,
+    marginTop: 2,
+  },
+  priceMetaValueNet: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: Brand.green,
+    marginTop: 2,
+  },
+  sendPrice: { marginTop: Space.lg },
+  billingHint: {
+    fontSize: 10.5,
+    color: Brand.textMuted,
+    marginTop: Space.sm,
+    lineHeight: 15,
+  },
+  pendingCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: Space.sm,
+    backgroundColor: Brand.amberSoft,
+    borderRadius: Radius.md,
+    padding: Space.md,
+  },
+  pendingText: {
+    flex: 1,
+    fontSize: 12,
+    color: Brand.amber,
+    fontWeight: "600",
+    lineHeight: 17,
+  },
+  infoCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: Space.sm,
+    backgroundColor: Brand.primarySoft,
+    borderRadius: Radius.md,
+    padding: Space.md,
+  },
+  infoText: {
+    flex: 1,
+    fontSize: 11.5,
+    color: Brand.primary,
+    lineHeight: 16,
+  },
   doneCard: {
     flexDirection: "row",
     alignItems: "center",

@@ -55,8 +55,8 @@
     "web": "expo start --web",
     "lint": "expo lint",
     "supabase:push": "npx supabase db push",
-    "supabase:deploy": "npx supabase functions deploy analyze-request && npx supabase functions deploy ai-assistant",
-    "supabase:check": "npx -y deno@2 check supabase/functions/analyze-request/index.ts supabase/functions/ai-assistant/index.ts",
+    "supabase:deploy": "npx supabase functions deploy analyze-request && npx supabase functions deploy ai-assistant && npx supabase functions deploy xendit-create-payment && npx supabase functions deploy xendit-request-withdrawal && npx supabase functions deploy xendit-webhook --no-verify-jwt && npx supabase functions deploy xendit-payout-webhook --no-verify-jwt",
+    "supabase:check": "npx -y deno@2 check supabase/functions/analyze-request/index.ts supabase/functions/ai-assistant/index.ts supabase/functions/xendit-create-payment/index.ts supabase/functions/xendit-request-withdrawal/index.ts supabase/functions/xendit-webhook/index.ts supabase/functions/xendit-payout-webhook/index.ts",
     "supabase:fmt": "npx -y deno@2 fmt supabase/functions",
     "supabase:verify": "node scripts/verify-ai-functions.mjs"
   },

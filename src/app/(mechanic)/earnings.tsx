@@ -1,11 +1,20 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useState } from 'react';
 import { RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
+import { useFocusEffect, useRouter } from 'expo-router';
 import { ScreenHeader } from '@/components/ui/screen-header';
+import { Button } from '@/components/ui/button';
 import { ErrorState, LoadingState } from '@/components/ui/state';
 import { Brand, CardShadow, Gradient, Radius, ScreenPadding, Space } from '@/constants/brand';
 import { getEarningsSummary, type EarningsSummary } from '@/features/mechanic/service';
-import { formatIDR } from '@/utils/format';
+import {
+  getWallet,
+  listWithdrawals,
+  type MechanicWallet,
+  type Withdrawal,
+} from '@/features/finance/service';
+import { channelLabel, withdrawalStatusMeta } from '@/features/finance/constants';
+import { formatDateTime, formatIDR } from '@/utils/format';
 
 const ZERO: EarningsSummary = { totalJobs: 0, gross: 0, fee: 0, net: 0 };
 
@@ -24,23 +33,30 @@ function startOf(period: 'day' | 'week' | 'month'): string {
 }
 
 export default function MechanicEarningsScreen() {
+  const router = useRouter();
   const [day, setDay] = useState<EarningsSummary>(ZERO);
   const [week, setWeek] = useState<EarningsSummary>(ZERO);
   const [month, setMonth] = useState<EarningsSummary>(ZERO);
+  const [wallet, setWallet] = useState<MechanicWallet | null>(null);
+  const [withdrawals, setWithdrawals] = useState<Withdrawal[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState(false);
 
   const load = useCallback(async () => {
     try {
-      const [d, w, m] = await Promise.all([
+      const [d, w, m, saldo, history] = await Promise.all([
         getEarningsSummary(startOf('day')),
         getEarningsSummary(startOf('week')),
         getEarningsSummary(startOf('month')),
+        getWallet(),
+        listWithdrawals(10),
       ]);
       setDay(d);
       setWeek(w);
       setMonth(m);
+      setWallet(saldo);
+      setWithdrawals(history);
       setError(false);
     } catch {
       setError(true);
@@ -50,32 +66,11 @@ export default function MechanicEarningsScreen() {
     }
   }, []);
 
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        const [d, w, m] = await Promise.all([
-          getEarningsSummary(startOf('day')),
-          getEarningsSummary(startOf('week')),
-          getEarningsSummary(startOf('month')),
-        ]);
-        if (cancelled) return;
-        setDay(d);
-        setWeek(w);
-        setMonth(m);
-      } catch {
-        if (!cancelled) setError(true);
-      } finally {
-        if (!cancelled) {
-          setLoading(false);
-          setRefreshing(false);
-        }
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+  useFocusEffect(
+    useCallback(() => {
+      load();
+    }, [load]),
+  );
 
   const sections: { label: string; s: EarningsSummary }[] = [
     { label: 'Hari ini', s: day },
@@ -108,6 +103,52 @@ export default function MechanicEarningsScreen() {
             <ErrorState onRetry={load} />
           ) : (
             <>
+              <View style={styles.walletCard}>
+                <View style={styles.walletRow}>
+                  <View style={styles.walletCopy}>
+                    <Text style={styles.walletLabel}>Saldo bisa ditarik</Text>
+                    <Text style={styles.walletValue}>
+                      {formatIDR(wallet?.available_balance ?? 0)}
+                    </Text>
+                  </View>
+                  <View style={styles.walletBadge}>
+                    <Text style={styles.walletBadgeText}>
+                      + {formatIDR(wallet?.pending_balance ?? 0)} pending
+                    </Text>
+                  </View>
+                </View>
+                <View style={styles.walletDivider} />
+                <View style={styles.walletMetaRow}>
+                  <View style={styles.walletMetaItem}>
+                    <Text style={styles.walletMetaLabel}>Total pendapatan</Text>
+                    <Text style={styles.walletMetaValue}>
+                      {formatIDR(wallet?.total_earned ?? 0)}
+                    </Text>
+                  </View>
+                  <View style={styles.walletMetaItem}>
+                    <Text style={styles.walletMetaLabel}>Sudah dicairkan</Text>
+                    <Text style={styles.walletMetaValue}>
+                      {formatIDR(wallet?.total_withdrawn ?? 0)}
+                    </Text>
+                  </View>
+                </View>
+                <View style={styles.walletActions}>
+                  <Button
+                    label="Tarik Saldo"
+                    icon="arrow-up-circle-outline"
+                    onPress={() => router.push('/(mechanic)/withdraw')}
+                    style={styles.walletAction}
+                  />
+                  <Button
+                    label="Rekening"
+                    icon="card-outline"
+                    variant="secondary"
+                    onPress={() => router.push('/(mechanic)/payout-accounts')}
+                    style={styles.walletAction}
+                  />
+                </View>
+              </View>
+
               <LinearGradient
                 colors={Gradient.promoGreen}
                 start={{ x: 0, y: 0 }}
@@ -140,6 +181,38 @@ export default function MechanicEarningsScreen() {
                   <Row label="Bersih" value={formatIDR(s.net)} strong />
                 </View>
               ))}
+
+              {withdrawals.length > 0 ? (
+                <>
+                  <Text style={styles.sectionTitle}>Riwayat pencairan</Text>
+                  <View style={styles.historyCard}>
+                    {withdrawals.map((item, index) => {
+                      const meta = withdrawalStatusMeta(item.status);
+                      return (
+                        <View
+                          key={item.id}
+                          style={[styles.historyRow, index === 0 && styles.historyRowFirst]}
+                        >
+                          <View style={styles.historyCopy}>
+                            <Text style={styles.historyAmount}>{formatIDR(item.amount)}</Text>
+                            <Text style={styles.historyMeta}>
+                              {item.account_snapshot?.bank_code
+                                ? `${channelLabel(item.account_snapshot.bank_code)} · `
+                                : ''}
+                              {formatDateTime(item.created_at)}
+                            </Text>
+                          </View>
+                          <View style={[styles.statusChip, { backgroundColor: meta.background }]}>
+                            <Text style={[styles.statusChipText, { color: meta.color }]}>
+                              {meta.label}
+                            </Text>
+                          </View>
+                        </View>
+                      );
+                    })}
+                  </View>
+                </>
+              ) : null}
 
               <Text style={styles.note}>
                 Dihitung dari tabel earnings, diisi otomatis saat pembayaran terverifikasi (PRD §18).
@@ -223,4 +296,74 @@ const styles = StyleSheet.create({
   strongValue: { fontSize: 15, fontWeight: '700', color: Brand.green },
   divider: { height: StyleSheet.hairlineWidth, backgroundColor: Brand.divider, marginVertical: Space.sm },
   note: { fontSize: 11, color: Brand.textMuted, marginTop: Space.lg, lineHeight: 16 },
+  walletCard: {
+    backgroundColor: Brand.surface,
+    borderRadius: Radius.lg,
+    borderWidth: 1,
+    borderColor: Brand.divider,
+    padding: Space.lg,
+    marginBottom: Space.md,
+    ...CardShadow,
+  },
+  walletRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    gap: Space.md,
+  },
+  walletCopy: { flex: 1 },
+  walletLabel: { fontSize: 11.5, color: Brand.textMuted, fontWeight: '600' },
+  walletValue: {
+    fontSize: 26,
+    fontWeight: '700',
+    color: Brand.text,
+    marginTop: 2,
+    letterSpacing: -0.5,
+  },
+  walletBadge: {
+    backgroundColor: Brand.greenSoft,
+    borderRadius: Radius.pill,
+    paddingHorizontal: 9,
+    paddingVertical: 4,
+  },
+  walletBadgeText: { fontSize: 10, fontWeight: '700', color: Brand.green },
+  walletDivider: {
+    height: StyleSheet.hairlineWidth,
+    backgroundColor: Brand.divider,
+    marginVertical: Space.md,
+  },
+  walletMetaRow: { flexDirection: 'row', gap: Space.md },
+  walletMetaItem: { flex: 1 },
+  walletMetaLabel: { fontSize: 10.5, color: Brand.textMuted, fontWeight: '600' },
+  walletMetaValue: { fontSize: 13, fontWeight: '700', color: Brand.text, marginTop: 2 },
+  walletActions: { flexDirection: 'row', gap: Space.sm, marginTop: Space.lg },
+  walletAction: { flex: 1 },
+  sectionTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: Brand.text,
+    marginTop: Space.xxl,
+    marginBottom: Space.md,
+  },
+  historyCard: {
+    backgroundColor: Brand.surface,
+    borderRadius: Radius.lg,
+    borderWidth: 1,
+    borderColor: Brand.divider,
+    paddingHorizontal: Space.lg,
+  },
+  historyRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Space.md,
+    paddingVertical: Space.md,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: Brand.divider,
+  },
+  historyRowFirst: { borderTopWidth: 0 },
+  historyCopy: { flex: 1 },
+  historyAmount: { fontSize: 14, fontWeight: '700', color: Brand.text },
+  historyMeta: { fontSize: 11, color: Brand.textSecondary, marginTop: 2 },
+  statusChip: { borderRadius: Radius.pill, paddingHorizontal: 9, paddingVertical: 4 },
+  statusChipText: { fontSize: 10.5, fontWeight: '700' },
 });
