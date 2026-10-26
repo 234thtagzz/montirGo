@@ -3,10 +3,12 @@ import { Ionicons } from '@/components/ui/icon';
 import { AppLoadingScreen } from '@/components/app-loading-screen';
 import { Brand } from '@/constants/brand';
 import { useSessionUser } from '@/hooks/use-session-user';
+import { useTabBarStyle } from '@/hooks/use-tab-bar-style';
 
 // Guard: hanya role montir (dari database) yang boleh masuk section ini (PRD §6).
 export default function MechanicLayout() {
   const { user, loading } = useSessionUser();
+  const tabBarStyle = useTabBarStyle();
 
   if (loading) return <AppLoadingScreen instant status="Memeriksa akses…" />;
   if (!user) return <Redirect href="/(auth)/login" />;
@@ -18,11 +20,7 @@ export default function MechanicLayout() {
         headerShown: false,
         tabBarActiveTintColor: Brand.primary,
         tabBarInactiveTintColor: Brand.textMuted,
-        tabBarStyle: {
-          backgroundColor: Brand.surface,
-          borderTopColor: Brand.border,
-          paddingTop: 6,
-        },
+        tabBarStyle,
         tabBarLabelStyle: { fontSize: 11, fontWeight: '600' },
         tabBarHideOnKeyboard: true,
       }}
