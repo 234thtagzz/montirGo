@@ -5,6 +5,7 @@ import { ScreenHeader } from '@/components/ui/screen-header';
 import { EmptyState, ErrorState, LoadingState } from '@/components/ui/state';
 import { Brand, ScreenPadding, Space } from '@/constants/brand';
 import { listMyOrders, type MyOrder } from '@/features/mechanic/service';
+import { syncMechanicPendingPayments } from '@/features/finance/service';
 import { OrderCard } from '@/features/mechanic/components/order-card';
 
 export default function MechanicActiveOrdersScreen() {
@@ -16,7 +17,11 @@ export default function MechanicActiveOrdersScreen() {
 
   const load = useCallback(async () => {
     try {
-      setOrders(await listMyOrders(true));
+      let rows = await listMyOrders(true);
+      if (await syncMechanicPendingPayments(rows)) {
+        rows = await listMyOrders(true);
+      }
+      setOrders(rows);
       setError(false);
     } catch {
       setError(true);
@@ -30,7 +35,10 @@ export default function MechanicActiveOrdersScreen() {
     let cancelled = false;
     (async () => {
       try {
-        const rows = await listMyOrders(true);
+        let rows = await listMyOrders(true);
+        if (await syncMechanicPendingPayments(rows)) {
+          rows = await listMyOrders(true);
+        }
         if (!cancelled) {
           setOrders(rows);
           setError(false);

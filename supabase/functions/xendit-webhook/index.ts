@@ -10,12 +10,14 @@ import {
   getServiceClient,
   json,
   verifyCallbackToken,
+  webhookTokenConfigured,
 } from '../_shared/xendit.ts';
 
 interface XenditWebhook {
   event?: string;
   created?: string;
   data?: {
+    id?: string;
     reference_id?: string;
     payment_id?: string;
     payment_session_id?: string;
@@ -31,6 +33,13 @@ interface XenditWebhook {
 Deno.serve(async (req: Request) => {
   if (req.method === 'OPTIONS') return new Response('ok');
   if (req.method !== 'POST') return json({ error: 'Metode tidak didukung' }, 405);
+
+  if (!webhookTokenConfigured()) {
+    // Tanpa token, semua notifikasi Xendit akan ditolak. Tampilkan pesan jelas
+    // agar terlihat di dashboard webhook Xendit.
+    console.error('XENDIT_WEBHOOK_TOKEN belum di-set di Supabase secrets');
+    return json({ error: 'XENDIT_WEBHOOK_TOKEN belum di-set di server' }, 500);
+  }
 
   if (!verifyCallbackToken(req)) {
     return json({ error: 'Webhook token tidak valid' }, 401);
@@ -49,10 +58,14 @@ Deno.serve(async (req: Request) => {
 
   const svc = getServiceClient();
   const sessionId = typeof data.payment_session_id === 'string' ? data.payment_session_id : null;
-  const externalPaymentId = typeof data.payment_id === 'string' ? data.payment_id : null;
+  const externalPaymentId =
+    (typeof data.payment_id === 'string' ? data.payment_id : null) ??
+    (typeof data.payment_request_id === 'string' ? data.payment_request_id : null) ??
+    (typeof data.id === 'string' ? data.id : null);
   const referenceId = typeof data.reference_id === 'string' ? data.reference_id : null;
 
-  // Cari baris payments: utamakan payment_session_id, lalu reference_id (request id).
+  // Cari baris payments: utamakan payment_session_id, lalu external id, lalu
+  // reference_id (request id) bila payload tidak membawa id sesi.
   let payment: { id: string; request_id: string; status: string } | null = null;
 
   if (sessionId) {
@@ -60,15 +73,6 @@ Deno.serve(async (req: Request) => {
       .from('payments')
       .select('id, request_id, status')
       .eq('payment_session_id', sessionId)
-      .maybeSingle();
-    payment = row ?? null;
-  }
-
-  if (!payment && referenceId) {
-    const { data: row } = await svc
-      .from('payments')
-      .select('id, request_id, status')
-      .eq('request_id', referenceId)
       .maybeSingle();
     payment = row ?? null;
   }
@@ -82,11 +86,32 @@ Deno.serve(async (req: Request) => {
     payment = row ?? null;
   }
 
+  if (!payment && referenceId && isUuid(referenceId)) {
+    const { data: row } = await svc
+      .from('payments')
+      .select('id, request_id, status')
+      .eq('request_id', referenceId)
+      .maybeSingle();
+    payment = row ?? null;
+  }
+
   if (!payment) {
     // Event untuk transaksi yang tidak dikenal — balas 200 agar Xendit tidak retry.
     console.warn('Webhook pembayaran tanpa baris payments', { event, referenceId, sessionId });
     return json({ ok: true, ignored: true });
   }
+
+  const isSuccess =
+    event === 'payment_session.completed' ||
+    event === 'payment.capture' ||
+    event === 'payment.succeeded' ||
+    status === 'COMPLETED' ||
+    (status === 'SUCCEEDED' && Boolean(externalPaymentId));
+
+  const isFailure =
+    event === 'payment_session.expired' ||
+    event === 'payment.failure' ||
+    ['EXPIRED', 'FAILED', 'CANCELED', 'CANCELLED'].includes(status);
 
   const eventId = [
     event || 'payment_event',
@@ -101,23 +126,14 @@ Deno.serve(async (req: Request) => {
     payload: body,
   });
 
-  if (eventError) {
-    // 23505 = unique violation -> webhook duplikat, aman diabaikan.
-    if (eventError.code === '23505') return json({ ok: true, duplicate: true });
+  // Webhook duplikat tetap diproses: percobaan sebelumnya bisa sudah mencatat
+  // event tetapi gagal saat finalize_payment. finalize_payment sendiri
+  // idempoten (langsung keluar bila payments sudah 'paid').
+  const isDuplicate = eventError?.code === '23505';
+  if (eventError && !isDuplicate) {
     console.error('Gagal menyimpan payment event', eventError);
     return json({ error: 'Gagal menyimpan event' }, 500);
   }
-
-  const isSuccess =
-    event === 'payment_session.completed' ||
-    event === 'payment.capture' ||
-    event === 'payment.succeeded' ||
-    (status === 'SUCCEEDED' && Boolean(externalPaymentId));
-
-  const isFailure =
-    event === 'payment_session.expired' ||
-    event === 'payment.failure' ||
-    ['EXPIRED', 'FAILED', 'CANCELED', 'CANCELLED'].includes(status);
 
   try {
     if (externalPaymentId) {
@@ -127,10 +143,14 @@ Deno.serve(async (req: Request) => {
         .eq('id', payment.id);
     }
 
-    if (isSuccess) {
+    if (isSuccess && payment.status !== 'paid') {
       const { error } = await svc.rpc('finalize_payment', { p_payment_id: payment.id });
       if (error) throw new Error(error.message);
-      return json({ ok: true, finalized: true });
+      return json({ ok: true, finalized: true, duplicate: isDuplicate });
+    }
+
+    if (isDuplicate) {
+      return json({ ok: true, duplicate: true });
     }
 
     if (isFailure && payment.status !== 'paid') {
@@ -150,3 +170,10 @@ Deno.serve(async (req: Request) => {
     return json({ error: 'Gagal memproses pembayaran' }, 500);
   }
 });
+
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/** Cegah query UUID gagal saat reference_id berupa teks bebas. */
+function isUuid(value: string): boolean {
+  return UUID_PATTERN.test(value);
+}

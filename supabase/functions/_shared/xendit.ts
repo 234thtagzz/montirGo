@@ -54,6 +54,17 @@ export async function authenticate(req: Request) {
   return { sb, user };
 }
 
+/** Apakah token webhook sudah dikonfigurasi di server? */
+export function webhookTokenConfigured(): boolean {
+  return Boolean(
+    optionalEnv(
+      'XENDIT_WEBHOOK_TOKEN',
+      'XENDIT_WEBHOOK_SECRET',
+      'PAYMENT_GATEWAY_WEBHOOK_SECRET',
+    ),
+  );
+}
+
 /** Verifikasi header x-callback-token dari Xendit. */
 export function verifyCallbackToken(req: Request): boolean {
   const expected = optionalEnv(

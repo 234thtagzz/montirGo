@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import {
   Alert,
-  Linking,
   Pressable,
   RefreshControl,
   ScrollView,
@@ -24,6 +23,7 @@ import {
 } from '@/features/mechanic/service';
 import { AiAnalysisCard } from '@/features/service-request/components/ai-analysis-card';
 import { formatDateTime } from '@/utils/format';
+import { openWhatsApp } from '@/utils/whatsapp';
 
 /**
  * Layar otorisasi montir: detail request SEBELUM diterima.
@@ -80,10 +80,13 @@ export default function MechanicRequestDetailScreen() {
     };
   }, [id, load]);
 
-  const callClient = () => {
-    if (!order?.contact_phone) return;
-    Linking.openURL(`tel:${order.contact_phone}`).catch(() =>
-      Alert.alert('Gagal', 'Tidak dapat membuka aplikasi telepon.'),
+  const chatClient = () => {
+    if (!order) return;
+    void openWhatsApp(
+      order.contact_phone,
+      `Halo, saya montir MontirGo. Saya ingin menanyakan permintaan #${order.id
+        .slice(0, 8)
+        .toUpperCase()} sebelum berangkat.`,
     );
   };
 
@@ -202,11 +205,11 @@ export default function MechanicRequestDetailScreen() {
           {order.contact_phone ? (
             <Pressable
               accessibilityRole="button"
-              accessibilityLabel="Hubungi client"
-              onPress={callClient}
-              style={({ pressed }) => [styles.callButton, pressed && styles.pressed]}
+              accessibilityLabel="Hubungi client lewat WhatsApp"
+              onPress={chatClient}
+              style={({ pressed }) => [styles.chatButton, pressed && styles.pressed]}
             >
-              <Ionicons name="call" size={17} color={Brand.white} />
+              <Ionicons name="logo-whatsapp" size={18} color={Brand.white} />
             </Pressable>
           ) : null}
         </View>
@@ -218,7 +221,7 @@ export default function MechanicRequestDetailScreen() {
           <DetailRow label="Kendaraan" value={vehicle || 'Tidak dicantumkan'} />
           {order.vehicle_plate ? <DetailRow label="Nomor polisi" value={order.vehicle_plate} /> : null}
           <DetailRow label="Lokasi" value={order.address || 'Lokasi GPS terdeteksi'} />
-          <DetailRow label="Kontak" value={order.contact_phone} />
+          <DetailRow label="WhatsApp" value={order.contact_phone} />
           {order.additional_notes ? (
             <DetailRow label="Catatan" value={order.additional_notes} />
           ) : null}
@@ -303,11 +306,11 @@ const styles = StyleSheet.create({
   clientCopy: { flex: 1 },
   clientName: { fontSize: 14, fontWeight: '700', color: Brand.text },
   clientRole: { fontSize: 11.5, color: Brand.textSecondary, marginTop: 2 },
-  callButton: {
+  chatButton: {
     width: 42,
     height: 42,
     borderRadius: 21,
-    backgroundColor: Brand.green,
+    backgroundColor: Brand.whatsapp,
     alignItems: 'center',
     justifyContent: 'center',
   },

@@ -7,9 +7,10 @@ import type {
   FinanceSettings,
   MechanicWallet,
   OrderPayment,
+  PaymentSessionResult,
+  PaymentSyncResult,
   PayoutAccount,
   PayoutAccountInput,
-  PaymentSessionResult,
   Withdrawal,
 } from './types';
 
@@ -257,4 +258,43 @@ export async function createPaymentSession(requestId: string): Promise<PaymentSe
   if (result?.alreadyPaid) return result;
   if (!result?.paymentUrl) throw new Error('Xendit tidak mengembalikan link pembayaran.');
   return result;
+}
+
+/**
+ * Sinkronkan status pembayaran langsung ke Xendit.
+ *
+ * Webhook bisa telat / belum terdaftar, jadi layar client & montir memanggil
+ * ini saat menampilkan order berstatus `payment`. Bila Xendit menyatakan
+ * sesi sudah COMPLETED, Edge Function menjalankan `finalize_payment` sehingga
+ * status order berubah menjadi `paid` untuk kedua pihak.
+ */
+export async function syncPaymentStatus(requestId: string): Promise<PaymentSyncResult> {
+  const { data, error } = await supabase.functions.invoke('xendit-sync-payment', {
+    body: { requestId },
+  });
+  if (error) {
+    throw new Error(await functionErrorMessage(error, 'Gagal memeriksa status pembayaran.'));
+  }
+
+  const result = data as (PaymentSyncResult & { error?: string }) | null;
+  if (!result) throw new Error('Server tidak mengembalikan status pembayaran.');
+  if (result.error) throw new Error(result.error);
+  return result;
+}
+
+/**
+ * Sinkronkan semua order montir yang masih menunggu pembayaran.
+ * Dipakai dashboard montir agar status "lunas" muncul walau webhook belum masuk.
+ * Mengembalikan true bila ada order yang berubah menjadi lunas.
+ */
+export async function syncMechanicPendingPayments(
+  orders: { id: string; status: string }[],
+): Promise<boolean> {
+  const pending = orders.filter((order) => order.status === 'payment').slice(0, 5);
+  if (pending.length === 0) return false;
+
+  const results = await Promise.allSettled(pending.map((order) => syncPaymentStatus(order.id)));
+  return results.some(
+    (result) => result.status === 'fulfilled' && result.value.status === 'paid',
+  );
 }

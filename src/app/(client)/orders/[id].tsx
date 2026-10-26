@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import {
   Alert,
-  Linking,
   Pressable,
   RefreshControl,
   ScrollView,
@@ -33,6 +32,7 @@ import {
 import {
   createPaymentSession,
   getPaymentForRequest,
+  syncPaymentStatus,
   type OrderPayment,
 } from '@/features/finance/service';
 import { AiAnalysisCard } from '@/features/service-request/components/ai-analysis-card';
@@ -42,6 +42,7 @@ import {
   isCancellable,
 } from '@/features/service-request/status';
 import { formatDateTime, formatIDR } from '@/utils/format';
+import { openWhatsApp } from '@/utils/whatsapp';
 
 export default function ClientOrderDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -136,6 +137,41 @@ export default function ClientOrderDetailScreen() {
     }
   };
 
+  /**
+   * Cek status pembayaran langsung ke Xendit (bukan mengandalkan webhook saja).
+   * Mengembalikan true bila order sudah lunas dan UI sudah dimuat ulang.
+   */
+  const checkPayment = useCallback(async (): Promise<boolean> => {
+    if (!id) return false;
+    try {
+      const result = await syncPaymentStatus(id);
+      if (result.status === 'paid') {
+        await load();
+        return true;
+      }
+    } catch {
+      // Gagal sementara (offline / Xendit timeout) — polling berikutnya mencoba lagi.
+    }
+    return false;
+  }, [id, load]);
+
+  // Selama tagihan belum lunas, sinkronkan berkala agar status berubah walau
+  // webhook Xendit belum/tidak terkirim ke server.
+  useEffect(() => {
+    if (!id || order?.status !== 'payment' || !payment?.payment_session_id) return;
+    let active = true;
+    const tick = async () => {
+      const paid = await checkPayment();
+      if (!active || paid) return;
+    };
+    void tick();
+    const timer = setInterval(tick, 7000);
+    return () => {
+      active = false;
+      clearInterval(timer);
+    };
+  }, [id, order?.status, payment?.payment_session_id, checkPayment]);
+
   const confirmCancel = () => {
     Alert.alert('Batalkan pesanan?', 'Montir tidak akan datang jika pesanan dibatalkan.', [
       { text: 'Tidak', style: 'cancel' },
@@ -161,10 +197,11 @@ export default function ClientOrderDetailScreen() {
     ]);
   };
 
-  const callMechanic = () => {
-    if (!order?.mechanic_phone) return;
-    Linking.openURL(`tel:${order.mechanic_phone}`).catch(() =>
-      Alert.alert('Gagal', 'Tidak dapat membuka aplikasi telepon.'),
+  const chatMechanic = () => {
+    if (!order) return;
+    void openWhatsApp(
+      order.mechanic_phone,
+      `Halo, saya client MontirGo terkait pesanan #${order.id.slice(0, 8).toUpperCase()}.`,
     );
   };
 
@@ -179,8 +216,9 @@ export default function ClientOrderDetailScreen() {
         return;
       }
       await openBrowserAsync(session.paymentUrl);
-      // Setelah kembali dari halaman checkout, status mungkin sudah berubah
-      // lewat webhook. Muat ulang agar UI mengikuti data server.
+      // Setelah kembali dari halaman checkout, minta server memeriksa status
+      // ke Xendit, lalu muat ulang. Polling di atas melanjutkan bila belum lunas.
+      await syncPaymentStatus(id).catch(() => null);
       await load();
     } catch (e) {
       Alert.alert(
@@ -284,11 +322,11 @@ export default function ClientOrderDetailScreen() {
             {order.mechanic_phone ? (
               <Pressable
                 accessibilityRole="button"
-                accessibilityLabel="Hubungi montir"
-                onPress={callMechanic}
-                style={({ pressed }) => [styles.callButton, pressed && styles.pressed]}
+                accessibilityLabel="Hubungi montir lewat WhatsApp"
+                onPress={chatMechanic}
+                style={({ pressed }) => [styles.chatButton, pressed && styles.pressed]}
               >
-                <Ionicons name="call" size={17} color={Brand.white} />
+                <Ionicons name="logo-whatsapp" size={18} color={Brand.white} />
               </Pressable>
             ) : null}
           </View>
@@ -371,7 +409,7 @@ export default function ClientOrderDetailScreen() {
           <DetailRow label="Kendaraan" value={vehicle || 'Tidak dicantumkan'} />
           {order.vehicle_plate ? <DetailRow label="Nomor polisi" value={order.vehicle_plate} /> : null}
           <DetailRow label="Lokasi" value={order.address || 'Lokasi GPS terdeteksi'} />
-          <DetailRow label="Kontak" value={order.contact_phone} />
+          <DetailRow label="WhatsApp" value={order.contact_phone} />
           {order.additional_notes ? (
             <DetailRow label="Catatan" value={order.additional_notes} />
           ) : null}
@@ -485,11 +523,11 @@ const styles = StyleSheet.create({
   mechanicCopy: { flex: 1 },
   mechanicName: { fontSize: 14, fontWeight: '700', color: Brand.text },
   mechanicRole: { fontSize: 11.5, color: Brand.textSecondary, marginTop: 2 },
-  callButton: {
+  chatButton: {
     width: 42,
     height: 42,
     borderRadius: 21,
-    backgroundColor: Brand.green,
+    backgroundColor: Brand.whatsapp,
     alignItems: 'center',
     justifyContent: 'center',
   },

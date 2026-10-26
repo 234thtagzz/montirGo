@@ -24,6 +24,7 @@ import {
 } from "@/features/mechanic/service";
 import {
   getFinanceSettings,
+  syncPaymentStatus,
   type FinanceSettings,
 } from "@/features/finance/service";
 import {
@@ -35,11 +36,11 @@ import { AiAnalysisCard } from "@/features/service-request/components/ai-analysi
 import { getStatusMeta } from "@/features/service-request/status";
 import { supabase } from "@/lib/supabase";
 import { formatDateTime, formatIDR } from "@/utils/format";
+import { openWhatsApp } from "@/utils/whatsapp";
 import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import { useCallback, useEffect, useState } from "react";
 import {
   Alert,
-  Linking,
   Pressable,
   RefreshControl,
   ScrollView,
@@ -134,6 +135,37 @@ export default function MechanicOrderDetailScreen() {
     };
   }, [id, load, loadAnalysis]);
 
+  // Webhook Xendit bisa telat atau belum terdaftar. Selama status order masih
+  // `payment`, montir juga memeriksa langsung ke Xendit agar status "lunas"
+  // ikut berubah walau notifikasi webhook tidak sampai ke server.
+  useEffect(() => {
+    if (!id || order?.status !== "payment") return;
+    let active = true;
+
+    const tick = async () => {
+      try {
+        const result = await syncPaymentStatus(id);
+        if (!active || result.status !== "paid") return;
+        const [detail, events] = await Promise.all([
+          getMyOrder(id),
+          listOrderStatusHistory(id),
+        ]);
+        if (!active) return;
+        setOrder(detail);
+        setHistory(events);
+      } catch {
+        // Gagal sementara — interval berikutnya mencoba lagi.
+      }
+    };
+
+    void tick();
+    const timer = setInterval(tick, 8000);
+    return () => {
+      active = false;
+      clearInterval(timer);
+    };
+  }, [id, order?.status]);
+
   useEffect(() => {
     let cancelled = false;
     getFinanceSettings()
@@ -222,11 +254,14 @@ export default function MechanicOrderDetailScreen() {
     }
   };
 
-  const callClient = () => {
-    const phone = order?.client_phone ?? order?.contact_phone;
-    if (!phone) return;
-    Linking.openURL(`tel:${phone}`).catch(() =>
-      Alert.alert("Gagal", "Tidak dapat membuka aplikasi telepon."),
+  const chatClient = () => {
+    if (!order) return;
+    const phone = order.client_phone ?? order.contact_phone;
+    void openWhatsApp(
+      phone,
+      `Halo, saya montir MontirGo yang menangani pesanan #${order.id
+        .slice(0, 8)
+        .toUpperCase()}.`,
     );
   };
 
@@ -362,14 +397,14 @@ export default function MechanicOrderDetailScreen() {
           {order.client_phone || order.contact_phone ? (
             <Pressable
               accessibilityRole="button"
-              accessibilityLabel="Hubungi pelanggan"
-              onPress={callClient}
+              accessibilityLabel="Hubungi pelanggan lewat WhatsApp"
+              onPress={chatClient}
               style={({ pressed }) => [
-                styles.callButton,
+                styles.chatButton,
                 pressed && styles.pressed,
               ]}
             >
-              <Ionicons name="call" size={17} color={Brand.white} />
+              <Ionicons name="logo-whatsapp" size={18} color={Brand.white} />
             </Pressable>
           ) : null}
         </View>
@@ -388,7 +423,7 @@ export default function MechanicOrderDetailScreen() {
             label="Lokasi"
             value={order.address || "Lokasi GPS terdeteksi"}
           />
-          <DetailRow label="Kontak" value={order.contact_phone} />
+          <DetailRow label="WhatsApp" value={order.contact_phone} />
           {order.additional_notes ? (
             <DetailRow label="Catatan" value={order.additional_notes} />
           ) : null}
@@ -637,11 +672,11 @@ const styles = StyleSheet.create({
   clientCopy: { flex: 1 },
   clientName: { fontSize: 14, fontWeight: "700", color: Brand.text },
   clientRole: { fontSize: 11.5, color: Brand.textSecondary, marginTop: 2 },
-  callButton: {
+  chatButton: {
     width: 42,
     height: 42,
     borderRadius: 21,
-    backgroundColor: Brand.green,
+    backgroundColor: Brand.whatsapp,
     alignItems: "center",
     justifyContent: "center",
   },

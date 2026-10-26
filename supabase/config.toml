@@ -12,6 +12,9 @@ verify_jwt = true
 [functions.xendit-create-payment]
 verify_jwt = true
 
+[functions.xendit-sync-payment]
+verify_jwt = true
+
 [functions.xendit-request-withdrawal]
 verify_jwt = true
 

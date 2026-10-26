@@ -77,7 +77,56 @@ Setelah deploy, uji ulang:
 - Analisis: buat request baru dari akun client; kartu "Analisis AI" harus terisi.
 - Chat: buka tab **AI Asisten** sebagai montir, kirim pertanyaan.
 
-## 5. Restart aplikasi
+## 5. Pembayaran Xendit (status lunas otomatis)
+
+Migrasi pembayaran/dompet wajib diterapkan lebih dulu:
+
+- `20261024000000_xendit_payments_wallets.sql` — tabel pembayaran, dompet,
+  `set_order_price`, `finalize_payment`, pencairan, dan realtime.
+
+Deploy semua function pembayaran:
+
+```bash
+npx supabase functions deploy xendit-create-payment
+npx supabase functions deploy xendit-sync-payment
+npx supabase functions deploy xendit-webhook --no-verify-jwt
+npx supabase functions deploy xendit-request-withdrawal
+npx supabase functions deploy xendit-payout-webhook --no-verify-jwt
+```
+
+Secret yang dibutuhkan:
+
+```bash
+npx supabase secrets set \
+  XENDIT_SECRET_KEY=<secret-key-xendit> \
+  XENDIT_WEBHOOK_TOKEN=<verification-token-dashboard-xendit> \
+  XENDIT_PAYOUT_WEBHOOK_TOKEN=<token-payout> \
+  APP_PAYMENT_RETURN_URL=https://montirgo.app/payment-return \
+  PLATFORM_FEE_PERCENT=10
+```
+
+`XENDIT_WEBHOOK_TOKEN` **harus sama** dengan *Webhook Verification Token* di
+Dashboard Xendit. Bila belum di-set, function webhook membalas `500` dengan
+pesan `XENDIT_WEBHOOK_TOKEN belum di-set di server`.
+
+Daftarkan URL webhook di Dashboard Xendit:
+
+- **Payment session** → `https://biifjpuvbwdwrstkatem.supabase.co/functions/v1/xendit-webhook`
+- **Payout** → `https://biifjpuvbwdwrstkatem.supabase.co/functions/v1/xendit-payout-webhook`
+
+Verifikasi alur pembayaran:
+
+1. Montir mengirim tagihan → order berstatus **Menunggu pembayaran**.
+2. Client menekan **Bayar Sekarang** dan menyelesaikan pembayaran.
+3. Kembali ke aplikasi: status order berubah menjadi **Lunas** di sisi client
+   dan montir, saldo pending montir bertambah.
+
+Bila webhook belum terdaftar atau telat, aplikasi tetap menyinkronkan status
+langsung ke Xendit lewat `xendit-sync-payment` (dipanggil otomatis saat layar
+order/pembayaran dibuka dan setiap beberapa detik selama status masih
+`payment`).
+
+## 6. Restart aplikasi
 
 ```bash
 npx expo start --clear

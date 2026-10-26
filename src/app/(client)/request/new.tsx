@@ -126,7 +126,10 @@ export default function NewServiceRequestScreen() {
       return;
     }
     if (!contactPhone.trim() || contactPhone.replace(/\D/g, '').length < 8) {
-      Alert.alert('Validasi', 'Nomor kontak wajib diisi agar montir bisa menghubungi kamu.');
+      Alert.alert(
+        'Validasi',
+        'Nomor WhatsApp wajib diisi agar montir bisa menghubungimu terkait pesanan.',
+      );
       return;
     }
     if (!coords) {
@@ -317,7 +320,7 @@ export default function NewServiceRequestScreen() {
             style={[styles.input, styles.inputSpaced]}
           />
 
-          <Text style={styles.label}>Nomor kontak</Text>
+          <Text style={styles.label}>Nomor WhatsApp</Text>
           <TextInput
             value={contactPhone}
             onChangeText={setPhone}
@@ -339,8 +342,8 @@ export default function NewServiceRequestScreen() {
 
           <Text style={styles.disclaimer}>
             Keluhanmu akan dianalisis AI untuk memberi indikasi awal kepada montir. Permintaan
-            dikirim ke montir terdekat dan montir akan menghubungi nomor kontakmu sebelum
-            berangkat.
+            dikirim ke montir terdekat dan montir akan menghubungimu lewat WhatsApp di nomor
+            di atas sebelum berangkat.
           </Text>
 
           {submitting ? (

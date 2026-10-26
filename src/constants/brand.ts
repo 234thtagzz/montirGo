@@ -14,6 +14,8 @@ export const Brand = {
   // Aksen status.
   green: '#00B14F',
   greenSoft: '#E6F7EE',
+  /** Hijau resmi WhatsApp untuk tombol chat. */
+  whatsapp: '#25D366',
   amber: '#B45309',
   amberSoft: '#FEF3C7',
   red: '#E8112A',

@@ -156,8 +156,8 @@ export default function RegisterScreen() {
         returnKeyType="next"
       />
       <AuthField
-        label="Nomor telepon (opsional)"
-        icon="call-outline"
+        label="Nomor WhatsApp (opsional)"
+        icon="logo-whatsapp"
         placeholder="08xx xxxx xxxx"
         value={phone}
         onChangeText={setPhone}

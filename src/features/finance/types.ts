@@ -81,6 +81,18 @@ export interface FinanceSettings {
   maxOrderPrice: number;
 }
 
+/** Hasil sinkronisasi status pembayaran langsung ke Xendit. */
+export interface PaymentSyncResult {
+  /** `none` bila montir belum mengirim tagihan / belum ada sesi pembayaran. */
+  status: PaymentStatus | 'none';
+  orderStatus?: string | null;
+  paidAt?: string | null;
+  alreadyPaid?: boolean;
+  finalized?: boolean;
+  /** Status mentah dari Xendit (ACTIVE/COMPLETED/EXPIRED/CANCELED). */
+  sessionStatus?: string;
+}
+
 export interface PaymentSessionResult {
   paymentUrl: string;
   sessionId?: string | null;

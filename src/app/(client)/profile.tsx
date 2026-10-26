@@ -89,7 +89,7 @@ export default function ClientProfileScreen() {
         <View style={styles.infoCard}>
           <InfoRow label="Nama lengkap" value={user?.fullName || '-'} />
           <InfoRow label="Email" value={user?.email || '-'} />
-          <InfoRow label="Nomor telepon" value={user?.phoneNumber || 'Belum diisi'} isLast />
+          <InfoRow label="Nomor WhatsApp" value={user?.phoneNumber || 'Belum diisi'} isLast />
         </View>
 
         <Text style={styles.section}>Menu</Text>

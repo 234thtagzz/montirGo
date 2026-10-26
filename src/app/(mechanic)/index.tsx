@@ -22,7 +22,11 @@ import { OnlineCard } from '@/features/mechanic/components/online-card';
 import { OrderCard } from '@/features/mechanic/components/order-card';
 import { StatTiles } from '@/features/mechanic/components/stat-tiles';
 import { BalanceCard } from '@/features/finance/components/balance-card';
-import { getWallet, type MechanicWallet } from '@/features/finance/service';
+import {
+  getWallet,
+  syncMechanicPendingPayments,
+  type MechanicWallet,
+} from '@/features/finance/service';
 
 export default function MechanicDashboardScreen() {
   const { user: sessionUser, loading: sessionLoading } = useSessionUser();
@@ -47,7 +51,13 @@ export default function MechanicDashboardScreen() {
       const sum = await getEarningsSummary(startOfDay.toISOString());
       setTodayNet(sum.net);
       setTodayJobs(sum.totalJobs);
-      setActiveOrders(await listMyOrders(true));
+      let orders = await listMyOrders(true);
+      // Webhook Xendit bisa telat/belum terdaftar: cek langsung ke Xendit agar
+      // order yang sudah dibayar client berubah menjadi lunas di Beranda.
+      if (await syncMechanicPendingPayments(orders)) {
+        orders = await listMyOrders(true);
+      }
+      setActiveOrders(orders);
       setWallet(await getWallet());
       setError(false);
     } catch {
@@ -80,7 +90,12 @@ export default function MechanicDashboardScreen() {
         if (cancelled) return;
         setTodayNet(sum.net);
         setTodayJobs(sum.totalJobs);
-        setActiveOrders(await listMyOrders(true));
+        let orders = await listMyOrders(true);
+        if (await syncMechanicPendingPayments(orders)) {
+          orders = await listMyOrders(true);
+        }
+        if (cancelled) return;
+        setActiveOrders(orders);
         setWallet(await getWallet());
         if (!cancelled) setError(false);
       } catch {
