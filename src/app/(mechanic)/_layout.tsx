@@ -87,6 +87,10 @@ export default function MechanicLayout() {
         options={{ href: null, tabBarStyle: { display: 'none' } }}
       />
       <Tabs.Screen
+        name="trip/[id]"
+        options={{ href: null, tabBarStyle: { display: 'none' } }}
+      />
+      <Tabs.Screen
         name="request/[id]"
         options={{ href: null, tabBarStyle: { display: 'none' } }}
       />

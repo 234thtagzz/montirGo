@@ -74,6 +74,19 @@ export interface MechanicOrderDetail extends MyOrder {
   additional_notes: string | null;
   vehicle_plate: string | null;
   updated_at: string;
+  /** Titik lokasi client — dipakai layar perjalanan (trip mode). */
+  lat: number;
+  lng: number;
+  accepted_at: string | null;
+  arrived_at: string | null;
+}
+
+/** Satu titik jejak perjalanan montir. */
+export interface MechanicLocationPoint {
+  lat: number;
+  lng: number;
+  accuracy_meters: number | null;
+  recorded_at: string;
 }
 
 export interface OrderStatusEvent {

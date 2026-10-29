@@ -1,8 +1,9 @@
 import { DarkTheme, DefaultTheme, ThemeProvider } from 'expo-router/react-navigation';
 import { Stack } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
-import { Platform, useColorScheme } from 'react-native';
+import { Platform, StyleSheet, useColorScheme } from 'react-native';
 import { useCallback, useEffect, useState } from 'react';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { AppLoadingScreen } from '@/components/app-loading-screen';
 import { supabase } from '@/lib/supabase';
 
@@ -64,17 +65,27 @@ export default function RootLayout() {
   }, []);
 
   if (isBooting) {
-    return <AppLoadingScreen exiting={isExiting} onLayout={hideNativeSplash} />;
+    return (
+      <GestureHandlerRootView style={styles.root}>
+        <AppLoadingScreen exiting={isExiting} onLayout={hideNativeSplash} />
+      </GestureHandlerRootView>
+    );
   }
 
   return (
-    <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
-      <Stack screenOptions={{ headerShown: false }}>
-        <Stack.Screen name="index" />
-        <Stack.Screen name="(auth)" />
-        <Stack.Screen name="(client)" />
-        <Stack.Screen name="(mechanic)" />
-      </Stack>
-    </ThemeProvider>
+    <GestureHandlerRootView style={styles.root}>
+      <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
+        <Stack screenOptions={{ headerShown: false }}>
+          <Stack.Screen name="index" />
+          <Stack.Screen name="(auth)" />
+          <Stack.Screen name="(client)" />
+          <Stack.Screen name="(mechanic)" />
+        </Stack>
+      </ThemeProvider>
+    </GestureHandlerRootView>
   );
 }
+
+const styles = StyleSheet.create({
+  root: { flex: 1 },
+});

@@ -5,8 +5,8 @@ import {
   type RawAiAnalysis,
 } from '@/features/service-request/ai';
 import type {
-  ActivityItem, EarningsSummary, IncomingOrder, IncomingRequestDetail, MechanicOrderDetail,
-  MechanicProfile, MyOrder, OrderStatus, OrderStatusEvent,
+  ActivityItem, EarningsSummary, IncomingOrder, IncomingRequestDetail, MechanicLocationPoint,
+  MechanicOrderDetail, MechanicProfile, MyOrder, OrderStatus, OrderStatusEvent,
 } from './types';
 
 export * from './types';
@@ -247,8 +247,9 @@ export async function getMyOrder(id: string): Promise<MechanicOrderDetail | null
   const { data, error } = await supabase
     .from('service_requests')
     .select(
-      'id, issue_description, symptoms, address, contact_phone, additional_notes, status, ' +
-        'price_amount, created_at, updated_at, vehicles (brand, model, license_plate), ' +
+      'id, issue_description, symptoms, address, lat, lng, contact_phone, additional_notes, status, ' +
+        'price_amount, created_at, updated_at, accepted_at, arrived_at, ' +
+        'vehicles (brand, model, license_plate), ' +
         'client:profiles!service_requests_client_id_fkey (full_name, phone_number)',
     )
     .eq('id', id)
@@ -268,12 +269,62 @@ export async function getMyOrder(id: string): Promise<MechanicOrderDetail | null
     price_amount: r.price_amount as number | null,
     created_at: r.created_at as string,
     updated_at: r.updated_at as string,
+    lat: Number(r.lat),
+    lng: Number(r.lng),
+    accepted_at: (r.accepted_at as string | null) ?? null,
+    arrived_at: (r.arrived_at as string | null) ?? null,
     vehicle_brand: (r.vehicles as { brand?: string } | null)?.brand ?? null,
     vehicle_model: (r.vehicles as { model?: string } | null)?.model ?? null,
     vehicle_plate: (r.vehicles as { license_plate?: string } | null)?.license_plate ?? null,
     client_name: (r.client as { full_name?: string } | null)?.full_name ?? null,
     client_phone: (r.client as { phone_number?: string } | null)?.phone_number ?? null,
   };
+}
+
+/**
+ * Menyimpan satu titik posisi montir selama perjalanan.
+ *
+ * RPC server memvalidasi bahwa pemanggil benar-benar montir order tersebut dan
+ * order masih dalam perjalanan, lalu memperbarui `mechanic_locations` +
+ * `mechanic_profiles.current_lat/current_lng` dalam satu transaksi.
+ */
+export async function recordMechanicLocation(
+  requestId: string,
+  input: { lat: number; lng: number; accuracy?: number | null },
+): Promise<void> {
+  const { error } = await supabase.rpc('record_mechanic_location', {
+    p_request_id: requestId,
+    p_lat: input.lat,
+    p_lng: input.lng,
+    p_accuracy: input.accuracy ?? null,
+  });
+  if (error) throw new Error(mapTripError(error.message));
+}
+
+const TRIP_ERROR_MESSAGES: Record<string, string> = {
+  UNAUTHORIZED: 'Sesi berakhir. Silakan login kembali.',
+  NOT_ACTIVE_TRIP: 'Order ini tidak sedang dalam perjalanan.',
+  INVALID_COORDINATES: 'Koordinat lokasi tidak valid.',
+};
+
+function mapTripError(message: string | null | undefined): string {
+  const code = (message ?? '').trim();
+  return TRIP_ERROR_MESSAGES[code] ?? code ?? 'Gagal menyimpan lokasi perjalanan.';
+}
+
+/** Titik terakhir yang sempat terkirim — dipakai untuk resume saat app dibuka ulang. */
+export async function getLastMechanicLocation(
+  requestId: string,
+): Promise<MechanicLocationPoint | null> {
+  const { data, error } = await supabase
+    .from('mechanic_locations')
+    .select('lat, lng, accuracy_meters, recorded_at')
+    .eq('request_id', requestId)
+    .order('recorded_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (error) throw error;
+  return (data as MechanicLocationPoint | null) ?? null;
 }
 
 export async function listOrderStatusHistory(requestId: string): Promise<OrderStatusEvent[]> {
@@ -363,6 +414,13 @@ export async function acceptOrder(requestId: string): Promise<void> {
   await logActivity('order_accepted', `Menerima order ${requestId.slice(0, 8)}.`);
 }
 
+/** Kolom waktu yang harus ikut terisi saat status berubah (PRD §16). */
+const STATUS_TIMESTAMP: Partial<Record<OrderStatus, string>> = {
+  mechanic_accepted: 'accepted_at',
+  arrived: 'arrived_at',
+  completed: 'completed_at',
+};
+
 export async function updateOrderStatus(requestId: string, toStatus: OrderStatus): Promise<void> {
   const id = await getMyId();
   const { data: current } = await supabase
@@ -370,9 +428,13 @@ export async function updateOrderStatus(requestId: string, toStatus: OrderStatus
     .select('status')
     .eq('id', requestId)
     .single();
+  const timestampColumn = STATUS_TIMESTAMP[toStatus];
+  const patch: Record<string, unknown> = { status: toStatus };
+  if (timestampColumn) patch[timestampColumn] = new Date().toISOString();
+
   const { data: updated, error } = await supabase
     .from('service_requests')
-    .update({ status: toStatus })
+    .update(patch)
     .eq('id', requestId)
     .eq('mechanic_id', id)
     .select('id');

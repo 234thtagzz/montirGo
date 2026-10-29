@@ -34,6 +34,7 @@ import {
 } from "@/features/service-request/ai";
 import { AiAnalysisCard } from "@/features/service-request/components/ai-analysis-card";
 import { getStatusMeta } from "@/features/service-request/status";
+import { TripEntryCard } from "@/features/mechanic/components/trip/trip-entry-card";
 import { supabase } from "@/lib/supabase";
 import { formatDateTime, formatIDR } from "@/utils/format";
 import { openWhatsApp } from "@/utils/whatsapp";
@@ -266,6 +267,15 @@ export default function MechanicOrderDetailScreen() {
   };
 
   const nextAction = order ? getNextAction(order.status) : null;
+  const tripStatus: 'mechanic_assigned' | 'mechanic_accepted' | 'on_the_way' | null =
+    order?.status === 'mechanic_assigned' ||
+    order?.status === 'mechanic_accepted' ||
+    order?.status === 'on_the_way'
+      ? order.status
+      : null;
+  // Transisi "Mulai Perjalanan"/"Sampai di Lokasi" dimiliki layar trip agar
+  // tidak ada dua tombol yang mengubah status yang sama.
+  const stageAction = tripStatus ? null : nextAction;
 
   const advance = () => {
     if (!order || !nextAction) return;
@@ -385,6 +395,18 @@ export default function MechanicOrderDetailScreen() {
             </View>
           ) : null}
         </View>
+
+        {tripStatus ? (
+          <TripEntryCard
+            status={tripStatus}
+            onPress={() =>
+              router.push({
+                pathname: '/(mechanic)/trip/[id]',
+                params: { id: order.id },
+              })
+            }
+          />
+        ) : null}
 
         <View style={styles.clientCard}>
           <Avatar name={order.client_name ?? "Client"} size={46} />
@@ -571,15 +593,15 @@ export default function MechanicOrderDetailScreen() {
           </>
         ) : null}
 
-        {nextAction ? (
+        {stageAction ? (
           <Button
-            label={nextAction.label}
-            icon={nextAction.icon}
+            label={stageAction.label}
+            icon={stageAction.icon}
             loading={updating}
             onPress={advance}
             style={styles.action}
           />
-        ) : canEditPrice ? null : (
+        ) : canEditPrice || tripStatus ? null : (
           <View style={styles.doneCard}>
             <Ionicons
               name="checkmark-done-outline"

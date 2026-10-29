@@ -20,6 +20,7 @@ import {
 import { DashboardHeader } from '@/features/mechanic/components/dashboard-header';
 import { OnlineCard } from '@/features/mechanic/components/online-card';
 import { OrderCard } from '@/features/mechanic/components/order-card';
+import { TripEntryCard } from '@/features/mechanic/components/trip/trip-entry-card';
 import { StatTiles } from '@/features/mechanic/components/stat-tiles';
 import { BalanceCard } from '@/features/finance/components/balance-card';
 import {
@@ -135,6 +136,18 @@ export default function MechanicDashboardScreen() {
   }
 
   const name = sessionUser?.fullName || sessionUser?.email || 'Montir';
+  const tripOrder =
+    activeOrders.find((order) => order.status === 'on_the_way') ??
+    activeOrders.find((order) => order.status === 'mechanic_accepted') ??
+    activeOrders.find((order) => order.status === 'mechanic_assigned');
+  const tripStatus =
+    tripOrder?.status === 'on_the_way'
+      ? 'on_the_way'
+      : tripOrder?.status === 'mechanic_accepted'
+        ? 'mechanic_accepted'
+        : tripOrder
+          ? 'mechanic_assigned'
+          : null;
 
   return (
     <View style={styles.screen}>
@@ -165,6 +178,18 @@ export default function MechanicDashboardScreen() {
             onPressWithdraw={() => router.push('/(mechanic)/withdraw')}
             onPressAccounts={() => router.push('/(mechanic)/payout-accounts')}
           />
+
+          {tripOrder && tripStatus ? (
+            <TripEntryCard
+              status={tripStatus}
+              onPress={() =>
+                router.push({
+                  pathname: '/(mechanic)/trip/[id]',
+                  params: { id: tripOrder.id },
+                })
+              }
+            />
+          ) : null}
 
           {error ? (
             <View style={styles.errorCard}>

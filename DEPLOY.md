@@ -156,3 +156,77 @@ npx expo start --clear
 3. Montir menekan **Terima Order** → request hilang dari tab Request dan muncul
    di **Beranda > Order aktif** milik montir tersebut.
 4. Akun montir lain tidak lagi melihat request itu.
+
+# Peta & lokasi
+
+Layar perjalanan montir punya dua renderer peta (lihat `MAP_RENDERER` di
+`src/features/mechanic/components/trip/trip-map.tsx`):
+
+- **`webview` (default)** — Leaflet + tile OpenStreetMap di dalam WebView.
+  Jalan di **Expo Go** maupun development build, tanpa Google Maps SDK/key.
+  Tidak perlu langkah tambahan; cukup `npx expo start`.
+- **`google`** — `react-native-maps` native. Lebih halus, tetapi **hanya tampil
+  di development build**: Expo Go tidak lagi mendukung Google Maps di Android
+  sejak SDK 52 (`MapView` ter-mount tapi petak peta kosong/hitam).
+
+## Rute & ETA (Google Cloud)
+
+Rute + ETA memakai key di `.env.local`:
+
+```bash
+EXPO_PUBLIC_MAPS_API_KEY=AIza...
+```
+
+Di Google Cloud, pada project key tersebut:
+- aktifkan **Maps SDK for Android** (hanya untuk renderer `google`),
+- aktifkan **Routes API** untuk rute + ETA (kode otomatis jatuh ke
+  **Directions API** lama bila yang aktif justru itu),
+- aktifkan billing, lalu batasi key ke API tersebut.
+
+Tanpa key/routing aktif, aplikasi tetap berjalan: rute digambar sebagai garis
+lurus putus-putus dan ETA memakai estimasi 25 km/jam (chip "Rute estimasi"
+muncul di atas peta).
+
+## Tile peta (opsional)
+
+Default memakai tile OpenStreetMap. Untuk produksi ganti ke penyedia ber-SLA:
+
+```bash
+EXPO_PUBLIC_MAP_TILE_URL=https://api.maptiler.com/maps/streets-v2/{z}/{x}/{y}.png?key=xxx
+EXPO_PUBLIC_MAP_TILE_ATTRIBUTION=&copy; MapTiler &copy; OpenStreetMap contributors
+```
+
+## Development build (hanya untuk renderer `google`)
+
+```bash
+npx expo run:android      # build lokal, butuh JDK 17+ & Android SDK
+# atau
+npx eas-cli build --profile development --platform android
+```
+
+Build lokal di Windows butuh environment berikut (sesuaikan path):
+
+```powershell
+$env:JAVA_HOME = "C:\Program Files\Microsoft\jdk-25.0.4.101-hotspot"
+$env:ANDROID_HOME = "$env:LOCALAPPDATA\Android\Sdk"
+npx expo run:android
+```
+
+Setelah pindah ke dev build, `npm run android` juga menjalankan
+`expo run:android`. SHA-1 debug keystore (untuk membatasi key per aplikasi)
+bisa dilihat dengan:
+
+```powershell
+keytool -list -v -keystore "$env:USERPROFILE\.android\debug.keystore" -alias androiddebugkey -storepass android
+```
+
+
+# Verifikasi alur perjalanan montir
+
+1. Montir menerima request → langsung masuk layar perjalanan.
+2. Tekan **Mulai Perjalanan** → status `on_the_way`, posisi mulai dikirim ke
+   `mechanic_locations` (butuh migration `20261031000000_mechanic_trip_tracking.sql`
+   sudah di-push).
+3. Peta mengikuti posisi; sheet menampilkan sisa waktu, jarak, dan jam tiba.
+4. Di sekitar lokasi client, muncul penanda "Kamu sudah dekat lokasi client".
+5. Tekan **Sampai di Lokasi** → status `arrived`, layar pindah ke detail order.

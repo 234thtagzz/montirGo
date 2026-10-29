@@ -103,8 +103,10 @@ export default function MechanicRequestDetailScreen() {
             setAccepting(true);
             try {
               await acceptOrder(order.id);
+              // Langsung masuk mode perjalanan: montir melihat rute + ETA, lalu
+              // menekan "Mulai Perjalanan" saat benar-benar berangkat.
               router.replace({
-                pathname: '/(mechanic)/active-order/[id]',
+                pathname: '/(mechanic)/trip/[id]',
                 params: { id: order.id },
               });
             } catch (e) {
