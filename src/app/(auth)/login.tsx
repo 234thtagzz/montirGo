@@ -24,9 +24,9 @@ export default function LoginScreen() {
       const { user } = await login({ email: email.trim().toLowerCase(), password });
       // Navigasi sesuai role asli dari database
       if (user.role === 'MONTIR') {
-        router.replace('/(mechanic)');
+        router.replace('/(mechanic)/(tabs)');
       } else {
-        router.replace('/(client)');
+        router.replace('/(client)/(tabs)');
       }
     } catch (error) {
       Alert.alert('Login Gagal', getAuthErrorMessage(error, 'Email atau kata sandi salah.'));

@@ -25,7 +25,7 @@ export function ScreenHeader({ title, subtitle, showBack = true, right }: Screen
             accessibilityRole="button"
             accessibilityLabel="Kembali"
             hitSlop={8}
-            onPress={() => (router.canGoBack() ? router.back() : router.replace('/(client)'))}
+            onPress={() => (router.canGoBack() ? router.back() : router.replace('/(client)/(tabs)'))}
             style={({ pressed }) => [styles.back, pressed && styles.pressed]}
           >
             <Ionicons name="arrow-back" size={20} color={Brand.text} />

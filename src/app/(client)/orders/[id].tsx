@@ -257,7 +257,7 @@ export default function ClientOrderDetailScreen() {
           message="Pesanan tidak ditemukan"
           hint="Pesanan mungkin sudah dihapus atau bukan milik akun ini."
           actionLabel="Kembali ke Beranda"
-          onPressAction={() => router.replace('/(client)')}
+          onPressAction={() => router.replace('/(client)/(tabs)')}
         />
       </View>
     );

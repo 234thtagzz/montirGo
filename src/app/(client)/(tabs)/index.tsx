@@ -108,7 +108,7 @@ export default function ClientHomeScreen() {
 
   const openCategory = (category: ServiceCategory) => {
     if (category.route === 'vehicles') {
-      router.push('/(client)/my-vehicles');
+      router.push('/(client)/(tabs)/my-vehicles');
       return;
     }
     if (category.route === 'services') {
@@ -129,7 +129,7 @@ export default function ClientHomeScreen() {
           pathname: '/(client)/orders/[id]',
           params: { id: active.id },
         });
-      } else router.push('/(client)/my-requests');
+      } else router.push('/(client)/(tabs)/my-requests');
       return;
     }
     if (key === 'vehicle') {
@@ -168,7 +168,7 @@ export default function ClientHomeScreen() {
         <HomeHeader
           name={name}
           unreadCount={unread}
-          onPressProfile={() => router.push('/(client)/profile')}
+          onPressProfile={() => router.push('/(client)/(tabs)/profile')}
           onPressNotifications={() => router.push('/(client)/notifications')}
           onPressSearch={() => router.push('/(client)/services')}
         />
@@ -187,7 +187,7 @@ export default function ClientHomeScreen() {
                     params: { category: 'montir' },
                   })
                 }
-                onPressOrders={() => router.push('/(client)/my-requests')}
+                onPressOrders={() => router.push('/(client)/(tabs)/my-requests')}
               />
 
               {partialError ? (
@@ -211,7 +211,7 @@ export default function ClientHomeScreen() {
                   <SectionHeader
                     title="Pesanan aktif"
                     actionLabel="Semua pesanan"
-                    onPressAction={() => router.push('/(client)/my-requests')}
+                    onPressAction={() => router.push('/(client)/(tabs)/my-requests')}
                   />
                   <ActiveOrderCard
                     order={activeOrder}
@@ -234,7 +234,7 @@ export default function ClientHomeScreen() {
               <SectionHeader
                 title="Kendaraan saya"
                 actionLabel="Kelola"
-                onPressAction={() => router.push('/(client)/my-vehicles')}
+                onPressAction={() => router.push('/(client)/(tabs)/my-vehicles')}
               />
               <VehicleStrip
                 vehicles={vehicles}
@@ -245,7 +245,7 @@ export default function ClientHomeScreen() {
                   })
                 }
                 onPressAdd={() => router.push('/(client)/vehicles/new')}
-                onPressManage={() => router.push('/(client)/my-vehicles')}
+                onPressManage={() => router.push('/(client)/(tabs)/my-vehicles')}
               />
             </>
           )}

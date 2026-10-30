@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ComponentRef } from 'react';
 import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
 import { WebView, type WebViewMessageEvent } from 'react-native-webview';
 import { Brand, Space } from '@/constants/brand';
@@ -30,7 +30,7 @@ export function TripMapWebView({
   recenterToken,
   onFollowChange,
 }: TripMapProps) {
-  const webRef = useRef<WebView | null>(null);
+  const webRef = useRef<ComponentRef<typeof WebView>>(null);
   const [ready, setReady] = useState(false);
   const [failed, setFailed] = useState(false);
   const lastRecenterRef = useRef(recenterToken);

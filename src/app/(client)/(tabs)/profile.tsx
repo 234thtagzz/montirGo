@@ -13,7 +13,7 @@ interface MenuItem {
   label: string;
   description: string;
   icon: IconName;
-  route?: '/(client)/my-requests' | '/(client)/my-vehicles' | '/(client)/notifications';
+  route?: '/(client)/(tabs)/my-requests' | '/(client)/(tabs)/my-vehicles' | '/(client)/notifications';
 }
 
 const MENU: MenuItem[] = [
@@ -22,14 +22,14 @@ const MENU: MenuItem[] = [
     label: 'Pesanan Saya',
     description: 'Riwayat dan status permintaan bantuan',
     icon: 'receipt-outline',
-    route: '/(client)/my-requests',
+    route: '/(client)/(tabs)/my-requests',
   },
   {
     key: 'vehicles',
     label: 'Garasi Saya',
     description: 'Kendaraan yang tersimpan',
     icon: 'car-outline',
-    route: '/(client)/my-vehicles',
+    route: '/(client)/(tabs)/my-vehicles',
   },
   {
     key: 'notifications',

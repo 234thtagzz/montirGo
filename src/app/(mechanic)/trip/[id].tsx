@@ -100,7 +100,7 @@ export default function MechanicTripScreen() {
     Alert.alert(
       'Order dibatalkan',
       'Client membatalkan pesanan ini. Perjalanan dihentikan.',
-      [{ text: 'Kembali ke Beranda', onPress: () => router.replace('/(mechanic)') }],
+      [{ text: 'Kembali ke Beranda', onPress: () => router.replace('/(mechanic)/(tabs)') }],
     );
   }, [order?.status, router]);
 
@@ -258,7 +258,7 @@ export default function MechanicTripScreen() {
           message="Perjalanan tidak ditemukan"
           hint="Order ini bukan milikmu atau sudah tidak aktif."
           actionLabel="Kembali ke Beranda"
-          onPressAction={() => router.replace('/(mechanic)')}
+          onPressAction={() => router.replace('/(mechanic)/(tabs)')}
         />
       </View>
     );

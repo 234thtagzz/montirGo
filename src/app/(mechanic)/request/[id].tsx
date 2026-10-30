@@ -151,7 +151,7 @@ export default function MechanicRequestDetailScreen() {
           message="Request sudah tidak tersedia"
           hint="Mungkin sudah diambil montir lain atau dibatalkan oleh client."
           actionLabel="Kembali ke Request"
-          onPressAction={() => router.replace('/(mechanic)/requests')}
+          onPressAction={() => router.replace('/(mechanic)/(tabs)/requests')}
         />
       </View>
     );

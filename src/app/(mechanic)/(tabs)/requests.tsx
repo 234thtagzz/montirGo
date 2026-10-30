@@ -83,7 +83,7 @@ export default function MechanicRequestsScreen() {
         [
           {
             text: 'Lihat Beranda',
-            onPress: () => router.replace('/(mechanic)'),
+            onPress: () => router.replace('/(mechanic)/(tabs)'),
           },
         ],
         { cancelable: false },
@@ -146,7 +146,7 @@ export default function MechanicRequestsScreen() {
             message="Belum ada request masuk"
             hint="Request client yang masih terbuka akan muncul di sini. Setelah kamu terima, request pindah ke Beranda sebagai order aktif."
             actionLabel="Buka Beranda"
-            onPressAction={() => router.push('/(mechanic)')}
+            onPressAction={() => router.push('/(mechanic)/(tabs)')}
           />
         ) : (
           orders.map((order) => (

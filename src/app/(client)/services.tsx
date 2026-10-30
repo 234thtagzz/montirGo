@@ -23,7 +23,7 @@ export default function ServicesScreen() {
             accessibilityLabel={category.label}
             onPress={() => {
               if (category.route === 'vehicles') {
-                router.push('/(client)/my-vehicles');
+                router.push('/(client)/(tabs)/my-vehicles');
                 return;
               }
               if (category.route === 'services') return;

@@ -4,7 +4,7 @@ import { AppLoadingScreen } from '@/components/app-loading-screen';
 import { getSessionUser } from '@/features/auth/service';
 
 export default function RootIndex() {
-  const [target, setTarget] = useState<'/(auth)/login' | '/(client)' | '/(mechanic)' | null>(null);
+  const [target, setTarget] = useState<'/(auth)/login' | '/(client)/(tabs)' | '/(mechanic)/(tabs)' | null>(null);
 
   useEffect(() => {
     const resolve = async () => {
@@ -15,7 +15,7 @@ export default function RootIndex() {
           setTarget('/(auth)/login');
           return;
         }
-        setTarget(user.role === 'MONTIR' ? '/(mechanic)' : '/(client)');
+        setTarget(user.role === 'MONTIR' ? '/(mechanic)/(tabs)' : '/(client)/(tabs)');
       } catch {
         setTarget('/(auth)/login');
       }

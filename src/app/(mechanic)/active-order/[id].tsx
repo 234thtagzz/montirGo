@@ -332,7 +332,7 @@ export default function MechanicOrderDetailScreen() {
           message="Order tidak ditemukan"
           hint="Order mungkin sudah selesai atau bukan milikmu."
           actionLabel="Kembali ke Beranda"
-          onPressAction={() => router.replace("/(mechanic)")}
+          onPressAction={() => router.replace("/(mechanic)/(tabs)")}
         />
       </View>
     );

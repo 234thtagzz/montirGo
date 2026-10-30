@@ -86,7 +86,7 @@ export default function MechanicActiveOrdersScreen() {
               message="Belum ada order aktif"
               hint="Terima request di tab Request untuk mulai mengerjakan order."
               actionLabel="Lihat Request"
-              onPressAction={() => router.push('/(mechanic)/requests')}
+              onPressAction={() => router.push('/(mechanic)/(tabs)/requests')}
             />
           ) : (
             orders.map((order) => (

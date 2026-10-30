@@ -215,7 +215,7 @@ export default function MechanicDashboardScreen() {
                   message="Belum ada order aktif"
                   hint="Nyalakan status online supaya request client bisa masuk."
                   actionLabel="Lihat Request"
-                  onPressAction={() => router.push('/(mechanic)/requests')}
+                  onPressAction={() => router.push('/(mechanic)/(tabs)/requests')}
                 />
               ) : (
                 activeOrders
@@ -240,7 +240,7 @@ export default function MechanicDashboardScreen() {
                 <Button
                   label="Lihat Request Masuk"
                   icon="flash-outline"
-                  onPress={() => router.push('/(mechanic)/requests')}
+                  onPress={() => router.push('/(mechanic)/(tabs)/requests')}
                 />
                 <Button
                   label="Rincian Pendapatan"
