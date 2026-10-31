@@ -7,6 +7,7 @@ import type {
   FinanceSettings,
   MechanicWallet,
   OrderPayment,
+  PaymentMethodChoice,
   PaymentSessionResult,
   PaymentSyncResult,
   PayoutAccount,
@@ -238,12 +239,57 @@ export async function getPaymentForRequest(requestId: string): Promise<OrderPaym
   const { data, error } = await supabase
     .from('payments')
     .select(
-      'id, request_id, amount, platform_fee, net_amount, status, payment_url, payment_session_id, expires_at, paid_at',
+      'id, request_id, amount, platform_fee, net_amount, method, status, payment_url, payment_session_id, expires_at, paid_at',
     )
     .eq('request_id', requestId)
     .maybeSingle();
   if (error) return null;
   return (data as OrderPayment | null) ?? null;
+}
+
+/** Terjemahkan kode error RPC pembayaran tunai menjadi pesan yang ramah. */
+function cashErrorMessage(message: string | undefined): string {
+  const code = message ?? '';
+  if (code.includes('UNAUTHORIZED')) return 'Sesi berakhir. Silakan login kembali.';
+  if (code.includes('REQUEST_NOT_FOUND')) return 'Order tidak ditemukan.';
+  if (code.includes('NOT_YOUR_REQUEST')) return 'Order ini bukan milikmu.';
+  if (code.includes('NOT_YOUR_ORDER')) return 'Order ini bukan milikmu.';
+  if (code.includes('ALREADY_PAID')) return 'Order ini sudah lunas.';
+  if (code.includes('INVALID_STATUS')) return 'Order ini tidak sedang menunggu pembayaran.';
+  if (code.includes('INVALID_PRICE')) return 'Nominal tagihan belum diisi montir.';
+  if (code.includes('INVALID_PAYMENT_METHOD')) return 'Metode pembayaran tidak dikenal.';
+  if (code.includes('CASH_NOT_AVAILABLE')) return 'Pembayaran tunai belum tersedia.';
+  return code || 'Pembayaran tunai gagal diproses.';
+}
+
+/**
+ * Client memilih metode pembayaran (`online` lewat Xendit atau `cash` tunai
+ * langsung ke montir). Server menyimpan pilihan di order agar montir tahu
+ * bahwa client akan membayar tunai.
+ */
+export async function choosePaymentMethod(
+  requestId: string,
+  method: PaymentMethodChoice,
+): Promise<void> {
+  const { error } = await supabase.rpc('choose_payment_method', {
+    p_request_id: requestId,
+    p_method: method,
+  });
+  if (error) throw new Error(cashErrorMessage(error.message));
+}
+
+/**
+ * Montir mengonfirmasi pembayaran tunai setelah uang benar-benar diterima.
+ *
+ * Server membuat/menandai `payments.method = 'cash'` dan mencatat `earnings`,
+ * tetapi TIDAK menambah saldo dompet. Setelah ini order menjadi `paid`.
+ */
+export async function confirmCashPayment(requestId: string): Promise<OrderPayment> {
+  const { data, error } = await supabase.rpc('confirm_cash_payment', {
+    p_request_id: requestId,
+  });
+  if (error) throw new Error(cashErrorMessage(error.message));
+  return data as OrderPayment;
 }
 
 /** Buat / pakai ulang sesi checkout Xendit, lalu buka URL-nya di browser. */

@@ -24,13 +24,19 @@ export interface ClientOrder {
   contact_phone: string;
   additional_notes: string | null;
   price_amount: number | null;
+  /** Pilihan metode pembayaran client saat order berstatus `payment`. */
+  payment_method: 'online' | 'cash' | null;
   created_at: string;
   updated_at: string;
   vehicle_id: string | null;
   mechanic_id: string | null;
+  vehicle_type: string | null;
   vehicle_brand: string | null;
   vehicle_model: string | null;
+  vehicle_year: number | null;
   vehicle_plate: string | null;
+  /** Path foto kendaraan di bucket privat `vehicle-photos`. */
+  vehicle_photo_url: string | null;
   mechanic_name: string | null;
   mechanic_phone: string | null;
   mechanic_avatar: string | null;
@@ -82,4 +88,6 @@ export interface VehicleInput {
   year?: number | null;
   license_plate: string;
   notes?: string | null;
+  /** Path objek foto di bucket `vehicle-photos` (bukan URL publik). */
+  photo_url?: string | null;
 }

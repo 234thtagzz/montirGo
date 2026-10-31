@@ -8,6 +8,7 @@ import { Brand, Radius, ScreenPadding, Space } from '@/constants/brand';
 import { useSessionUser } from '@/hooks/use-session-user';
 import { supabase } from '@/lib/supabase';
 import { listMyRequests, type ClientOrder } from '@/features/client/service';
+import { formatVehicleLabel } from '@/features/vehicles/constants';
 import { getStatusMeta, isActiveStatus } from '@/features/service-request/status';
 import { formatDateTime, formatIDR } from '@/utils/format';
 
@@ -138,7 +139,11 @@ export default function MyRequestsScreen() {
           ) : (
             visible.map((order) => {
               const meta = getStatusMeta(order.status);
-              const vehicle = [order.vehicle_brand, order.vehicle_model].filter(Boolean).join(' ');
+              const vehicle = formatVehicleLabel(
+                order.vehicle_type,
+                order.vehicle_brand,
+                order.vehicle_model,
+              );
               return (
                 <Pressable
                   key={order.id}

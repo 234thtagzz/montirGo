@@ -4,6 +4,9 @@ export type WithdrawalStatus = 'requested' | 'processing' | 'succeeded' | 'faile
 
 export type PaymentStatus = 'pending' | 'paid' | 'failed' | 'expired' | 'refunded';
 
+/** Metode pembayaran yang bisa dipilih client saat order berstatus `payment`. */
+export type PaymentMethodChoice = 'online' | 'cash';
+
 export type PayoutAccountType = 'bank' | 'ewallet';
 
 export interface MechanicWallet {
@@ -66,6 +69,8 @@ export interface OrderPayment {
   amount: number;
   platform_fee: number;
   net_amount: number;
+  /** `cash` berarti dibayar tunai langsung ke montir (tanpa saldo dompet). */
+  method: string;
   status: PaymentStatus;
   payment_url: string | null;
   payment_session_id: string | null;

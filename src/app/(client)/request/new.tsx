@@ -1,5 +1,6 @@
 import { useCallback, useMemo, useState } from 'react';
 import {
+  ActivityIndicator,
   Alert,
   KeyboardAvoidingView,
   Platform,
@@ -18,12 +19,23 @@ import { LoadingState } from '@/components/ui/state';
 import { Ionicons } from '@/components/ui/icon';
 import { Brand, Radius, ScreenPadding, Space } from '@/constants/brand';
 import { useSessionUser } from '@/hooks/use-session-user';
-import { createServiceRequest, listMyVehicles, type ClientVehicle } from '@/features/client/service';
+import {
+  createServiceRequest,
+  listMyVehicles,
+  updateVehiclePhoto,
+  type ClientVehicle,
+} from '@/features/client/service';
 import { analyzeRequest } from '@/features/service-request/ai';
 import {
   SERVICE_CATEGORIES,
   getCategory,
 } from '@/features/service-request/categories';
+import { VehicleProfileCard } from '@/features/vehicles/components/vehicle-profile-card';
+import {
+  deleteVehiclePhoto,
+  pickVehiclePhoto,
+  uploadVehiclePhoto,
+} from '@/features/vehicles/photo';
 
 const PRESET_CATEGORIES = SERVICE_CATEGORIES.filter((category) => !category.route);
 
@@ -46,8 +58,13 @@ export default function NewServiceRequestScreen() {
   const [phone, setPhone] = useState<string | null>(null);
   const [notes, setNotes] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const [photoBusy, setPhotoBusy] = useState(false);
 
   const activeCategory = useMemo(() => getCategory(categoryKey), [categoryKey]);
+  const selectedVehicle = useMemo(
+    () => vehicles.find((vehicle) => vehicle.id === vehicleId) ?? null,
+    [vehicleId, vehicles],
+  );
   const contactPhone = phone ?? user?.phoneNumber ?? '';
 
   const loadVehicles = useCallback(async () => {
@@ -69,6 +86,43 @@ export default function NewServiceRequestScreen() {
     const nextPreset = getCategory(key)?.presetIssue ?? '';
     setCategoryKey(key);
     setIssue((current) => (current.trim() === '' || current === previousPreset ? nextPreset : current));
+  };
+
+  /**
+   * Tambah/ganti foto kendaraan langsung dari form request supaya client tidak
+   * perlu membuka garasi dulu. Foto diunggah ke bucket privat lalu path-nya
+   * disimpan di kendaraan, sehingga montir bisa melihatnya di detail request.
+   */
+  const attachVehiclePhoto = async () => {
+    if (!selectedVehicle || !user?.id || photoBusy) return;
+    const vehicle = selectedVehicle;
+    try {
+      const picked = await pickVehiclePhoto();
+      if (!picked) return;
+
+      setPhotoBusy(true);
+      const path = await uploadVehiclePhoto(user.id, picked);
+      try {
+        await updateVehiclePhoto(vehicle.id, path);
+      } catch (error) {
+        await deleteVehiclePhoto(path);
+        throw error;
+      }
+
+      setVehicles((current) =>
+        current.map((item) =>
+          item.id === vehicle.id ? { ...item, photo_url: path } : item,
+        ),
+      );
+      if (vehicle.photo_url) await deleteVehiclePhoto(vehicle.photo_url);
+    } catch (error) {
+      Alert.alert(
+        'Gagal menambahkan foto',
+        error instanceof Error ? error.message : 'Coba lagi beberapa saat lagi.',
+      );
+    } finally {
+      setPhotoBusy(false);
+    }
   };
 
   const detectLocation = async () => {
@@ -266,6 +320,55 @@ export default function NewServiceRequestScreen() {
             </View>
           )}
 
+          {selectedVehicle ? (
+            <View style={styles.vehiclePreview}>
+              <VehicleProfileCard
+                variant="compact"
+                photo={selectedVehicle.photo_url}
+                type={selectedVehicle.type}
+                brand={selectedVehicle.brand}
+                model={selectedVehicle.model}
+                year={selectedVehicle.year}
+                plate={selectedVehicle.license_plate}
+                notes={selectedVehicle.notes}
+                footer={
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel={
+                      selectedVehicle.photo_url
+                        ? 'Ganti foto kendaraan'
+                        : 'Tambah foto kendaraan'
+                    }
+                    disabled={photoBusy}
+                    onPress={attachVehiclePhoto}
+                    style={({ pressed }) => [
+                      styles.photoButton,
+                      pressed && styles.pressed,
+                      photoBusy && styles.photoButtonDisabled,
+                    ]}
+                  >
+                    {photoBusy ? (
+                      <ActivityIndicator size="small" color={Brand.primary} />
+                    ) : (
+                      <Ionicons name="camera-outline" size={14} color={Brand.primary} />
+                    )}
+                    <Text style={styles.photoButtonText}>
+                      {photoBusy
+                        ? 'Mengunggah foto...'
+                        : selectedVehicle.photo_url
+                          ? 'Ganti foto kendaraan'
+                          : 'Tambah foto kendaraan'}
+                    </Text>
+                  </Pressable>
+                }
+              />
+              <Text style={styles.vehicleHint}>
+                Foto dan jenis kendaraan otomatis dikirim ke montir agar analisisnya
+                lebih akurat.
+              </Text>
+            </View>
+          ) : null}
+
           <Text style={styles.label}>Keluhan kendaraan</Text>
           <TextInput
             value={issue}
@@ -442,6 +545,26 @@ const styles = StyleSheet.create({
     backgroundColor: '#FAFCFF',
   },
   emptyVehicleText: { flex: 1, fontSize: 12, color: Brand.primary },
+  vehiclePreview: { marginTop: Space.sm },
+  vehicleHint: {
+    fontSize: 10.5,
+    color: Brand.textMuted,
+    lineHeight: 15,
+    marginTop: Space.xs,
+  },
+  photoButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    alignSelf: 'flex-start',
+    marginTop: 4,
+    paddingHorizontal: Space.sm,
+    paddingVertical: 5,
+    borderRadius: Radius.pill,
+    backgroundColor: Brand.primarySoft,
+  },
+  photoButtonDisabled: { opacity: 0.65 },
+  photoButtonText: { fontSize: 10.5, fontWeight: '700', color: Brand.primary },
   locationButton: {
     flexDirection: 'row',
     alignItems: 'center',

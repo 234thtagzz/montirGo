@@ -47,6 +47,18 @@ const ACTIVITY_META: Record<string, ActivityMeta> = {
     color: Brand.green,
     background: Brand.greenSoft,
   },
+  cash_payment_confirmed: {
+    label: 'Pembayaran tunai',
+    icon: 'cash-outline',
+    color: Brand.green,
+    background: Brand.greenSoft,
+  },
+  payment_method_selected: {
+    label: 'Metode pembayaran',
+    icon: 'card-outline',
+    color: Brand.primary,
+    background: Brand.primarySoft,
+  },
   withdrawal: {
     label: 'Pencairan saldo',
     icon: 'wallet-outline',

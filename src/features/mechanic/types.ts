@@ -25,6 +25,7 @@ export interface IncomingOrder {
   contact_phone: string;
   status: OrderStatus;
   created_at: string;
+  vehicle_type: string | null;
   vehicle_brand: string | null;
   vehicle_model: string | null;
   client_name: string | null;
@@ -51,6 +52,8 @@ export interface IncomingRequestDetail {
   vehicle_model: string | null;
   vehicle_year: number | null;
   vehicle_plate: string | null;
+  /** Path foto kendaraan di bucket privat `vehicle-photos`. */
+  vehicle_photo_url: string | null;
   ai_analysis: AiAnalysis | null;
   ai_created_at: string | null;
 }
@@ -64,6 +67,7 @@ export interface MyOrder {
   status: OrderStatus;
   price_amount: number | null;
   created_at: string;
+  vehicle_type: string | null;
   vehicle_brand: string | null;
   vehicle_model: string | null;
   client_name: string | null;
@@ -72,7 +76,12 @@ export interface MyOrder {
 
 export interface MechanicOrderDetail extends MyOrder {
   additional_notes: string | null;
+  vehicle_year: number | null;
   vehicle_plate: string | null;
+  /** Path foto kendaraan di bucket privat `vehicle-photos`. */
+  vehicle_photo_url: string | null;
+  /** Pilihan pembayaran client: `cash` berarti menunggu konfirmasi tunai. */
+  payment_method: 'online' | 'cash' | null;
   updated_at: string;
   /** Titik lokasi client — dipakai layar perjalanan (trip mode). */
   lat: number;
@@ -109,4 +118,6 @@ export interface EarningsSummary {
   gross: number;
   fee: number;
   net: number;
+  /** Porsi pendapatan tunai (tidak masuk saldo dompet). */
+  cashNet: number;
 }

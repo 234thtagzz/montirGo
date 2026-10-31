@@ -3,6 +3,7 @@ import { RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native
 import { LinearGradient } from 'expo-linear-gradient';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { ScreenHeader } from '@/components/ui/screen-header';
+import { Ionicons } from '@/components/ui/icon';
 import { Button } from '@/components/ui/button';
 import { ErrorState, LoadingState } from '@/components/ui/state';
 import { Brand, CardShadow, Gradient, Radius, ScreenPadding, Space } from '@/constants/brand';
@@ -16,7 +17,7 @@ import {
 import { channelLabel, withdrawalStatusMeta } from '@/features/finance/constants';
 import { formatDateTime, formatIDR } from '@/utils/format';
 
-const ZERO: EarningsSummary = { totalJobs: 0, gross: 0, fee: 0, net: 0 };
+const ZERO: EarningsSummary = { totalJobs: 0, gross: 0, fee: 0, net: 0, cashNet: 0 };
 
 function startOf(period: 'day' | 'week' | 'month'): string {
   const d = new Date();
@@ -132,6 +133,15 @@ export default function MechanicEarningsScreen() {
                     </Text>
                   </View>
                 </View>
+                {month.cashNet > 0 ? (
+                  <View style={styles.cashNote}>
+                    <Ionicons name="cash-outline" size={15} color={Brand.amber} />
+                    <Text style={styles.cashNoteText}>
+                      Pendapatan tunai bulan ini {formatIDR(month.cashNet)} diterima langsung
+                      dari client dan tidak masuk saldo dompet.
+                    </Text>
+                  </View>
+                ) : null}
                 <View style={styles.walletActions}>
                   <Button
                     label="Tarik Saldo"
@@ -179,6 +189,9 @@ export default function MechanicEarningsScreen() {
                   <Row label="Fee platform" value={`- ${formatIDR(s.fee)}`} />
                   <View style={styles.divider} />
                   <Row label="Bersih" value={formatIDR(s.net)} strong />
+                  {s.cashNet > 0 ? (
+                    <Row label="Termasuk tunai" value={formatIDR(s.cashNet)} />
+                  ) : null}
                 </View>
               ))}
 
@@ -338,6 +351,16 @@ const styles = StyleSheet.create({
   walletMetaValue: { fontSize: 13, fontWeight: '700', color: Brand.text, marginTop: 2 },
   walletActions: { flexDirection: 'row', gap: Space.sm, marginTop: Space.lg },
   walletAction: { flex: 1 },
+  cashNote: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: Space.sm,
+    backgroundColor: Brand.amberSoft,
+    borderRadius: Radius.md,
+    padding: Space.md,
+    marginTop: Space.md,
+  },
+  cashNoteText: { flex: 1, fontSize: 11, lineHeight: 16, color: Brand.textSecondary },
   sectionTitle: {
     fontSize: 14,
     fontWeight: '700',

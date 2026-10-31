@@ -30,12 +30,14 @@ import {
   type AiAnalysis,
 } from '@/features/service-request/ai';
 import {
+  choosePaymentMethod,
   createPaymentSession,
   getPaymentForRequest,
   syncPaymentStatus,
   type OrderPayment,
 } from '@/features/finance/service';
 import { AiAnalysisCard } from '@/features/service-request/components/ai-analysis-card';
+import { VehicleProfileCard } from '@/features/vehicles/components/vehicle-profile-card';
 import {
   getProgressLabel,
   getStatusMeta,
@@ -60,6 +62,7 @@ export default function ClientOrderDetailScreen() {
   const [cancelling, setCancelling] = useState(false);
   const [payment, setPayment] = useState<OrderPayment | null>(null);
   const [paying, setPaying] = useState(false);
+  const [choosingCash, setChoosingCash] = useState(false);
 
   const loadAnalysis = useCallback(async () => {
     if (!id) return;
@@ -210,6 +213,9 @@ export default function ClientOrderDetailScreen() {
     if (!id || paying) return;
     setPaying(true);
     try {
+      // Pastikan order tidak lagi ditandai "tunai" bila client beralih ke
+      // pembayaran online.
+      await choosePaymentMethod(id, 'online').catch(() => null);
       const session = await createPaymentSession(id);
       if (session.alreadyPaid) {
         await load();
@@ -229,6 +235,38 @@ export default function ClientOrderDetailScreen() {
     } finally {
       setPaying(false);
     }
+  };
+
+  /** Client memilih bayar tunai — montir yang akan mengonfirmasi pembayaran. */
+  const chooseCash = () => {
+    if (!id || choosingCash || paying) return;
+    const amount = order?.price_amount ?? payment?.amount ?? 0;
+    Alert.alert(
+      'Bayar tunai ke montir?',
+      `Siapkan uang tunai ${formatIDR(amount)} dan bayar langsung ke ${
+        order?.mechanic_name ?? 'montir'
+      }. Pembayaran dicatat setelah montir mengonfirmasi.`,
+      [
+        { text: 'Batal', style: 'cancel' },
+        {
+          text: 'Ya, bayar tunai',
+          onPress: async () => {
+            setChoosingCash(true);
+            try {
+              await choosePaymentMethod(id, 'cash');
+              await load();
+            } catch (e) {
+              Alert.alert(
+                'Gagal memilih metode',
+                e instanceof Error ? e.message : 'Coba lagi beberapa saat lagi.',
+              );
+            } finally {
+              setChoosingCash(false);
+            }
+          },
+        },
+      ],
+    );
   };
 
   if (loading) {
@@ -265,7 +303,16 @@ export default function ClientOrderDetailScreen() {
   }
 
   const meta = getStatusMeta(order.status);
-  const vehicle = [order.vehicle_brand, order.vehicle_model].filter(Boolean).join(' ');
+  const hasVehicle = Boolean(
+    order.vehicle_type ||
+      order.vehicle_brand ||
+      order.vehicle_model ||
+      order.vehicle_plate ||
+      order.vehicle_photo_url,
+  );
+  /** Client sudah memilih tunai dan menunggu montir mengonfirmasi. */
+  const cashSelected = order.status === 'payment' && order.payment_method === 'cash';
+  const paidWithCash = order.status === 'paid' && payment?.method === 'cash';
 
   return (
     <View style={styles.screen}>
@@ -366,7 +413,11 @@ export default function ClientOrderDetailScreen() {
                         : styles.paymentBadgeTextPending,
                     ]}
                   >
-                    {order.status === 'paid' ? 'Lunas' : 'Belum dibayar'}
+                    {order.status === 'paid'
+                      ? 'Lunas'
+                      : cashSelected
+                        ? 'Tunai'
+                        : 'Belum dibayar'}
                   </Text>
                 </View>
               </View>
@@ -375,15 +426,42 @@ export default function ClientOrderDetailScreen() {
                 <View style={styles.paymentStatusRow}>
                   <Ionicons name="checkmark-circle" size={16} color={Brand.green} />
                   <Text style={styles.paymentStatusText}>
-                    Pembayaran diterima
+                    {paidWithCash ? 'Pembayaran tunai dikonfirmasi montir' : 'Pembayaran diterima'}
                     {payment?.paid_at ? ` · ${formatDateTime(payment.paid_at)}` : ''}.
                   </Text>
                 </View>
+              ) : cashSelected ? (
+                <>
+                  <View style={styles.cashCard}>
+                    <View style={styles.cashHeader}>
+                      <Ionicons name="cash-outline" size={18} color={Brand.amber} />
+                      <Text style={styles.cashTitle}>Bayar tunai ke montir</Text>
+                    </View>
+                    <Text style={styles.cashText}>
+                      Siapkan uang tunai {formatIDR(order.price_amount ?? payment?.amount ?? 0)} dan
+                      bayar langsung ke {order.mechanic_name ?? 'montir'}. Pembayaran dicatat setelah
+                      montir menekan konfirmasi.
+                    </Text>
+                    <View style={styles.cashStatus}>
+                      <Ionicons name="time-outline" size={14} color={Brand.amber} />
+                      <Text style={styles.cashStatusText}>Menunggu konfirmasi montir</Text>
+                    </View>
+                  </View>
+                  <Button
+                    label="Ganti ke Pembayaran Online"
+                    icon="card-outline"
+                    variant="secondary"
+                    loading={paying}
+                    onPress={payOrder}
+                    style={styles.payButton}
+                  />
+                </>
               ) : (
                 <>
                   <Text style={styles.paymentHint}>
                     Bayar dengan QRIS, GoPay, OVO, DANA, atau ShopeePay di halaman aman Xendit.
-                    Status pesanan diperbarui otomatis setelah pembayaran berhasil.
+                    Status pesanan diperbarui otomatis setelah pembayaran berhasil. Ingin bayar
+                    tunai? Pilih opsi di bawah.
                   </Text>
                   {payment?.expires_at ? (
                     <Text style={styles.paymentMeta}>
@@ -397,9 +475,33 @@ export default function ClientOrderDetailScreen() {
                     onPress={payOrder}
                     style={styles.payButton}
                   />
+                  <Button
+                    label="Bayar Tunai ke Montir"
+                    icon="cash-outline"
+                    variant="secondary"
+                    loading={choosingCash}
+                    disabled={paying}
+                    onPress={chooseCash}
+                    style={styles.cashButton}
+                  />
                 </>
               )}
             </View>
+          </>
+        ) : null}
+
+        {hasVehicle ? (
+          <>
+            <Text style={styles.section}>Kendaraan</Text>
+            <VehicleProfileCard
+              variant="compact"
+              photo={order.vehicle_photo_url}
+              type={order.vehicle_type}
+              brand={order.vehicle_brand}
+              model={order.vehicle_model}
+              year={order.vehicle_year}
+              plate={order.vehicle_plate}
+            />
           </>
         ) : null}
 
@@ -407,8 +509,7 @@ export default function ClientOrderDetailScreen() {
         <View style={styles.detailCard}>
           <DetailRow label="Keluhan" value={order.issue_description} />
           {order.symptoms ? <DetailRow label="Gejala" value={order.symptoms} /> : null}
-          <DetailRow label="Kendaraan" value={vehicle || 'Tidak dicantumkan'} />
-          {order.vehicle_plate ? <DetailRow label="Nomor polisi" value={order.vehicle_plate} /> : null}
+          {!hasVehicle ? <DetailRow label="Kendaraan" value="Tidak dicantumkan" /> : null}
           <DetailRow label="Lokasi" value={order.address || 'Lokasi GPS terdeteksi'} />
           <DetailRow label="WhatsApp" value={order.contact_phone} />
           {order.additional_notes ? (
@@ -622,5 +723,27 @@ const styles = StyleSheet.create({
     lineHeight: 17,
   },
   payButton: { marginTop: Space.lg },
+  cashButton: { marginTop: Space.sm },
+  cashCard: {
+    marginTop: Space.md,
+    backgroundColor: Brand.amberSoft,
+    borderRadius: Radius.md,
+    padding: Space.md,
+  },
+  cashHeader: { flexDirection: 'row', alignItems: 'center', gap: Space.sm },
+  cashTitle: { fontSize: 12.5, fontWeight: '700', color: Brand.amber },
+  cashText: {
+    fontSize: 11.5,
+    color: Brand.textSecondary,
+    lineHeight: 17,
+    marginTop: Space.sm,
+  },
+  cashStatus: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginTop: Space.md,
+  },
+  cashStatusText: { fontSize: 11, fontWeight: '600', color: Brand.amber },
   pressed: { opacity: 0.7 },
 });

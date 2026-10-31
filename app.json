@@ -41,6 +41,14 @@
           "color": "#0B74E5",
           "defaultChannel": "requests"
         }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "MontirGo memakai foto galeri untuk menambahkan foto kendaraan agar montir bisa menganalisis kondisinya.",
+          "cameraPermission": false,
+          "microphonePermission": false
+        }
       ]
     ],
     "experiments": {

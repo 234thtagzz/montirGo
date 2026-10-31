@@ -2,6 +2,7 @@ import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { Ionicons, type IconName } from '@/components/ui/icon';
 import { Brand, Radius, Space } from '@/constants/brand';
 import type { ClientVehicle } from '@/features/client/types';
+import { VehiclePhoto } from '@/features/vehicles/components/vehicle-photo';
 
 const VEHICLE_ICON: Record<ClientVehicle['type'], IconName> = {
   motor: 'bicycle-outline',
@@ -36,9 +37,21 @@ export function VehicleStrip({
           onPress={() => onPressVehicle(vehicle)}
           style={({ pressed }) => [styles.card, pressed && styles.pressed]}
         >
-          <View style={styles.iconBox}>
-            <Ionicons name={VEHICLE_ICON[vehicle.type] ?? 'car-outline'} size={20} color={Brand.primary} />
-          </View>
+          {vehicle.photo_url ? (
+            <VehiclePhoto
+              value={vehicle.photo_url}
+              height={72}
+              emptyLabel={null}
+            />
+          ) : (
+            <View style={styles.iconBox}>
+              <Ionicons
+                name={VEHICLE_ICON[vehicle.type] ?? 'car-outline'}
+                size={20}
+                color={Brand.primary}
+              />
+            </View>
+          )}
           <Text style={styles.brand} numberOfLines={1}>
             {vehicle.brand} {vehicle.model}
           </Text>

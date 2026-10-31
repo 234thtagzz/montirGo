@@ -11,6 +11,7 @@ import {
   listMyVehicles,
   type ClientVehicle,
 } from '@/features/client/service';
+import { VehiclePhoto } from '@/features/vehicles/components/vehicle-photo';
 
 const VEHICLE_LABEL: Record<ClientVehicle['type'], string> = {
   motor: 'Motor',
@@ -136,13 +137,22 @@ export default function MyVehiclesScreen() {
                   }
                   style={({ pressed }) => [styles.cardMain, pressed && styles.pressed]}
                 >
-                  <View style={styles.iconBox}>
-                    <Ionicons
-                      name={VEHICLE_ICON[vehicle.type] ?? 'car-outline'}
-                      size={22}
-                      color={Brand.primary}
+                  {vehicle.photo_url ? (
+                    <VehiclePhoto
+                      value={vehicle.photo_url}
+                      height={56}
+                      style={styles.vehicleThumb}
+                      emptyLabel={null}
                     />
-                  </View>
+                  ) : (
+                    <View style={styles.iconBox}>
+                      <Ionicons
+                        name={VEHICLE_ICON[vehicle.type] ?? 'car-outline'}
+                        size={22}
+                        color={Brand.primary}
+                      />
+                    </View>
+                  )}
                   <View style={styles.copy}>
                     <Text style={styles.name} numberOfLines={1}>
                       {vehicle.brand} {vehicle.model}
@@ -216,6 +226,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  vehicleThumb: { width: 64, borderRadius: Radius.md },
   copy: { flex: 1 },
   name: { fontSize: 14, fontWeight: '700', color: Brand.text },
   meta: { fontSize: 11.5, color: Brand.textSecondary, marginTop: 2 },

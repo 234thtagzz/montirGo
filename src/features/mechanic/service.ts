@@ -66,7 +66,7 @@ export async function listIncomingOrders(): Promise<IncomingOrder[]> {
     .from('mechanic_open_request_view')
     .select(
       'id, issue_description, symptoms, address, contact_phone, status, created_at, ' +
-        'vehicle_brand, vehicle_model, client_name, ai_analysis',
+        'vehicle_type, vehicle_brand, vehicle_model, vehicle_photo_url, client_name, ai_analysis',
     )
     .order('created_at', { ascending: false })
     .limit(30);
@@ -84,6 +84,7 @@ export async function listIncomingOrders(): Promise<IncomingOrder[]> {
         contact_phone: r.contact_phone as string,
         status: r.status as OrderStatus,
         created_at: r.created_at as string,
+        vehicle_type: (r.vehicle_type as string | null) ?? null,
         vehicle_brand: (r.vehicle_brand as string | null) ?? null,
         vehicle_model: (r.vehicle_model as string | null) ?? null,
         client_name: (r.client_name as string | null) ?? null,
@@ -97,7 +98,7 @@ export async function listIncomingOrders(): Promise<IncomingOrder[]> {
     .from('service_requests')
     .select(
       'id, issue_description, symptoms, address, contact_phone, status, created_at, ' +
-        'vehicles (brand, model), client:profiles!service_requests_client_id_fkey (full_name)',
+        'vehicles (type, brand, model), client:profiles!service_requests_client_id_fkey (full_name)',
     )
     .is('mechanic_id', null)
     .in('status', OPEN_REQUEST_STATUSES)
@@ -112,6 +113,7 @@ export async function listIncomingOrders(): Promise<IncomingOrder[]> {
     contact_phone: r.contact_phone as string,
     status: r.status as OrderStatus,
     created_at: r.created_at as string,
+    vehicle_type: (r.vehicles as { type?: string } | null)?.type ?? null,
     vehicle_brand: (r.vehicles as { brand?: string } | null)?.brand ?? null,
     vehicle_model: (r.vehicles as { model?: string } | null)?.model ?? null,
     client_name: (r.client as { full_name?: string } | null)?.full_name ?? null,
@@ -132,7 +134,7 @@ export async function getIncomingRequestDetail(
     .select(
       'id, status, issue_description, symptoms, address, lat, lng, contact_phone, ' +
         'additional_notes, created_at, client_name, vehicle_type, vehicle_brand, ' +
-        'vehicle_model, vehicle_year, vehicle_plate, ai_analysis, ai_created_at',
+        'vehicle_model, vehicle_year, vehicle_plate, vehicle_photo_url, ai_analysis, ai_created_at',
     )
     .eq('id', id)
     .maybeSingle();
@@ -148,7 +150,7 @@ export async function getIncomingRequestDetail(
     .from('service_requests')
     .select(
       'id, status, issue_description, symptoms, address, lat, lng, contact_phone, ' +
-        'additional_notes, created_at, vehicles ( type, brand, model, year, license_plate ), ' +
+        'additional_notes, created_at, vehicles ( type, brand, model, year, license_plate, photo_url ), ' +
         'client:profiles!service_requests_client_id_fkey ( full_name )',
     )
     .eq('id', id)
@@ -165,6 +167,7 @@ export async function getIncomingRequestDetail(
     model?: string | null;
     year?: number | null;
     license_plate?: string | null;
+    photo_url?: string | null;
   } | null;
   return {
     id: r.id as string,
@@ -183,6 +186,7 @@ export async function getIncomingRequestDetail(
     vehicle_model: vehicle?.model ?? null,
     vehicle_year: vehicle?.year ?? null,
     vehicle_plate: vehicle?.license_plate ?? null,
+    vehicle_photo_url: vehicle?.photo_url ?? null,
     ai_analysis: null,
     ai_created_at: null,
   };
@@ -206,6 +210,7 @@ function mapIncomingDetail(r: Record<string, unknown>): IncomingRequestDetail {
     vehicle_model: (r.vehicle_model as string | null) ?? null,
     vehicle_year: (r.vehicle_year as number | null) ?? null,
     vehicle_plate: (r.vehicle_plate as string | null) ?? null,
+    vehicle_photo_url: (r.vehicle_photo_url as string | null) ?? null,
     ai_analysis: mapAiAnalysis(r.ai_analysis as RawAiAnalysis | null),
     ai_created_at: (r.ai_created_at as string | null) ?? null,
   };
@@ -217,7 +222,7 @@ export async function listMyOrders(onlyActive = false): Promise<MyOrder[]> {
     .from('service_requests')
     .select(
       'id, issue_description, symptoms, address, contact_phone, status, price_amount, created_at, ' +
-        'vehicles (brand, model), ' +
+        'vehicles (type, brand, model), ' +
         'client:profiles!service_requests_client_id_fkey (full_name, phone_number)',
     )
     .eq('mechanic_id', id)
@@ -235,6 +240,7 @@ export async function listMyOrders(onlyActive = false): Promise<MyOrder[]> {
     status: r.status as OrderStatus,
     price_amount: r.price_amount as number | null,
     created_at: r.created_at as string,
+    vehicle_type: (r.vehicles as { type?: string } | null)?.type ?? null,
     vehicle_brand: (r.vehicles as { brand?: string } | null)?.brand ?? null,
     vehicle_model: (r.vehicles as { model?: string } | null)?.model ?? null,
     client_name: (r.client as { full_name?: string } | null)?.full_name ?? null,
@@ -263,8 +269,8 @@ export async function getMyOrder(id: string): Promise<MechanicOrderDetail | null
     .from('service_requests')
     .select(
       'id, issue_description, symptoms, address, lat, lng, contact_phone, additional_notes, status, ' +
-        'price_amount, created_at, updated_at, accepted_at, arrived_at, ' +
-        'vehicles (brand, model, license_plate), ' +
+        'price_amount, payment_method, created_at, updated_at, accepted_at, arrived_at, ' +
+        'vehicles (type, brand, model, year, license_plate, photo_url), ' +
         'client:profiles!service_requests_client_id_fkey (full_name, phone_number)',
     )
     .eq('id', id)
@@ -282,15 +288,19 @@ export async function getMyOrder(id: string): Promise<MechanicOrderDetail | null
     additional_notes: (r.additional_notes as string | null) ?? null,
     status: r.status as OrderStatus,
     price_amount: r.price_amount as number | null,
+    payment_method: (r.payment_method as 'online' | 'cash' | null) ?? null,
     created_at: r.created_at as string,
     updated_at: r.updated_at as string,
     lat: Number(r.lat),
     lng: Number(r.lng),
     accepted_at: (r.accepted_at as string | null) ?? null,
     arrived_at: (r.arrived_at as string | null) ?? null,
+    vehicle_type: (r.vehicles as { type?: string } | null)?.type ?? null,
     vehicle_brand: (r.vehicles as { brand?: string } | null)?.brand ?? null,
     vehicle_model: (r.vehicles as { model?: string } | null)?.model ?? null,
+    vehicle_year: (r.vehicles as { year?: number | null } | null)?.year ?? null,
     vehicle_plate: (r.vehicles as { license_plate?: string } | null)?.license_plate ?? null,
+    vehicle_photo_url: (r.vehicles as { photo_url?: string | null } | null)?.photo_url ?? null,
     client_name: (r.client as { full_name?: string } | null)?.full_name ?? null,
     client_phone: (r.client as { phone_number?: string } | null)?.phone_number ?? null,
   };
@@ -549,15 +559,24 @@ export async function getEarningsSummary(fromISO: string): Promise<EarningsSumma
   const id = await getMyId();
   const { data, error } = await supabase
     .from('earnings')
-    .select('gross_amount, platform_fee, net_amount')
+    .select('gross_amount, platform_fee, net_amount, payment_method')
     .eq('mechanic_id', id)
     .gte('period_date', fromISO.slice(0, 10));
   if (error) throw error;
-  const rows = (data ?? []) as { gross_amount: number; platform_fee: number; net_amount: number }[];
+  const rows = (data ?? []) as {
+    gross_amount: number;
+    platform_fee: number;
+    net_amount: number;
+    payment_method: string | null;
+  }[];
   return {
     totalJobs: rows.length,
     gross: rows.reduce((s, r) => s + r.gross_amount, 0),
     fee: rows.reduce((s, r) => s + r.platform_fee, 0),
     net: rows.reduce((s, r) => s + r.net_amount, 0),
+    cashNet: rows.reduce(
+      (s, r) => (r.payment_method === 'cash' ? s + r.net_amount : s),
+      0,
+    ),
   };
 }

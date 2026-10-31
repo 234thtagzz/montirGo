@@ -24,6 +24,7 @@ import {
   type IncomingRequestDetail,
 } from '@/features/mechanic/service';
 import { AiAnalysisCard } from '@/features/service-request/components/ai-analysis-card';
+import { VehicleProfileCard } from '@/features/vehicles/components/vehicle-profile-card';
 import { formatDateTime } from '@/utils/format';
 import { openWhatsApp } from '@/utils/whatsapp';
 
@@ -174,9 +175,13 @@ export default function MechanicRequestDetailScreen() {
     );
   }
 
-  const vehicle = [order.vehicle_brand, order.vehicle_model, order.vehicle_year]
-    .filter((part) => part != null && String(part).trim() !== '')
-    .join(' ');
+  const hasVehicle = Boolean(
+    order.vehicle_type ||
+      order.vehicle_brand ||
+      order.vehicle_model ||
+      order.vehicle_plate ||
+      order.vehicle_photo_url,
+  );
 
   return (
     <View style={styles.screen}>
@@ -233,12 +238,26 @@ export default function MechanicRequestDetailScreen() {
           ) : null}
         </View>
 
+        {hasVehicle ? (
+          <>
+            <Text style={styles.section}>Kendaraan client</Text>
+            <VehicleProfileCard
+              title="Data kendaraan"
+              photo={order.vehicle_photo_url}
+              type={order.vehicle_type}
+              brand={order.vehicle_brand}
+              model={order.vehicle_model}
+              year={order.vehicle_year}
+              plate={order.vehicle_plate}
+            />
+          </>
+        ) : null}
+
         <Text style={styles.section}>Detail permintaan</Text>
         <View style={styles.detailCard}>
           <DetailRow label="Keluhan" value={order.issue_description} />
           {order.symptoms ? <DetailRow label="Gejala" value={order.symptoms} /> : null}
-          <DetailRow label="Kendaraan" value={vehicle || 'Tidak dicantumkan'} />
-          {order.vehicle_plate ? <DetailRow label="Nomor polisi" value={order.vehicle_plate} /> : null}
+          {!hasVehicle ? <DetailRow label="Kendaraan" value="Tidak dicantumkan" /> : null}
           <DetailRow label="Lokasi" value={order.address || 'Lokasi GPS terdeteksi'} />
           <DetailRow label="WhatsApp" value={order.contact_phone} />
           {order.additional_notes ? (

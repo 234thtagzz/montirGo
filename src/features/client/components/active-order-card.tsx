@@ -4,6 +4,7 @@ import { Ionicons } from '@/components/ui/icon';
 import { Brand, CardShadow, Radius, Space } from '@/constants/brand';
 import { formatDateTime } from '@/utils/format';
 import type { ClientOrder } from '@/features/client/types';
+import { formatVehicleLabel } from '@/features/vehicles/constants';
 import { getProgressLabel, getStatusMeta, TOTAL_STEPS } from '@/features/service-request/status';
 
 interface ActiveOrderCardProps {
@@ -14,7 +15,11 @@ interface ActiveOrderCardProps {
 export function ActiveOrderCard({ order, onPress }: ActiveOrderCardProps) {
   const meta = getStatusMeta(order.status);
   const hasMechanic = Boolean(order.mechanic_id);
-  const vehicle = [order.vehicle_brand, order.vehicle_model].filter(Boolean).join(' ');
+  const vehicle = formatVehicleLabel(
+    order.vehicle_type,
+    order.vehicle_brand,
+    order.vehicle_model,
+  );
 
   return (
     <Pressable

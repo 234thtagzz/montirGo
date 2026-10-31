@@ -14,6 +14,7 @@ import {
   type IncomingOrder,
 } from '@/features/mechanic/service';
 import { OrderCard } from '@/features/mechanic/components/order-card';
+import { formatVehicleLabel } from '@/features/vehicles/constants';
 import { MechanicNotificationBell } from '@/features/notifications/components/notification-bell';
 
 const NEW_REQUEST_BADGE = {
@@ -183,7 +184,11 @@ export default function MechanicRequestsScreen() {
               issue={order.issue_description}
               status={order.status}
               createdAt={order.created_at}
-              vehicle={[order.vehicle_brand, order.vehicle_model].filter(Boolean).join(' ')}
+              vehicle={formatVehicleLabel(
+                order.vehicle_type,
+                order.vehicle_brand,
+                order.vehicle_model,
+              )}
               clientName={order.client_name}
               address={order.address}
               aiRisk={order.ai_risk_level}

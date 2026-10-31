@@ -10,23 +10,33 @@ import {
   TextInput,
   View,
 } from 'react-native';
+import { Image } from 'expo-image';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { ScreenHeader } from '@/components/ui/screen-header';
 import { Button } from '@/components/ui/button';
 import { LoadingState } from '@/components/ui/state';
+import { Ionicons } from '@/components/ui/icon';
 import { Brand, Radius, ScreenPadding, Space } from '@/constants/brand';
 import {
   createVehicle,
+  getMyId,
   getVehicle,
   updateVehicle,
   type VehicleType,
 } from '@/features/client/service';
+import {
+  VEHICLE_TYPE_OPTIONS,
+  getVehicleTypeMeta,
+} from '@/features/vehicles/constants';
+import { VehiclePhoto } from '@/features/vehicles/components/vehicle-photo';
+import {
+  deleteVehiclePhoto,
+  pickVehiclePhoto,
+  uploadVehiclePhoto,
+  type PickedVehiclePhoto,
+} from '@/features/vehicles/photo';
 
-const TYPES: { key: VehicleType; label: string }[] = [
-  { key: 'motor', label: 'Motor' },
-  { key: 'mobil', label: 'Mobil' },
-  { key: 'lainnya', label: 'Lainnya' },
-];
+const TYPES = VEHICLE_TYPE_OPTIONS;
 
 export default function VehicleFormScreen() {
   const { id } = useLocalSearchParams<{ id?: string }>();
@@ -39,6 +49,9 @@ export default function VehicleFormScreen() {
   const [year, setYear] = useState('');
   const [plate, setPlate] = useState('');
   const [notes, setNotes] = useState('');
+  const [photoPath, setPhotoPath] = useState<string | null>(null);
+  const [pickedPhoto, setPickedPhoto] = useState<PickedVehiclePhoto | null>(null);
+  const [photoRemoved, setPhotoRemoved] = useState(false);
   const [loading, setLoading] = useState(isEdit);
   const [saving, setSaving] = useState(false);
 
@@ -55,6 +68,7 @@ export default function VehicleFormScreen() {
         setYear(vehicle.year ? String(vehicle.year) : '');
         setPlate(vehicle.license_plate);
         setNotes(vehicle.notes ?? '');
+        setPhotoPath(vehicle.photo_url);
       } catch (error) {
         Alert.alert('Gagal memuat', error instanceof Error ? error.message : 'Coba lagi.');
       } finally {
@@ -65,6 +79,26 @@ export default function VehicleFormScreen() {
       cancelled = true;
     };
   }, [id]);
+
+  const choosePhoto = async () => {
+    try {
+      const picked = await pickVehiclePhoto();
+      if (!picked) return;
+      setPickedPhoto(picked);
+      setPhotoRemoved(false);
+    } catch (error) {
+      Alert.alert(
+        'Gagal memilih foto',
+        error instanceof Error ? error.message : 'Coba lagi beberapa saat lagi.',
+      );
+    }
+  };
+
+  const removePhoto = () => {
+    setPickedPhoto(null);
+    setPhotoPath(null);
+    setPhotoRemoved(true);
+  };
 
   const save = async () => {
     if (!brand.trim() || !model.trim() || !plate.trim()) {
@@ -79,7 +113,21 @@ export default function VehicleFormScreen() {
     }
 
     setSaving(true);
+    let uploadedPath: string | null = null;
     try {
+      let photoUrl = photoPath;
+      let replacedPhoto: string | null = null;
+
+      if (pickedPhoto) {
+        const ownerId = await getMyId();
+        uploadedPath = await uploadVehiclePhoto(ownerId, pickedPhoto);
+        photoUrl = uploadedPath;
+        replacedPhoto = photoPath;
+      } else if (photoRemoved) {
+        replacedPhoto = photoPath;
+        photoUrl = null;
+      }
+
       const payload = {
         type,
         brand: brand.trim(),
@@ -87,11 +135,17 @@ export default function VehicleFormScreen() {
         year: parsedYear,
         license_plate: plate.trim().toUpperCase(),
         notes: notes.trim() || null,
+        photo_url: photoUrl,
       };
       if (isEdit && id) await updateVehicle(id, payload);
       else await createVehicle(payload);
+
+      // Foto lama baru dihapus setelah data tersimpan agar tidak ada momen
+      // kendaraan kehilangan foto ketika penyimpanan gagal.
+      if (replacedPhoto) await deleteVehiclePhoto(replacedPhoto);
       router.back();
     } catch (error) {
+      if (uploadedPath) await deleteVehiclePhoto(uploadedPath);
       Alert.alert(
         'Gagal menyimpan',
         error instanceof Error ? error.message : 'Coba lagi beberapa saat lagi.',
@@ -129,6 +183,7 @@ export default function VehicleFormScreen() {
           <View style={styles.typeRow}>
             {TYPES.map((item) => {
               const active = item.key === type;
+              const meta = getVehicleTypeMeta(item.key);
               return (
                 <Pressable
                   key={item.key}
@@ -137,6 +192,11 @@ export default function VehicleFormScreen() {
                   onPress={() => setType(item.key)}
                   style={[styles.typeChip, active && styles.typeChipActive]}
                 >
+                  <Ionicons
+                    name={meta.icon}
+                    size={14}
+                    color={active ? Brand.white : meta.color}
+                  />
                   <Text style={[styles.typeText, active && styles.typeTextActive]}>
                     {item.label}
                   </Text>
@@ -144,6 +204,56 @@ export default function VehicleFormScreen() {
               );
             })}
           </View>
+
+          <Text style={styles.label}>Foto kendaraan (opsional)</Text>
+          <View style={styles.photoCard}>
+            {pickedPhoto ? (
+              <Image
+                source={{ uri: pickedPhoto.uri }}
+                style={styles.photoPreview}
+                contentFit="cover"
+                transition={150}
+              />
+            ) : (
+              <VehiclePhoto
+                value={photoPath}
+                height={168}
+                emptyLabel="Tambahkan foto kendaraan"
+              />
+            )}
+            <View style={styles.photoActions}>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={pickedPhoto || photoPath ? 'Ganti foto kendaraan' : 'Pilih foto kendaraan'}
+                onPress={choosePhoto}
+                style={({ pressed }) => [styles.photoAction, pressed && styles.pressed]}
+              >
+                <Ionicons name="camera-outline" size={16} color={Brand.primary} />
+                <Text style={styles.photoActionText}>
+                  {pickedPhoto || photoPath ? 'Ganti Foto' : 'Pilih Foto'}
+                </Text>
+              </Pressable>
+              {pickedPhoto || photoPath ? (
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel="Hapus foto kendaraan"
+                  onPress={removePhoto}
+                  style={({ pressed }) => [
+                    styles.photoAction,
+                    styles.photoRemove,
+                    pressed && styles.pressed,
+                  ]}
+                >
+                  <Ionicons name="trash-outline" size={16} color={Brand.red} />
+                  <Text style={[styles.photoActionText, styles.photoRemoveText]}>Hapus</Text>
+                </Pressable>
+              ) : null}
+            </View>
+          </View>
+          <Text style={styles.hint}>
+            Foto tampak depan/samping kendaraan membantu montir menyiapkan alat dan
+            memperkirakan kondisi kendaraan sebelum datang.
+          </Text>
 
           <Field label="Merek" value={brand} onChangeText={setBrand} placeholder="Contoh: Honda" />
           <Field label="Model" value={model} onChangeText={setModel} placeholder="Contoh: Vario 125" />
@@ -211,7 +321,10 @@ const styles = StyleSheet.create({
   typeRow: { flexDirection: 'row', gap: Space.sm },
   typeChip: {
     flex: 1,
+    flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
     paddingVertical: 10,
     borderRadius: Radius.md,
     borderWidth: 1,
@@ -221,6 +334,37 @@ const styles = StyleSheet.create({
   typeChipActive: { backgroundColor: Brand.primary, borderColor: Brand.primary },
   typeText: { fontSize: 12.5, fontWeight: '600', color: Brand.textSecondary },
   typeTextActive: { color: Brand.white },
+  photoCard: {
+    borderRadius: Radius.md,
+    borderWidth: 1,
+    borderColor: Brand.border,
+    backgroundColor: Brand.surface,
+    overflow: 'hidden',
+  },
+  photoPreview: { width: '100%', height: 168 },
+  photoActions: {
+    flexDirection: 'row',
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: Brand.divider,
+  },
+  photoAction: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 11,
+  },
+  photoRemove: { borderLeftWidth: StyleSheet.hairlineWidth, borderLeftColor: Brand.divider },
+  photoActionText: { fontSize: 12, fontWeight: '700', color: Brand.primary },
+  photoRemoveText: { color: Brand.red },
+  hint: {
+    fontSize: 10.5,
+    color: Brand.textMuted,
+    lineHeight: 15,
+    marginTop: Space.sm,
+  },
+  pressed: { opacity: 0.7 },
   input: {
     backgroundColor: Brand.surface,
     borderWidth: 1,

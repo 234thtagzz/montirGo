@@ -15,8 +15,8 @@ export * from './types';
 
 const ORDER_SELECT =
   'id, status, issue_description, symptoms, address, contact_phone, additional_notes, ' +
-  'price_amount, created_at, updated_at, vehicle_id, mechanic_id, ' +
-  'vehicles ( brand, model, license_plate ), ' +
+  'price_amount, payment_method, created_at, updated_at, vehicle_id, mechanic_id, ' +
+  'vehicles ( type, brand, model, year, license_plate, photo_url ), ' +
   'mechanic:profiles!service_requests_mechanic_id_fkey ( full_name, phone_number, avatar_url )';
 
 interface RawOrder {
@@ -28,11 +28,19 @@ interface RawOrder {
   contact_phone: string;
   additional_notes: string | null;
   price_amount: number | null;
+  payment_method: 'online' | 'cash' | null;
   created_at: string;
   updated_at: string;
   vehicle_id: string | null;
   mechanic_id: string | null;
-  vehicles: { brand?: string; model?: string; license_plate?: string } | null;
+  vehicles: {
+    type?: string;
+    brand?: string;
+    model?: string;
+    year?: number | null;
+    license_plate?: string;
+    photo_url?: string | null;
+  } | null;
   mechanic: { full_name?: string; phone_number?: string; avatar_url?: string } | null;
 }
 
@@ -46,13 +54,17 @@ function mapOrder(row: RawOrder): ClientOrder {
     contact_phone: row.contact_phone,
     additional_notes: row.additional_notes,
     price_amount: row.price_amount,
+    payment_method: row.payment_method,
     created_at: row.created_at,
     updated_at: row.updated_at,
     vehicle_id: row.vehicle_id,
     mechanic_id: row.mechanic_id,
+    vehicle_type: row.vehicles?.type ?? null,
     vehicle_brand: row.vehicles?.brand ?? null,
     vehicle_model: row.vehicles?.model ?? null,
+    vehicle_year: row.vehicles?.year ?? null,
     vehicle_plate: row.vehicles?.license_plate ?? null,
+    vehicle_photo_url: row.vehicles?.photo_url ?? null,
     mechanic_name: row.mechanic?.full_name ?? null,
     mechanic_phone: row.mechanic?.phone_number ?? null,
     mechanic_avatar: row.mechanic?.avatar_url ?? null,
@@ -109,6 +121,15 @@ export async function createVehicle(input: VehicleInput): Promise<ClientVehicle>
 
 export async function updateVehicle(id: string, input: VehicleInput): Promise<void> {
   const { error } = await supabase.from('vehicles').update(input).eq('id', id);
+  if (error) throw error;
+}
+
+/** Simpan/ganti hanya foto kendaraan (dipakai dari form request cepat). */
+export async function updateVehiclePhoto(
+  id: string,
+  photoUrl: string | null,
+): Promise<void> {
+  const { error } = await supabase.from('vehicles').update({ photo_url: photoUrl }).eq('id', id);
   if (error) throw error;
 }
 

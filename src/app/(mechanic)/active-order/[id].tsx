@@ -23,6 +23,7 @@ import {
   type OrderStatusEvent,
 } from "@/features/mechanic/service";
 import {
+  confirmCashPayment,
   getFinanceSettings,
   syncPaymentStatus,
   type FinanceSettings,
@@ -35,6 +36,7 @@ import {
 import { AiAnalysisCard } from "@/features/service-request/components/ai-analysis-card";
 import { getStatusMeta, TOTAL_STEPS } from "@/features/service-request/status";
 import { TripEntryCard } from "@/features/mechanic/components/trip/trip-entry-card";
+import { VehicleProfileCard } from "@/features/vehicles/components/vehicle-profile-card";
 import { supabase } from "@/lib/supabase";
 import { formatDateTime, formatIDR } from "@/utils/format";
 import { openWhatsApp } from "@/utils/whatsapp";
@@ -72,6 +74,7 @@ export default function MechanicOrderDetailScreen() {
   const [settings, setSettings] = useState<FinanceSettings | null>(null);
   const [priceDraft, setPriceDraft] = useState<string | null>(null);
   const [sendingPrice, setSendingPrice] = useState(false);
+  const [confirmingCash, setConfirmingCash] = useState(false);
 
   const loadAnalysis = useCallback(async () => {
     if (!id) return;
@@ -259,6 +262,39 @@ export default function MechanicOrderDetailScreen() {
     );
   };
 
+  /** Montir mengonfirmasi uang tunai sudah diterima dari client. */
+  const confirmCash = () => {
+    if (!order || confirmingCash) return;
+    const amount = order.price_amount ?? 0;
+    const chosen = order.payment_method === 'cash';
+    Alert.alert(
+      'Konfirmasi pembayaran tunai?',
+      `Pastikan kamu sudah menerima uang tunai ${formatIDR(amount)} dari client.` +
+        (chosen ? '' : '\n\nClient belum memilih metode tunai di aplikasi.') +
+        '\n\nPendapatan tunai dicatat di menu Pendapatan, tetapi tidak masuk saldo dompet MontirGo.',
+      [
+        { text: 'Batal', style: 'cancel' },
+        {
+          text: 'Ya, sudah diterima',
+          onPress: async () => {
+            setConfirmingCash(true);
+            try {
+              await confirmCashPayment(order.id);
+              await load();
+            } catch (e) {
+              Alert.alert(
+                'Gagal mengonfirmasi',
+                e instanceof Error ? e.message : 'Coba lagi.',
+              );
+            } finally {
+              setConfirmingCash(false);
+            }
+          },
+        },
+      ],
+    );
+  };
+
   const retryAnalysis = async () => {
     if (!id || analyzing) return;
     setAnalyzing(true);
@@ -360,9 +396,13 @@ export default function MechanicOrderDetailScreen() {
   }
 
   const meta = getStatusMeta(order.status);
-  const vehicle = [order.vehicle_brand, order.vehicle_model]
-    .filter(Boolean)
-    .join(" ");
+  const hasVehicle = Boolean(
+    order.vehicle_type ||
+      order.vehicle_brand ||
+      order.vehicle_model ||
+      order.vehicle_plate ||
+      order.vehicle_photo_url,
+  );
 
   return (
     <View style={styles.screen}>
@@ -453,15 +493,29 @@ export default function MechanicOrderDetailScreen() {
           ) : null}
         </View>
 
+        {hasVehicle ? (
+          <>
+            <Text style={styles.section}>Kendaraan client</Text>
+            <VehicleProfileCard
+              title="Data kendaraan"
+              photo={order.vehicle_photo_url}
+              type={order.vehicle_type}
+              brand={order.vehicle_brand}
+              model={order.vehicle_model}
+              year={order.vehicle_year}
+              plate={order.vehicle_plate}
+            />
+          </>
+        ) : null}
+
         <Text style={styles.section}>Detail permintaan</Text>
         <View style={styles.detailCard}>
           <DetailRow label="Keluhan" value={order.issue_description} />
           {order.symptoms ? (
             <DetailRow label="Gejala" value={order.symptoms} />
           ) : null}
-          <DetailRow label="Kendaraan" value={vehicle || "Tidak dicantumkan"} />
-          {order.vehicle_plate ? (
-            <DetailRow label="Nomor polisi" value={order.vehicle_plate} />
+          {!hasVehicle ? (
+            <DetailRow label="Kendaraan" value="Tidak dicantumkan" />
           ) : null}
           <DetailRow
             label="Lokasi"
@@ -527,18 +581,53 @@ export default function MechanicOrderDetailScreen() {
               style={styles.sendPrice}
             />
             <Text style={styles.billingHint}>
-              Client membayar lewat QRIS / e-wallet Xendit. Saldo masuk sebagai
-              pending dan bisa ditarik setelah masa hold.
+              Client bisa membayar online lewat QRIS / e-wallet Xendit atau tunai
+              langsung. Pembayaran tunai dicatat setelah kamu mengonfirmasi uang
+              diterima, dan tidak masuk saldo dompet.
             </Text>
           </View>
         ) : order.status === "payment" ? (
-          <View style={styles.pendingCard}>
-            <Ionicons name="time-outline" size={18} color={Brand.amber} />
-            <Text style={styles.pendingText}>
-              Tagihan {formatIDR(order.price_amount ?? 0)} sudah dikirim. Menunggu
-              pembayaran client.
-            </Text>
-          </View>
+          <>
+            <View style={styles.pendingCard}>
+              <Ionicons
+                name={order.payment_method === "cash" ? "cash-outline" : "time-outline"}
+                size={18}
+                color={Brand.amber}
+              />
+              <View style={styles.pendingCopy}>
+                <Text style={styles.pendingText}>
+                  Tagihan {formatIDR(order.price_amount ?? 0)} sudah dikirim.{" "}
+                  {order.payment_method === "cash"
+                    ? "Client memilih bayar tunai — konfirmasi setelah uang kamu terima."
+                    : "Menunggu pembayaran client."}
+                </Text>
+                {order.payment_method === "cash" ? (
+                  <Text style={styles.pendingHint}>
+                    Uang tunai tidak masuk saldo dompet, tetapi tercatat di menu
+                    Pendapatan.
+                  </Text>
+                ) : null}
+              </View>
+            </View>
+            {order.payment_method === "cash" ? (
+              <Button
+                label="Konfirmasi Pembayaran Cash"
+                icon="cash-outline"
+                loading={confirmingCash}
+                onPress={confirmCash}
+                style={styles.cashConfirm}
+              />
+            ) : (
+              <Button
+                label="Konfirmasi Pembayaran Tunai"
+                icon="cash-outline"
+                variant="secondary"
+                loading={confirmingCash}
+                onPress={confirmCash}
+                style={styles.cashConfirm}
+              />
+            )}
+          </>
         ) : order.status === "paid" ? (
           <View style={styles.doneCard}>
             <Ionicons
@@ -547,9 +636,20 @@ export default function MechanicOrderDetailScreen() {
               color={Brand.green}
             />
             <Text style={styles.doneText}>
-              Pembayaran Rp
-              {(order.price_amount ?? 0).toLocaleString("id-ID")} sudah lunas.
-              Pendapatan masuk ke saldo pending.
+              {order.payment_method === "cash" ? (
+                <>
+                  Pembayaran tunai Rp
+                  {(order.price_amount ?? 0).toLocaleString("id-ID")} sudah
+                  dikonfirmasi. Pendapatan tunai tercatat di menu Pendapatan dan
+                  tidak masuk saldo dompet.
+                </>
+              ) : (
+                <>
+                  Pembayaran Rp
+                  {(order.price_amount ?? 0).toLocaleString("id-ID")} sudah lunas.
+                  Pendapatan masuk ke saldo pending.
+                </>
+              )}
             </Text>
           </View>
         ) : (
@@ -850,12 +950,19 @@ const styles = StyleSheet.create({
     padding: Space.md,
   },
   pendingText: {
-    flex: 1,
     fontSize: 12,
     color: Brand.amber,
     fontWeight: "600",
     lineHeight: 17,
   },
+  pendingCopy: { flex: 1, gap: 3 },
+  pendingHint: {
+    fontSize: 10.5,
+    color: Brand.amber,
+    lineHeight: 15,
+    opacity: 0.85,
+  },
+  cashConfirm: { marginTop: Space.md },
   infoCard: {
     flexDirection: "row",
     alignItems: "center",

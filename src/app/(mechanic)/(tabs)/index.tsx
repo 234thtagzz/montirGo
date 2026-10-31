@@ -21,6 +21,7 @@ import { DashboardHeader } from '@/features/mechanic/components/dashboard-header
 import { useMechanicAlerts } from '@/features/notifications/mechanic-alerts';
 import { OnlineCard } from '@/features/mechanic/components/online-card';
 import { OrderCard } from '@/features/mechanic/components/order-card';
+import { formatVehicleLabel } from '@/features/vehicles/constants';
 import { TripEntryCard } from '@/features/mechanic/components/trip/trip-entry-card';
 import { StatTiles } from '@/features/mechanic/components/stat-tiles';
 import { BalanceCard } from '@/features/finance/components/balance-card';
@@ -234,7 +235,11 @@ export default function MechanicDashboardScreen() {
                       issue={order.issue_description}
                       status={order.status}
                       createdAt={order.created_at}
-                      vehicle={[order.vehicle_brand, order.vehicle_model].filter(Boolean).join(' ')}
+                      vehicle={formatVehicleLabel(
+                        order.vehicle_type,
+                        order.vehicle_brand,
+                        order.vehicle_model,
+                      )}
                       clientName={order.client_name}
                       address={order.address}
                       price={order.price_amount}
