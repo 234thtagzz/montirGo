@@ -191,7 +191,7 @@ export default function MechanicTripScreen() {
     if (!order || busy) return;
     Alert.alert(
       'Sampai di lokasi?',
-      'Pastikan kamu sudah berada di titik lokasi client. Status order akan berubah menjadi "Montir sudah tiba".',
+      'Status order akan berubah menjadi "Montir tiba di lokasi" dan kamu langsung diarahkan untuk mengisi tagihan ke client.',
       [
         { text: 'Belum', style: 'cancel' },
         {
@@ -202,7 +202,7 @@ export default function MechanicTripScreen() {
               await updateOrderStatus(order.id, 'arrived');
               router.replace({
                 pathname: '/(mechanic)/active-order/[id]',
-                params: { id: order.id },
+                params: { id: order.id, focus: 'invoice' },
               });
             } catch (e) {
               Alert.alert('Gagal memperbarui status', e instanceof Error ? e.message : 'Coba lagi.');
@@ -227,7 +227,7 @@ export default function MechanicTripScreen() {
     }
     router.replace({
       pathname: '/(mechanic)/active-order/[id]',
-      params: { id: order.id },
+      params: phase === 'arrived' ? { id: order.id, focus: 'invoice' } : { id: order.id },
     });
   }, [order, phase, startTrip, confirmArrival, router]);
 

@@ -40,6 +40,7 @@ import {
   getProgressLabel,
   getStatusMeta,
   isCancellable,
+  TOTAL_STEPS,
 } from '@/features/service-request/status';
 import { formatDateTime, formatIDR } from '@/utils/format';
 import { openWhatsApp } from '@/utils/whatsapp';
@@ -300,7 +301,7 @@ export default function ClientOrderDetailScreen() {
 
           {meta.step > 0 ? (
             <View style={styles.progress}>
-              {Array.from({ length: 7 }).map((_, index) => (
+              {Array.from({ length: TOTAL_STEPS }).map((_, index) => (
                 <View
                   key={index}
                   style={[styles.segment, index < meta.step && styles.segmentActive]}

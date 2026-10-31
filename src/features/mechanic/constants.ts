@@ -29,6 +29,18 @@ const ACTIVITY_META: Record<string, ActivityMeta> = {
     color: Brand.primary,
     background: Brand.primarySoft,
   },
+  order_arrived: {
+    label: 'Tiba di lokasi client',
+    icon: 'location-outline',
+    color: Brand.green,
+    background: Brand.greenSoft,
+  },
+  invoice_sent: {
+    label: 'Tagihan dikirim',
+    icon: 'receipt-outline',
+    color: Brand.amber,
+    background: Brand.amberSoft,
+  },
   payment_received: {
     label: 'Pembayaran diterima',
     icon: 'cash-outline',
@@ -67,9 +79,6 @@ const NEXT_ACTION: Partial<
   mechanic_assigned: { next: 'on_the_way', label: 'Mulai Perjalanan', icon: 'navigate-outline' },
   mechanic_accepted: { next: 'on_the_way', label: 'Mulai Perjalanan', icon: 'navigate-outline' },
   on_the_way: { next: 'arrived', label: 'Sampai di Lokasi', icon: 'location-outline' },
-  arrived: { next: 'diagnosing', label: 'Mulai Diagnosis', icon: 'medkit-outline' },
-  diagnosing: { next: 'repairing', label: 'Mulai Perbaikan', icon: 'construct-outline' },
-  repairing: { next: 'completed', label: 'Selesaikan Pekerjaan', icon: 'checkmark-done-outline' },
 };
 
 export function getNextAction(status: string) {
@@ -81,7 +90,7 @@ const PROGRESS_LABEL: Record<string, string> = {
   mechanic_assigned: 'Order diberikan kepadamu',
   mechanic_accepted: 'Kamu menerima order ini',
   on_the_way: 'Sedang menuju lokasi pelanggan',
-  arrived: 'Sudah tiba di lokasi',
+  arrived: 'Tiba di lokasi — isi tagihan sekarang',
   diagnosing: 'Sedang mendiagnosis kendaraan',
   repairing: 'Sedang memperbaiki kendaraan',
   completed: 'Pekerjaan selesai',

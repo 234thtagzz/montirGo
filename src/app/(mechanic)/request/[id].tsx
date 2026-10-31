@@ -18,7 +18,9 @@ import { Brand, CardShadow, Radius, ScreenPadding, Space } from '@/constants/bra
 import { supabase } from '@/lib/supabase';
 import {
   acceptOrder,
+  ACTIVE_ORDER_MESSAGE,
   getIncomingRequestDetail,
+  getMyActiveOrderId,
   type IncomingRequestDetail,
 } from '@/features/mechanic/service';
 import { AiAnalysisCard } from '@/features/service-request/components/ai-analysis-card';
@@ -38,12 +40,17 @@ export default function MechanicRequestDetailScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState(false);
   const [accepting, setAccepting] = useState(false);
+  const [activeOrderId, setActiveOrderId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     if (!id) return;
     try {
-      const detail = await getIncomingRequestDetail(id);
+      const [detail, activeId] = await Promise.all([
+        getIncomingRequestDetail(id),
+        getMyActiveOrderId().catch(() => null),
+      ]);
       setOrder(detail);
+      setActiveOrderId(activeId);
       setError(false);
     } catch {
       setError(true);
@@ -92,6 +99,16 @@ export default function MechanicRequestDetailScreen() {
 
   const confirmAccept = () => {
     if (!order) return;
+    if (activeOrderId) {
+      Alert.alert('Masih ada order aktif', ACTIVE_ORDER_MESSAGE, [
+        { text: 'Tutup', style: 'cancel' },
+        {
+          text: 'Buka Order Aktif',
+          onPress: () => router.push(`/(mechanic)/active-order/${activeOrderId}`),
+        },
+      ]);
+      return;
+    }
     Alert.alert(
       'Terima request ini?',
       'Pastikan kamu bisa menuju lokasi client. Setelah diterima, request akan menjadi order aktifmu.',
@@ -242,10 +259,36 @@ export default function MechanicRequestDetailScreen() {
           </Text>
         </View>
 
+        {activeOrderId ? (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Buka order aktif yang sedang berjalan"
+            onPress={() => router.push(`/(mechanic)/active-order/${activeOrderId}`)}
+            style={({ pressed }) => [styles.notice, pressed && styles.pressed]}
+          >
+            <Ionicons name="lock-closed-outline" size={16} color={Brand.amber} />
+            <View style={styles.noticeCopy}>
+              <Text style={styles.noticeTitle}>Selesaikan order aktif dulu</Text>
+              <Text style={styles.noticeText}>
+                Kamu hanya bisa memegang satu order. Request ini bisa diterima
+                setelah order #{activeOrderId.slice(0, 8).toUpperCase()} lunas.
+              </Text>
+            </View>
+            <Ionicons name="chevron-forward" size={15} color={Brand.amber} />
+          </Pressable>
+        ) : null}
+
         <Button
-          label={accepting ? 'Memproses...' : 'Terima Order'}
+          label={
+            activeOrderId
+              ? 'Selesaikan Order Dulu'
+              : accepting
+                ? 'Memproses...'
+                : 'Terima Order'
+          }
           icon="checkmark-circle-outline"
           loading={accepting}
+          disabled={activeOrderId != null}
           onPress={confirmAccept}
           style={styles.action}
         />
@@ -349,6 +392,18 @@ const styles = StyleSheet.create({
     marginTop: Space.lg,
   },
   disclaimerText: { flex: 1, fontSize: 11, color: Brand.primary, lineHeight: 16 },
+  notice: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Space.sm,
+    backgroundColor: Brand.amberSoft,
+    borderRadius: Radius.md,
+    padding: Space.md,
+    marginTop: Space.lg,
+  },
+  noticeCopy: { flex: 1 },
+  noticeTitle: { fontSize: 12.5, fontWeight: '700', color: Brand.text },
+  noticeText: { fontSize: 11, color: Brand.textSecondary, marginTop: 2, lineHeight: 16 },
   action: { marginTop: Space.xl },
   pressed: { opacity: 0.7 },
 });

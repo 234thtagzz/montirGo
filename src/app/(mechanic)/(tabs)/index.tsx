@@ -18,6 +18,7 @@ import {
   type MyOrder,
 } from '@/features/mechanic/service';
 import { DashboardHeader } from '@/features/mechanic/components/dashboard-header';
+import { useMechanicAlerts } from '@/features/notifications/mechanic-alerts';
 import { OnlineCard } from '@/features/mechanic/components/online-card';
 import { OrderCard } from '@/features/mechanic/components/order-card';
 import { TripEntryCard } from '@/features/mechanic/components/trip/trip-entry-card';
@@ -41,6 +42,7 @@ export default function MechanicDashboardScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState(false);
   const router = useRouter();
+  const { unread } = useMechanicAlerts();
 
   const load = useCallback(async () => {
     try {
@@ -168,7 +170,13 @@ export default function MechanicDashboardScreen() {
           />
         }
       >
-        <DashboardHeader name={name} isOnline={online} isVerified={verified} />
+        <DashboardHeader
+          name={name}
+          isOnline={online}
+          isVerified={verified}
+          unreadNotifications={unread}
+          onPressNotifications={() => router.push('/(mechanic)/notifications')}
+        />
 
         <View style={styles.body}>
           <OnlineCard online={online} onToggle={toggleOnline} />

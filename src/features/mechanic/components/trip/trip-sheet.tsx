@@ -42,11 +42,11 @@ interface TripSheetProps {
 const PRIMARY: Record<TripPhase, { label: string; icon: IconName }> = {
   preview: { label: 'Mulai Perjalanan', icon: 'navigate-outline' },
   enroute: { label: 'Sampai di Lokasi', icon: 'location-outline' },
-  arrived: { label: 'Buka Detail Order', icon: 'document-text-outline' },
+  arrived: { label: 'Isi Tagihan', icon: 'receipt-outline' },
   completed: { label: 'Buka Detail Order', icon: 'document-text-outline' },
 };
 
-const STEPS = ['Diterima', 'Berangkat', 'Tiba'] as const;
+const STEPS = ['Diterima', 'Berangkat', 'Tiba', 'Tagihan'] as const;
 
 /** Pegas snap saat sheet dilepas / diketuk. */
 const SHEET_SPRING = { damping: 24, stiffness: 240, mass: 0.7 };
@@ -55,7 +55,12 @@ const SHEET_SPRING = { damping: 24, stiffness: 240, mass: 0.7 };
 const FLING_VELOCITY = 600;
 
 function stepState(phase: TripPhase, index: number): 'done' | 'active' | 'next' {
-  const activeIndex = phase === 'preview' ? 1 : phase === 'enroute' ? 1 : 2;
+  const activeIndex =
+    phase === 'preview' || phase === 'enroute'
+      ? 1
+      : phase === 'arrived'
+        ? 3
+        : STEPS.length;
   if (index < activeIndex) return 'done';
   if (index === activeIndex) return 'active';
   return 'next';

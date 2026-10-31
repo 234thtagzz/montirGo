@@ -4,7 +4,7 @@ import { Ionicons } from '@/components/ui/icon';
 import { Brand, CardShadow, Radius, Space } from '@/constants/brand';
 import { formatDateTime } from '@/utils/format';
 import type { ClientOrder } from '@/features/client/types';
-import { getProgressLabel, getStatusMeta } from '@/features/service-request/status';
+import { getProgressLabel, getStatusMeta, TOTAL_STEPS } from '@/features/service-request/status';
 
 interface ActiveOrderCardProps {
   order: ClientOrder;
@@ -41,7 +41,7 @@ export function ActiveOrderCard({ order, onPress }: ActiveOrderCardProps) {
 
       {meta.step > 0 ? (
         <View style={styles.progress}>
-          {Array.from({ length: 7 }).map((_, index) => (
+          {Array.from({ length: TOTAL_STEPS }).map((_, index) => (
             <View
               key={index}
               style={[styles.segment, index < meta.step && styles.segmentActive]}

@@ -242,6 +242,21 @@ export async function listMyOrders(onlyActive = false): Promise<MyOrder[]> {
   }));
 }
 
+export async function getMyActiveOrderId(mechanicId?: string): Promise<string | null> {
+  const id = mechanicId ?? (await getMyId());
+  const { data, error } = await supabase
+    .from('service_requests')
+    .select('id')
+    .eq('mechanic_id', id)
+    .neq('status', 'paid')
+    .neq('status', 'cancelled')
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (error) throw error;
+  return (data as { id?: string } | null)?.id ?? null;
+}
+
 export async function getMyOrder(id: string): Promise<MechanicOrderDetail | null> {
   const mechanicId = await getMyId();
   const { data, error } = await supabase
@@ -339,6 +354,10 @@ export async function listOrderStatusHistory(requestId: string): Promise<OrderSt
 
 const ACCEPT_RPC = 'accept_service_request';
 
+/** Pesan seragam saat montir masih memegang order yang belum selesai. */
+export const ACTIVE_ORDER_MESSAGE =
+  'Kamu masih punya order aktif. Selesaikan order itu sampai lunas sebelum mengambil request baru.';
+
 function isRpcMissing(error: { code?: string; message?: string } | null): boolean {
   if (!error) return false;
   return (
@@ -361,6 +380,11 @@ function isRpcMissing(error: { code?: string; message?: string } | null): boolea
  */
 export async function acceptOrder(requestId: string): Promise<void> {
   const id = await getMyId();
+
+  // Satu montir hanya boleh memegang satu order aktif. RPC juga memeriksa ini
+  // di server; cek di sini supaya pesan errornya langsung ramah.
+  const activeOrderId = await getMyActiveOrderId(id).catch(() => null);
+  if (activeOrderId) throw new Error(ACTIVE_ORDER_MESSAGE);
 
   const { data, error } = await supabase.rpc(ACCEPT_RPC, { p_request_id: requestId });
   if (!error) {
@@ -448,11 +472,27 @@ export async function updateOrderStatus(requestId: string, toStatus: OrderStatus
     to_status: toStatus,
     changed_by: id,
   });
-  await logActivity('order_status', `Order ${requestId.slice(0, 8)} -> ${toStatus}.`);
+  const shortId = requestId.slice(0, 8).toUpperCase();
+  await logActivity(
+    toStatus === 'arrived' ? 'order_arrived' : 'order_status',
+    ACTIVITY_DESCRIPTION[toStatus]?.(shortId) ?? `Order ${shortId} -> ${toStatus}.`,
+  );
 }
 
+/** Kalimat aktivitas yang ramah dibaca di layar Aktivitas montir. */
+const ACTIVITY_DESCRIPTION: Partial<Record<OrderStatus, (shortId: string) => string>> = {
+  mechanic_assigned: (shortId) => `Order #${shortId} diberikan kepadamu.`,
+  mechanic_accepted: (shortId) => `Kamu menerima order #${shortId}.`,
+  on_the_way: (shortId) => `Kamu mulai menuju lokasi order #${shortId}.`,
+  arrived: (shortId) =>
+    `Kamu tiba di lokasi order #${shortId}. Lanjut isi tagihan untuk client.`,
+  payment: (shortId) => `Tagihan order #${shortId} terkirim, menunggu pembayaran client.`,
+  paid: (shortId) => `Pembayaran order #${shortId} sudah lunas.`,
+  cancelled: (shortId) => `Order #${shortId} dibatalkan.`,
+};
+
 const PRICE_ERROR_MESSAGES: Record<string, string> = {
-  INVALID_STATUS: 'Harga hanya bisa diisi saat pekerjaan sedang berjalan atau selesai.',
+  INVALID_STATUS: 'Tagihan bisa diisi setelah kamu tiba di lokasi client.',
   INVALID_PRICE: 'Nominal tagihan tidak valid atau di luar batas yang diizinkan.',
   ALREADY_PAID: 'Order ini sudah dibayar.',
   NOT_YOUR_ORDER: 'Order ini bukan milikmu.',
@@ -474,8 +514,9 @@ export async function setOrderPrice(requestId: string, price: number): Promise<v
     throw new Error(PRICE_ERROR_MESSAGES[code] ?? code ?? 'Gagal menyimpan tagihan.');
   }
   await logActivity(
-    'order_status',
-    `Mengirim tagihan order ${requestId.slice(0, 8)} sebesar ${price}.`,
+    'invoice_sent',
+    `Tagihan order ${requestId.slice(0, 8).toUpperCase()} sebesar ` +
+      `Rp${price.toLocaleString('id-ID')} dikirim ke client.`,
   );
 }
 

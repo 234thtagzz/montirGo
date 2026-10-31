@@ -26,7 +26,13 @@ interface OrderCardProps {
   /** Ganti chip status default (mis. "Request baru" di tab Request). */
   badge?: OrderBadge;
   onPress?: () => void;
-  action?: { label: string; icon: IconName; loading?: boolean; onPress: () => void };
+  action?: {
+    label: string;
+    icon: IconName;
+    loading?: boolean;
+    disabled?: boolean;
+    onPress: () => void;
+  };
 }
 
 /** Kartu order yang dipakai di dashboard, request masuk, dan order aktif. */
@@ -92,6 +98,7 @@ export function OrderCard({
           label={action.label}
           icon={action.icon}
           loading={action.loading}
+          disabled={action.disabled}
           onPress={action.onPress}
           style={styles.action}
         />

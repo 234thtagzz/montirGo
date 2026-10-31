@@ -1,5 +1,5 @@
 import { LinearGradient } from 'expo-linear-gradient';
-import { StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Avatar } from '@/components/ui/avatar';
 import { Ionicons } from '@/components/ui/icon';
@@ -9,6 +9,9 @@ interface DashboardHeaderProps {
   name: string;
   isOnline: boolean;
   isVerified: boolean;
+  /** Jumlah notifikasi yang belum dibaca (badge lonceng). */
+  unreadNotifications?: number;
+  onPressNotifications?: () => void;
 }
 
 function greeting(): string {
@@ -25,7 +28,13 @@ function firstName(name: string): string {
   return clean.split(/\s+/)[0];
 }
 
-export function DashboardHeader({ name, isOnline, isVerified }: DashboardHeaderProps) {
+export function DashboardHeader({
+  name,
+  isOnline,
+  isVerified,
+  unreadNotifications = 0,
+  onPressNotifications,
+}: DashboardHeaderProps) {
   const insets = useSafeAreaInsets();
 
   return (
@@ -48,14 +57,39 @@ export function DashboardHeader({ name, isOnline, isVerified }: DashboardHeaderP
           </View>
         </View>
 
-        <View style={styles.statusPill}>
-          <View
-            style={[
-              styles.statusDot,
-              { backgroundColor: isOnline ? Brand.green : 'rgba(255,255,255,0.6)' },
-            ]}
-          />
-          <Text style={styles.statusText}>{isOnline ? 'Online' : 'Offline'}</Text>
+        <View style={styles.topActions}>
+          {onPressNotifications ? (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={
+                unreadNotifications > 0
+                  ? `Notifikasi, ${unreadNotifications} belum dibaca`
+                  : 'Buka notifikasi'
+              }
+              hitSlop={8}
+              onPress={onPressNotifications}
+              style={({ pressed }) => [styles.bell, pressed && styles.pressed]}
+            >
+              <Ionicons name="notifications-outline" size={20} color={Brand.white} />
+              {unreadNotifications > 0 ? (
+                <View style={styles.bellBadge}>
+                  <Text style={styles.bellBadgeText}>
+                    {unreadNotifications > 9 ? '9+' : unreadNotifications}
+                  </Text>
+                </View>
+              ) : null}
+            </Pressable>
+          ) : null}
+
+          <View style={styles.statusPill}>
+            <View
+              style={[
+                styles.statusDot,
+                { backgroundColor: isOnline ? Brand.green : 'rgba(255,255,255,0.6)' },
+              ]}
+            />
+            <Text style={styles.statusText}>{isOnline ? 'Online' : 'Offline'}</Text>
+          </View>
         </View>
       </View>
 
@@ -93,6 +127,29 @@ const styles = StyleSheet.create({
   userText: { flex: 1 },
   greeting: { color: 'rgba(255,255,255,0.78)', fontSize: 12 },
   name: { color: Brand.white, fontSize: 16, fontWeight: '700', marginTop: 1 },
+  topActions: { flexDirection: 'row', alignItems: 'center', gap: Space.sm },
+  bell: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(255,255,255,0.18)',
+  },
+  pressed: { opacity: 0.7 },
+  bellBadge: {
+    position: 'absolute',
+    top: 1,
+    right: 0,
+    minWidth: 16,
+    height: 16,
+    paddingHorizontal: 3,
+    borderRadius: 8,
+    backgroundColor: Brand.red,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  bellBadgeText: { color: Brand.white, fontSize: 9, fontWeight: '700' },
   statusPill: {
     flexDirection: 'row',
     alignItems: 'center',

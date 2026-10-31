@@ -33,13 +33,13 @@ import {
   type AiAnalysis,
 } from "@/features/service-request/ai";
 import { AiAnalysisCard } from "@/features/service-request/components/ai-analysis-card";
-import { getStatusMeta } from "@/features/service-request/status";
+import { getStatusMeta, TOTAL_STEPS } from "@/features/service-request/status";
 import { TripEntryCard } from "@/features/mechanic/components/trip/trip-entry-card";
 import { supabase } from "@/lib/supabase";
 import { formatDateTime, formatIDR } from "@/utils/format";
 import { openWhatsApp } from "@/utils/whatsapp";
 import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   Alert,
   Pressable,
@@ -49,11 +49,16 @@ import {
   Text,
   TextInput,
   View,
+  type LayoutChangeEvent,
+  type ScrollViewInstance,
 } from "react-native";
 
 export default function MechanicOrderDetailScreen() {
-  const { id } = useLocalSearchParams<{ id: string }>();
+  const { id, focus } = useLocalSearchParams<{ id: string; focus?: string }>();
   const router = useRouter();
+  const scrollRef = useRef<ScrollViewInstance>(null);
+  const billingOffset = useRef<number | null>(null);
+  const scrolledToBilling = useRef(false);
 
   const [order, setOrder] = useState<MechanicOrderDetail | null>(null);
   const [history, setHistory] = useState<OrderStatusEvent[]>([]);
@@ -181,6 +186,21 @@ export default function MechanicOrderDetailScreen() {
     };
   }, []);
 
+  // Montir yang baru menekan "Sampai di Lokasi" diarahkan ke sini dengan
+  // param `focus=invoice`, jadi form tagihan langsung terlihat tanpa scroll manual.
+  const handleBillingLayout = useCallback(
+    (event: LayoutChangeEvent) => {
+      billingOffset.current = event.nativeEvent.layout.y;
+      if (focus !== "invoice" || scrolledToBilling.current) return;
+      scrolledToBilling.current = true;
+      const y = Math.max(0, billingOffset.current - Space.md);
+      requestAnimationFrame(() => {
+        scrollRef.current?.scrollTo({ y, animated: true });
+      });
+    },
+    [focus],
+  );
+
   const existingPrice = order?.price_amount ?? null;
   // Selama mekanik mengetik, pakai draft lokal. Bila belum mengetik, input
   // mengikuti harga terakhir dari server tanpa perlu efek sinkronisasi.
@@ -206,7 +226,8 @@ export default function MechanicOrderDetailScreen() {
     priceValue <= maxPrice &&
     !priceError;
   const canEditPrice =
-    order != null && ["diagnosing", "repairing", "completed"].includes(order.status);
+    order != null &&
+    ["arrived", "diagnosing", "repairing", "completed"].includes(order.status);
 
   const submitPrice = () => {
     if (!order || !canSendPrice) return;
@@ -350,6 +371,7 @@ export default function MechanicOrderDetailScreen() {
         subtitle={`#${order.id.slice(0, 8).toUpperCase()}`}
       />
       <ScrollView
+        ref={scrollRef}
         contentContainerStyle={styles.content}
         showsVerticalScrollIndicator={false}
         refreshControl={
@@ -383,7 +405,7 @@ export default function MechanicOrderDetailScreen() {
 
           {meta.step > 0 ? (
             <View style={styles.progress}>
-              {Array.from({ length: 7 }).map((_, index) => (
+              {Array.from({ length: TOTAL_STEPS }).map((_, index) => (
                 <View
                   key={index}
                   style={[
@@ -458,6 +480,7 @@ export default function MechanicOrderDetailScreen() {
           ) : null}
         </View>
 
+        <View onLayout={handleBillingLayout} />
         <Text style={styles.section}>Tagihan & pembayaran</Text>
         {canEditPrice ? (
           <View style={styles.billingCard}>
@@ -537,8 +560,8 @@ export default function MechanicOrderDetailScreen() {
               color={Brand.primary}
             />
             <Text style={styles.infoText}>
-              Tagihan bisa dikirim saat pekerjaan memasuki tahap diagnosis,
-              perbaikan, atau selesai.
+              Tagihan bisa dikirim setelah kamu menekan “Sampai di Lokasi”. Client
+              langsung menerima notifikasi pembayaran.
             </Text>
           </View>
         )}

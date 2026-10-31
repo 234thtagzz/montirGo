@@ -21,9 +21,12 @@ export interface StatusMeta {
   color: string;
   background: string;
   icon: IconName;
-  /** Langkah 1-7 pada indikator progres; 0 untuk status batal. */
+  /** Langkah 1-6 pada indikator progres; 0 untuk status batal. */
   step: number;
 }
+
+/** Jumlah langkah pada indikator progres order. */
+export const TOTAL_STEPS = 6;
 
 const META: Record<OrderStatus, StatusMeta> = {
   requested: {
@@ -67,7 +70,7 @@ const META: Record<OrderStatus, StatusMeta> = {
     step: 3,
   },
   arrived: {
-    label: 'Montir sudah tiba',
+    label: 'Montir tiba di lokasi',
     shortLabel: 'Montir tiba',
     color: Brand.primary,
     background: Brand.blueSoft,
@@ -80,7 +83,7 @@ const META: Record<OrderStatus, StatusMeta> = {
     color: Brand.primary,
     background: Brand.blueSoft,
     icon: 'medkit-outline',
-    step: 5,
+    step: 4,
   },
   repairing: {
     label: 'Kendaraan sedang diperbaiki',
@@ -88,7 +91,7 @@ const META: Record<OrderStatus, StatusMeta> = {
     color: Brand.primary,
     background: Brand.blueSoft,
     icon: 'construct-outline',
-    step: 5,
+    step: 4,
   },
   completed: {
     label: 'Pekerjaan selesai',
@@ -96,7 +99,7 @@ const META: Record<OrderStatus, StatusMeta> = {
     color: Brand.green,
     background: Brand.greenSoft,
     icon: 'checkmark-done-outline',
-    step: 6,
+    step: 5,
   },
   payment: {
     label: 'Menunggu pembayaran',
@@ -104,7 +107,7 @@ const META: Record<OrderStatus, StatusMeta> = {
     color: Brand.amber,
     background: Brand.amberSoft,
     icon: 'wallet-outline',
-    step: 7,
+    step: 5,
   },
   paid: {
     label: 'Pembayaran lunas',
@@ -112,7 +115,7 @@ const META: Record<OrderStatus, StatusMeta> = {
     color: Brand.green,
     background: Brand.greenSoft,
     icon: 'shield-checkmark-outline',
-    step: 7,
+    step: 6,
   },
   cancelled: {
     label: 'Pesanan dibatalkan',
@@ -144,7 +147,6 @@ export function getProgressLabel(status: string): string {
   if (step === 2) return 'Montir menerima pesananmu';
   if (step === 3) return 'Montir sedang menuju lokasi';
   if (step === 4) return 'Montir sudah tiba di lokasi';
-  if (step === 5) return 'Kendaraan sedang ditangani';
-  if (step === 6) return 'Pekerjaan selesai';
-  return 'Menunggu pembayaran';
+  if (step === 5) return 'Menunggu pembayaran';
+  return 'Pembayaran lunas';
 }

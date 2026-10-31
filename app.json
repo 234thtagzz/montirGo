@@ -34,7 +34,14 @@
           "resizeMode": "contain"
         }
       ],
-      "expo-status-bar"
+      "expo-status-bar",
+      [
+        "expo-notifications",
+        {
+          "color": "#0B74E5",
+          "defaultChannel": "requests"
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true,
