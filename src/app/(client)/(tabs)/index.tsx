@@ -121,14 +121,20 @@ export default function ClientHomeScreen() {
     });
   };
 
+  /** Pesanan aktif dengan montir di jalan langsung membuka layar perjalanan. */
+  const openOrder = (order: ClientOrder) => {
+    router.push(
+      order.status === 'on_the_way'
+        ? { pathname: '/(client)/tracking/[id]', params: { id: order.id } }
+        : { pathname: '/(client)/orders/[id]', params: { id: order.id } },
+    );
+  };
+
   const openPromo = (key: PromoKey) => {
     if (key === 'track') {
       const active = orders.find((order) => isActiveStatus(order.status));
       if (active) {
-        router.push({
-          pathname: '/(client)/orders/[id]',
-          params: { id: active.id },
-        });
+        openOrder(active);
       } else router.push('/(client)/(tabs)/my-requests');
       return;
     }
@@ -215,12 +221,7 @@ export default function ClientHomeScreen() {
                   />
                   <ActiveOrderCard
                     order={activeOrder}
-                    onPress={() =>
-                      router.push({
-                        pathname: '/(client)/orders/[id]',
-                        params: { id: activeOrder.id },
-                      })
-                    }
+                    onPress={() => openOrder(activeOrder)}
                   />
                 </>
               ) : null}

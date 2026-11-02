@@ -21,6 +21,9 @@ export interface ClientOrder {
   issue_description: string;
   symptoms: string | null;
   address: string | null;
+  /** Koordinat lokasi client, tujuan perjalanan montir. */
+  lat: number | null;
+  lng: number | null;
   contact_phone: string;
   additional_notes: string | null;
   price_amount: number | null;
@@ -67,6 +70,14 @@ export interface ClientNotification {
   type: string;
   is_read: boolean;
   created_at: string;
+}
+
+/** Titik posisi montir terakhir yang dipublikasikan selama perjalanan. */
+export interface MechanicLocationSnapshot {
+  lat: number;
+  lng: number;
+  accuracy_meters: number | null;
+  recorded_at: string;
 }
 
 export interface CreateServiceRequestInput {

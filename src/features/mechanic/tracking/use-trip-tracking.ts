@@ -1,7 +1,7 @@
 import * as Location from 'expo-location';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { getLastMechanicLocation, recordMechanicLocation } from '../service';
-import { fetchTripRoute, getMapsApiKey, type TripRoute } from './directions';
+import { fetchTripRoute, type TripRoute } from './directions';
 import { estimateEtaSeconds, haversineMeters, type LatLng } from './geo';
 
 /** Kirim posisi paling cepat tiap 5 detik … */
@@ -289,7 +289,7 @@ export function useTripTracking({
     etaSeconds,
     isNearDestination:
       distanceToDestinationM != null && distanceToDestinationM <= ARRIVAL_RADIUS_METERS,
-    usingEstimatedRoute: route?.estimated ?? getMapsApiKey() == null,
+    usingEstimatedRoute: route?.estimated ?? false,
     retryPermission: () => {
       setPermission('unknown');
       setPermissionAttempt((value) => value + 1);

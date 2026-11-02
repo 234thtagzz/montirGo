@@ -12,6 +12,12 @@ export interface TripMapProps {
   route: TripRoute | null;
   /** true = rute estimasi, digambar putus-putus. */
   estimated: boolean;
+  /**
+   * `mechanic` (default): kamera mengikuti posisi montir seperti layar navigasi.
+   * `client`: kamera membingkai seluruh rute agar montir dan lokasi client
+   * sama-sama terlihat (dipakai di kartu pelacakan client).
+   */
+  mode?: 'mechanic' | 'client';
   /** Ruang di atas peta yang tertutup kartu status. */
   topInset: number;
   /** Ruang di bawah peta yang tertutup bottom sheet. */

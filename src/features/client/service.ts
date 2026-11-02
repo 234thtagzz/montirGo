@@ -6,6 +6,7 @@ import type {
   ClientOrder,
   ClientVehicle,
   CreateServiceRequestInput,
+  MechanicLocationSnapshot,
   NearbyMechanic,
   OrderStatusEvent,
   VehicleInput,
@@ -14,9 +15,9 @@ import type {
 export * from './types';
 
 const ORDER_SELECT =
-  'id, status, issue_description, symptoms, address, contact_phone, additional_notes, ' +
-  'price_amount, payment_method, created_at, updated_at, vehicle_id, mechanic_id, ' +
-  'vehicles ( type, brand, model, year, license_plate, photo_url ), ' +
+  'id, status, issue_description, symptoms, address, lat, lng, contact_phone, ' +
+  'additional_notes, price_amount, payment_method, created_at, updated_at, vehicle_id, ' +
+  'mechanic_id, vehicles ( type, brand, model, year, license_plate, photo_url ), ' +
   'mechanic:profiles!service_requests_mechanic_id_fkey ( full_name, phone_number, avatar_url )';
 
 interface RawOrder {
@@ -25,6 +26,8 @@ interface RawOrder {
   issue_description: string;
   symptoms: string | null;
   address: string | null;
+  lat: number | null;
+  lng: number | null;
   contact_phone: string;
   additional_notes: string | null;
   price_amount: number | null;
@@ -51,6 +54,8 @@ function mapOrder(row: RawOrder): ClientOrder {
     issue_description: row.issue_description,
     symptoms: row.symptoms,
     address: row.address,
+    lat: row.lat,
+    lng: row.lng,
     contact_phone: row.contact_phone,
     additional_notes: row.additional_notes,
     price_amount: row.price_amount,
@@ -160,6 +165,27 @@ export async function getRequest(id: string): Promise<ClientOrder | null> {
     .maybeSingle();
   if (error) throw error;
   return data ? mapOrder(data as unknown as RawOrder) : null;
+}
+
+/**
+ * Posisi montir terakhir untuk satu pesanan.
+ *
+ * Client hanya boleh membaca baris milik pesanannya (policy `ml_select_involved`),
+ * jadi query ini aman dipanggil dari perangkat client. `null` berarti montir
+ * belum pernah mengirim sinyal GPS.
+ */
+export async function getLatestMechanicLocation(
+  requestId: string,
+): Promise<MechanicLocationSnapshot | null> {
+  const { data, error } = await supabase
+    .from('mechanic_locations')
+    .select('lat, lng, accuracy_meters, recorded_at')
+    .eq('request_id', requestId)
+    .order('recorded_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (error) throw error;
+  return (data as MechanicLocationSnapshot | null) ?? null;
 }
 
 export async function createServiceRequest(

@@ -183,9 +183,55 @@ Di Google Cloud, pada project key tersebut:
   **Directions API** lama bila yang aktif justru itu),
 - aktifkan billing, lalu batasi key ke API tersebut.
 
-Tanpa key/routing aktif, aplikasi tetap berjalan: rute digambar sebagai garis
-lurus putus-putus dan ETA memakai estimasi 25 km/jam (chip "Rute estimasi"
-muncul di atas peta).
+Urutan sumber rute di aplikasi:
+
+1. **Google Routes API** — rute tercepat dengan data lalu lintas (`TRAFFIC_AWARE`).
+2. **Google Directions API** — fallback untuk project yang hanya mengaktifkan API lama.
+3. **OSRM / OpenStreetMap** — rute jalan nyata tanpa API key. Dipakai otomatis
+   bila Google belum aktif, key dibatasi, atau tanpa key sama sekali. Rute
+   tercepat tetap dipilih dari beberapa alternatif, tetapi tanpa data lalu lintas
+   realtime (chip "Rute tercepat · tanpa data lalu lintas" muncul di peta).
+4. **Garis lurus + estimasi** — hanya saat offline total; chip "Rute estimasi"
+   muncul dan garis digambar putus-putus.
+
+Server OSRM default adalah demo publik. Untuk produksi arahkan ke server sendiri:
+
+```bash
+EXPO_PUBLIC_OSRM_URL=https://osrm.contoh.com
+```
+
+Tanpa key Google, aplikasi tetap menampilkan rute jalan lewat OSRM. Bila OSRM
+juga tidak dapat dihubungi (offline), ETA memakai estimasi 25 km/jam.
+
+## Pelacakan montir di sisi client
+
+Saat montir menekan **Mulai Perjalanan** (status `on_the_way`), client bisa
+membuka **layar perjalanan penuh** (`/(client)/tracking/[id]`) dari kartu
+pesanan aktif, tombol **Lacak**, atau kartu "Perjalanan sedang berlangsung" di
+detail pesanan. Tampilannya mengikuti layar trip montir:
+
+- peta penuh dengan posisi montir + rute tercepat ke lokasi client,
+- kartu status mengambang di atas: judul, ETA/jarak, dan tombol chat montir,
+- bottom sheet yang bisa dilipat (geser/ketuk) berisi identitas montir, sisa
+  waktu, sisa jarak, perkiraan jam tiba, alamat, langkah status, telepon, dan
+  pintasan **Detail pesanan**.
+
+Chip **Live** berubah **Terakhir** bila belum ada titik baru ±45 detik (montir
+berhenti/bergeser <15 m memang tidak mengirim titik baru). Selama belum ada
+sinyal sama sekali, chip **Menunggu** dan sheet menjelaskan bahwa posisi muncul
+otomatis.
+
+Sumber data di perangkat client bersifat pasif (tanpa izin GPS, tanpa menulis
+posisi):
+
+1. Realtime Supabase `mechanic_locations` (INSERT, filter `request_id`) —
+   membutuhkan migration `20261031000000_mechanic_trip_tracking.sql` yang sudah
+   menambahkan tabel ini ke publication `supabase_realtime`.
+2. Polling 10 detik sebagai cadangan bila websocket terputus.
+3. Rute dihitung ulang saat montir bergeser ≥30 m atau sudah 30 detik.
+
+RLS `ml_select_involved` mengizinkan client membaca titik lokasi milik
+pesanannya; client lain dan pengguna anonim tidak bisa.
 
 ## Tile peta (opsional)
 
@@ -229,4 +275,9 @@ keytool -list -v -keystore "$env:USERPROFILE\.android\debug.keystore" -alias and
    sudah di-push).
 3. Peta mengikuti posisi; sheet menampilkan sisa waktu, jarak, dan jam tiba.
 4. Di sekitar lokasi client, muncul penanda "Kamu sudah dekat lokasi client".
-5. Tekan **Sampai di Lokasi** → status `arrived`, layar pindah ke detail order.
+5. Buka akun client → kartu pesanan aktif / **Lacak** membuka layar perjalanan
+   penuh: posisi montir, rute, ETA, dan jam tiba secara realtime (chip **Live**).
+   Tombol **Detail pesanan** di bottom sheet membuka rincian order; dari detail,
+   kartu "Perjalanan sedang berlangsung" mengembalikan ke peta.
+6. Tekan **Sampai di Lokasi** → status `arrived`, layar perjalanan client
+   menampilkan "Montir sudah tiba di lokasimu" dengan tombol ke detail order.

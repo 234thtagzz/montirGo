@@ -25,6 +25,7 @@ export function TripMapWebView({
   destination,
   route,
   estimated,
+  mode = 'mechanic',
   topInset,
   bottomInset,
   recenterToken,
@@ -67,6 +68,11 @@ export function TripMapWebView({
   useEffect(() => {
     run(`window.TripMap.setInsets(${Math.round(topInset)}, ${Math.round(bottomInset)});`);
   }, [run, topInset, bottomInset]);
+
+  // Mode "client": kamera membingkai rute, bukan mengikuti montir.
+  useEffect(() => {
+    run(`window.TripMap.setMode(${JSON.stringify(mode)});`);
+  }, [run, mode]);
 
   const destinationLat = destination?.latitude;
   const destinationLng = destination?.longitude;

@@ -100,6 +100,10 @@ export function buildTripMapHtml(): string {
   var hasFitted = false;
   var hasCentered = false;
   var arrowEl = null;
+  // 'mechanic' = kamera mengikuti montir; 'client' = kamera membingkai rute.
+  var MODE = 'mechanic';
+  // Tampilan client: berhenti membingkai otomatis setelah pengguna menggeser peta.
+  var viewerPanned = false;
 
   var map = L.map('map', {
     zoomControl: false,
@@ -149,6 +153,7 @@ export function buildTripMapHtml(): string {
   var clientMarker = null;
 
   map.on('dragstart', function () {
+    if (MODE === 'client') viewerPanned = true;
     if (follow) {
       follow = false;
       post({ type: 'follow', value: false });
@@ -164,13 +169,47 @@ export function buildTripMapHtml(): string {
     map.setView(center, FOLLOW_ZOOM, { animate: !!animate, duration: 0.6 });
   }
 
+  // Tampilan client: bingkai seluruh rute (atau montir + tujuan) agar keduanya
+  // terlihat dalam satu layar.
+  function fitViewer(animate) {
+    var bounds = null;
+    var points = line.getLatLngs();
+    if (points && points.length > 1) {
+      bounds = line.getBounds();
+    } else {
+      bounds = L.latLngBounds([]);
+      if (meMarker) bounds.extend(meMarker.getLatLng());
+      if (clientMarker) bounds.extend(clientMarker.getLatLng());
+      if (!bounds.isValid()) return;
+    }
+    map.fitBounds(bounds, {
+      paddingTopLeft: [28, TOP_INSET + 20],
+      paddingBottomRight: [28, BOTTOM_INSET + 20],
+      maxZoom: 16,
+      animate: !!animate,
+      duration: 0.5,
+    });
+  }
+
   window.TripMap = {
     setInsets: function (top, bottom) {
       TOP_INSET = top;
       BOTTOM_INSET = bottom;
       // Kartu atas/bawah berubah tinggi (mis. sheet dilipat): jaga montir tetap
       // di tengah area yang terlihat.
-      if (follow && meMarker) {
+      if (MODE === 'mechanic' && follow && meMarker) {
+        var p = meMarker.getLatLng();
+        centerOn(p.lat, p.lng, true);
+      } else if (MODE === 'client' && !viewerPanned) {
+        fitViewer(true);
+      }
+    },
+    setMode: function (mode) {
+      MODE = mode === 'client' ? 'client' : 'mechanic';
+      if (MODE === 'client') {
+        viewerPanned = false;
+        fitViewer(true);
+      } else if (follow && meMarker) {
         var p = meMarker.getLatLng();
         centerOn(p.lat, p.lng, true);
       }
@@ -182,6 +221,9 @@ export function buildTripMapHtml(): string {
         }).addTo(map);
       } else {
         clientMarker.setLatLng([lat, lng]);
+      }
+      if (MODE === 'client' && !viewerPanned && line.getLatLngs().length < 2) {
+        fitViewer(hasFitted);
       }
     },
     setMechanic: function (lat, lng, heading) {
@@ -197,9 +239,12 @@ export function buildTripMapHtml(): string {
       if (arrowEl && typeof heading === 'number' && isFinite(heading)) {
         arrowEl.style.transform = 'rotate(' + heading + 'deg)';
       }
-      if (follow) {
+      if (MODE === 'mechanic' && follow) {
         centerOn(lat, lng, hasCentered);
         hasCentered = true;
+      } else if (MODE === 'client' && !viewerPanned && line.getLatLngs().length < 2) {
+        fitViewer(hasFitted);
+        hasFitted = true;
       }
     },
     setRoute: function (points, estimated, fit) {
@@ -211,6 +256,14 @@ export function buildTripMapHtml(): string {
       casing.setLatLngs(points);
       line.setLatLngs(points);
       line.setStyle({ dashArray: estimated ? '10 8' : null });
+      if (MODE === 'client') {
+        // Bingkai rute selama pengguna belum menggeser peta sendiri.
+        if (!viewerPanned) {
+          fitViewer(hasFitted);
+          hasFitted = true;
+        }
+        return;
+      }
       if (fit && !hasFitted) {
         hasFitted = true;
         map.fitBounds(line.getBounds(), {
@@ -221,7 +274,10 @@ export function buildTripMapHtml(): string {
     },
     recenter: function () {
       follow = true;
-      if (meMarker) {
+      if (MODE === 'client') {
+        viewerPanned = false;
+        fitViewer(true);
+      } else if (meMarker) {
         var p = meMarker.getLatLng();
         centerOn(p.lat, p.lng, true);
       }

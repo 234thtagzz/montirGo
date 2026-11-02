@@ -37,6 +37,7 @@ export function TripMapGoogle({
   destination,
   route,
   estimated,
+  mode = 'mechanic',
   topInset,
   bottomInset,
   recenterToken,
@@ -58,16 +59,33 @@ export function TripMapGoogle({
 
   // Saat rute pertama kali tersedia: tampilkan seluruh perjalanan.
   useEffect(() => {
+    if (mode !== 'mechanic') return;
     if (fittedOnceRef.current || routeCoordinates.length < 2) return;
     fittedOnceRef.current = true;
     mapRef.current?.fitToCoordinates(routeCoordinates, {
       edgePadding: { top: topInset + 32, bottom: bottomInset + 32, left: 40, right: 40 },
       animated: true,
     });
-  }, [routeCoordinates, topInset, bottomInset]);
+  }, [mode, routeCoordinates, topInset, bottomInset]);
+
+  // Mode client: bingkai rute (atau montir + tujuan) setiap rute diperbarui.
+  const viewerCoordinates = useMemo(() => {
+    if (mode !== 'client') return [];
+    if (routeCoordinates.length > 1) return routeCoordinates;
+    return mechanic && destination ? [mechanic, destination] : [];
+  }, [mode, routeCoordinates, mechanic, destination]);
+
+  useEffect(() => {
+    if (mode !== 'client' || viewerCoordinates.length < 2) return;
+    mapRef.current?.fitToCoordinates(viewerCoordinates, {
+      edgePadding: { top: 28, bottom: 28, left: 28, right: 28 },
+      animated: true,
+    });
+  }, [mode, viewerCoordinates]);
 
   // Tombol "recenter" ditekan: kembali mengikuti montir.
   useEffect(() => {
+    if (mode !== 'mechanic') return;
     if (recenterToken === lastRecenterRef.current) return;
     lastRecenterRef.current = recenterToken;
     followingRef.current = true;
@@ -78,16 +96,17 @@ export function TripMapGoogle({
         { duration: 600 },
       );
     }
-  }, [recenterToken, mechanicLat, mechanicLng, onFollowChange]);
+  }, [mode, recenterToken, mechanicLat, mechanicLng, onFollowChange]);
 
   // Ikuti montir selama pengguna belum menggeser peta.
   useEffect(() => {
+    if (mode !== 'mechanic') return;
     if (mechanicLat == null || mechanicLng == null || !followingRef.current) return;
     mapRef.current?.animateCamera(
       { center: { latitude: mechanicLat, longitude: mechanicLng }, zoom: FOLLOW_ZOOM },
       { duration: 900 },
     );
-  }, [mechanicLat, mechanicLng]);
+  }, [mode, mechanicLat, mechanicLng]);
 
   if (needsDevBuild) {
     return (

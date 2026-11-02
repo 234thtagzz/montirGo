@@ -1,18 +1,34 @@
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Ionicons } from '@/components/ui/icon';
+import { Ionicons, type IconName } from '@/components/ui/icon';
 import { Brand, CardShadow, Radius, Space } from '@/constants/brand';
 
 interface TripTopBarProps {
   title: string;
   subtitle: string;
   estimated: boolean;
+  /** false = rute memakai OSRM (tanpa data lalu lintas realtime). */
+  trafficAware: boolean;
   onBack: () => void;
-  onOpenMaps: () => void;
+  /** Aksi utama di kanan: buka rute (montir) atau chat (client). */
+  onAction: () => void;
+  actionIcon?: IconName;
+  actionLabel?: string;
+  actionBackground?: string;
 }
 
 /** Kartu status mengambang di atas peta (gaya aplikasi transportasi). */
-export function TripTopBar({ title, subtitle, estimated, onBack, onOpenMaps }: TripTopBarProps) {
+export function TripTopBar({
+  title,
+  subtitle,
+  estimated,
+  trafficAware,
+  onBack,
+  onAction,
+  actionIcon = 'navigate',
+  actionLabel = 'Buka rute di Google Maps',
+  actionBackground = Brand.primary,
+}: TripTopBarProps) {
   const insets = useSafeAreaInsets();
 
   return (
@@ -41,11 +57,15 @@ export function TripTopBar({ title, subtitle, estimated, onBack, onOpenMaps }: T
 
         <Pressable
           accessibilityRole="button"
-          accessibilityLabel="Buka rute di Google Maps"
-          onPress={onOpenMaps}
-          style={({ pressed }) => [styles.routeButton, pressed && styles.pressed]}
+          accessibilityLabel={actionLabel}
+          onPress={onAction}
+          style={({ pressed }) => [
+            styles.routeButton,
+            { backgroundColor: actionBackground },
+            pressed && styles.pressed,
+          ]}
         >
-          <Ionicons name="navigate" size={18} color={Brand.white} />
+          <Ionicons name={actionIcon} size={18} color={Brand.white} />
         </Pressable>
       </View>
 
@@ -53,6 +73,11 @@ export function TripTopBar({ title, subtitle, estimated, onBack, onOpenMaps }: T
         <View style={styles.estimateChip}>
           <Ionicons name="information-circle-outline" size={12} color={Brand.amber} />
           <Text style={styles.estimateText}>Rute estimasi — data lalu lintas belum tersedia</Text>
+        </View>
+      ) : !trafficAware ? (
+        <View style={styles.routeChip}>
+          <Ionicons name="navigate" size={12} color={Brand.primary} />
+          <Text style={styles.routeText}>Rute tercepat · tanpa data lalu lintas</Text>
         </View>
       ) : null}
     </View>
@@ -96,7 +121,6 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: Brand.primary,
   },
   estimateChip: {
     flexDirection: 'row',
@@ -110,5 +134,17 @@ const styles = StyleSheet.create({
     backgroundColor: Brand.amberSoft,
   },
   estimateText: { fontSize: 10.5, fontWeight: '600', color: Brand.amber },
+  routeChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    alignSelf: 'center',
+    marginTop: Space.sm,
+    paddingHorizontal: Space.md,
+    paddingVertical: 5,
+    borderRadius: Radius.pill,
+    backgroundColor: Brand.primarySoft,
+  },
+  routeText: { fontSize: 10.5, fontWeight: '600', color: Brand.primary },
   pressed: { opacity: 0.75 },
 });

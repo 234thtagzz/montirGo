@@ -312,8 +312,9 @@ export default function MechanicTripScreen() {
         title={phase === 'preview' ? 'Menuju lokasi client' : 'Perjalanan ke lokasi client'}
         subtitle={subtitle}
         estimated={tracking.usingEstimatedRoute && phase !== 'preview'}
+        trafficAware={tracking.route?.trafficAware ?? true}
         onBack={() => router.back()}
-        onOpenMaps={openInMaps}
+        onAction={openInMaps}
       />
 
       {!following ? (

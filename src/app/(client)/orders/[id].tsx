@@ -37,6 +37,7 @@ import {
   type OrderPayment,
 } from '@/features/finance/service';
 import { AiAnalysisCard } from '@/features/service-request/components/ai-analysis-card';
+import { ClientTripEntryCard } from '@/features/client/components/tracking/client-trip-entry-card';
 import { VehicleProfileCard } from '@/features/vehicles/components/vehicle-profile-card';
 import {
   getProgressLabel,
@@ -357,6 +358,17 @@ export default function ClientOrderDetailScreen() {
             </View>
           ) : null}
         </View>
+
+        {order.status === 'on_the_way' ? (
+          <ClientTripEntryCard
+            onPress={() =>
+              router.push({
+                pathname: '/(client)/tracking/[id]',
+                params: { id: order.id },
+              })
+            }
+          />
+        ) : null}
 
         {order.mechanic_id ? (
           <View style={styles.mechanicCard}>
