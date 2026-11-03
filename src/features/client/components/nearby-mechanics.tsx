@@ -1,14 +1,46 @@
+import { useEffect, useState } from 'react';
+import { Image } from 'expo-image';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { Avatar } from '@/components/ui/avatar';
 import { Ionicons } from '@/components/ui/icon';
 import { Brand, Radius, Space } from '@/constants/brand';
 import type { NearbyMechanic } from '@/features/client/types';
+import { formatSpecializations } from '@/features/mechanic/specializations';
+import { resolveWorkshopPhotoUrls } from '@/features/mechanic/photo';
 
 interface NearbyMechanicsProps {
   mechanics: NearbyMechanic[];
 }
 
+/** Foto bengkel (path privat) → signed URL, dimuat sekali untuk semua kartu. */
+function useWorkshopPhotos(mechanics: NearbyMechanic[]) {
+  const [urls, setUrls] = useState<Record<string, string>>({});
+  const key = mechanics.map((item) => item.workshop_photo ?? '').join('|');
+
+  useEffect(() => {
+    const paths = mechanics.map((item) => item.workshop_photo).filter((path): path is string => !!path);
+    if (paths.length === 0) return;
+    let active = true;
+    resolveWorkshopPhotoUrls(paths)
+      .then((resolved) => {
+        if (active) setUrls(resolved);
+      })
+      .catch(() => {
+        // Foto bersifat pelengkap — kartu tetap tampil tanpa foto.
+      });
+    return () => {
+      active = false;
+    };
+    // `key` mewakili isi daftar foto; `mechanics` sendiri dibuat ulang tiap render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [key]);
+
+  return urls;
+}
+
 export function NearbyMechanics({ mechanics }: NearbyMechanicsProps) {
+  const photoUrls = useWorkshopPhotos(mechanics);
+
   if (mechanics.length === 0) {
     return (
       <View style={styles.empty}>
@@ -34,8 +66,21 @@ export function NearbyMechanics({ mechanics }: NearbyMechanicsProps) {
       {mechanics.map((mechanic) => {
         const name = mechanic.full_name?.trim() || 'Montir MontirGo';
         const expertise = mechanic.skills.slice(0, 2).join(' · ');
+        const specialization = formatSpecializations(mechanic.vehicle_specialization);
+        const workshopPhoto = mechanic.workshop_photo
+          ? photoUrls[mechanic.workshop_photo]
+          : null;
         return (
           <View key={mechanic.profile_id} style={styles.card}>
+            {workshopPhoto ? (
+              <Image
+                source={{ uri: workshopPhoto }}
+                style={styles.workshopPhoto}
+                contentFit="cover"
+                transition={150}
+              />
+            ) : null}
+
             <View style={styles.avatarRow}>
               <Avatar name={name} uri={mechanic.avatar_url} size={46} />
               <View style={styles.onlineDot} />
@@ -60,6 +105,15 @@ export function NearbyMechanics({ mechanics }: NearbyMechanicsProps) {
               <View style={styles.metaRow}>
                 <Ionicons name="briefcase-outline" size={11} color={Brand.textMuted} />
                 <Text style={styles.metaText}>{mechanic.experience_years} tahun pengalaman</Text>
+              </View>
+            ) : null}
+
+            {specialization ? (
+              <View style={styles.metaRow}>
+                <Ionicons name="car-sport-outline" size={11} color={Brand.primary} />
+                <Text style={styles.specialization} numberOfLines={1}>
+                  {specialization}
+                </Text>
               </View>
             ) : null}
 
@@ -108,7 +162,15 @@ const styles = StyleSheet.create({
   jobs: { fontSize: 10.5, color: Brand.textMuted },
   metaRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: Space.sm },
   metaText: { fontSize: 10.5, color: Brand.textSecondary },
-  expertise: { fontSize: 10.5, color: Brand.primary, marginTop: 3 },
+  specialization: { flex: 1, fontSize: 10.5, color: Brand.primary },
+  expertise: { fontSize: 10.5, color: Brand.text, marginTop: 3 },
+  workshopPhoto: {
+    width: '100%',
+    height: 72,
+    borderRadius: Radius.md,
+    backgroundColor: Brand.background,
+    marginBottom: Space.sm,
+  },
   onlineBadge: {
     flexDirection: 'row',
     alignItems: 'center',

@@ -262,6 +262,7 @@ interface RawDirectoryMechanic {
   experience_years?: number | null;
   skills?: string[] | null;
   vehicle_specialization?: string[] | null;
+  workshop_photo?: string | null;
 }
 
 function mapMechanic(row: RawDirectoryMechanic): NearbyMechanic {
@@ -278,6 +279,7 @@ function mapMechanic(row: RawDirectoryMechanic): NearbyMechanic {
     experience_years: row.experience_years ?? null,
     skills: row.skills ?? [],
     vehicle_specialization: row.vehicle_specialization ?? [],
+    workshop_photo: row.workshop_photo ?? null,
   };
 }
 
@@ -290,7 +292,7 @@ export async function listOnlineMechanics(limit = 10): Promise<NearbyMechanic[]>
   const { data, error } = await supabase
     .from('mechanic_directory')
     .select(
-      'profile_id, full_name, avatar_url, workshop_name, rating_avg, rating_count, total_jobs, is_online, bio, experience_years, skills, vehicle_specialization',
+      'profile_id, full_name, avatar_url, workshop_name, rating_avg, rating_count, total_jobs, is_online, bio, experience_years, skills, vehicle_specialization, workshop_photo',
     )
     .eq('is_online', true)
     .order('rating_avg', { ascending: false })

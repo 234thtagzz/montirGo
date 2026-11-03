@@ -59,6 +59,8 @@ export interface NearbyMechanic {
   experience_years: number | null;
   skills: string[];
   vehicle_specialization: string[];
+  /** Path foto utama bengkel di bucket privat `workshop-photos`. */
+  workshop_photo: string | null;
 }
 
 export interface ClientReview {

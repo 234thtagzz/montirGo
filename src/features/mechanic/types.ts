@@ -13,6 +13,8 @@ export interface MechanicProfile {
   profile_id: string;
   workshop_name: string | null;
   workshop_address: string | null;
+  /** Path foto bengkel di bucket privat `workshop-photos` (urutan = urutan tampil). */
+  workshop_photos: string[];
   bio: string | null;
   experience_years: number | null;
   skills: string[];
@@ -33,6 +35,7 @@ export interface MechanicProfile {
 export interface MechanicProfilePatch {
   workshop_name?: string | null;
   workshop_address?: string | null;
+  workshop_photos?: string[];
   bio?: string | null;
   experience_years?: number | null;
   skills?: string[];

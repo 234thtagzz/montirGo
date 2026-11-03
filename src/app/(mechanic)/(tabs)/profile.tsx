@@ -18,6 +18,7 @@ import {
   View,
 } from 'react-native';
 import { useRouter } from 'expo-router';
+import { Image } from 'expo-image';
 import { ScreenHeader } from '@/components/ui/screen-header';
 import { Avatar } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
@@ -37,7 +38,15 @@ import {
   type MechanicProfile,
   type MechanicReview,
 } from '@/features/mechanic/service';
-import { pickMechanicPhoto, uploadMechanicAvatar } from '@/features/mechanic/photo';
+import {
+  deleteWorkshopPhotos,
+  MAX_WORKSHOP_PHOTOS,
+  pickMechanicPhoto,
+  resolveWorkshopPhotoUrls,
+  uploadMechanicAvatar,
+  uploadWorkshopPhoto,
+} from '@/features/mechanic/photo';
+import { VEHICLE_SPECIALIZATION_OPTIONS } from '@/features/mechanic/specializations';
 
 type CertificationDraft = {
   key: string;
@@ -107,14 +116,19 @@ export default function MechanicProfileScreen() {
   const [workshop, setWorkshop] = useState('');
   const [workshopAddress, setWorkshopAddress] = useState('');
   const [skills, setSkills] = useState('');
-  const [specializations, setSpecializations] = useState('');
+  const [specializations, setSpecializations] = useState<string[]>([]);
   const [certifications, setCertifications] = useState<CertificationDraft[]>([]);
   const [reviews, setReviews] = useState<MechanicReview[]>([]);
+
+  /** Path foto bengkel di bucket privat (urutan = urutan tampil). */
+  const [workshopPhotos, setWorkshopPhotos] = useState<string[]>([]);
+  const [workshopPhotoUrls, setWorkshopPhotoUrls] = useState<Record<string, string>>({});
 
   const [online, setOnline] = useState(false);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
+  const [uploadingWorkshop, setUploadingWorkshop] = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -133,10 +147,14 @@ export default function MechanicProfileScreen() {
       setWorkshop(mechanic?.workshop_name ?? '');
       setWorkshopAddress(mechanic?.workshop_address ?? '');
       setSkills((mechanic?.skills ?? []).join(', '));
-      setSpecializations((mechanic?.vehicle_specialization ?? []).join(', '));
+      setSpecializations(mechanic?.vehicle_specialization ?? []);
       setCertifications((mechanic?.certifications ?? []).map(parseCertification));
       setOnline(mechanic?.is_online ?? false);
       setReviews(reviewRows);
+
+      const photos = mechanic?.workshop_photos ?? [];
+      setWorkshopPhotos(photos);
+      setWorkshopPhotoUrls(await resolveWorkshopPhotoUrls(photos).catch(() => ({})));
     } catch (error) {
       Alert.alert('Gagal memuat', error instanceof Error ? error.message : 'Coba lagi.');
     } finally {
@@ -162,8 +180,58 @@ export default function MechanicProfileScreen() {
     }
   };
 
-  const pickAvatar = async () => {
-    if (!sessionUser?.id || uploadingAvatar) return;
+  const toggleSpecialization = (value: string) => {
+    setSpecializations((current) =>
+      current.includes(value) ? current.filter((item) => item !== value) : [...current, value],
+    );
+  };
+
+  /**
+   * Foto bengkel langsung diunggah & disimpan ke database (bukan menunggu
+   * tombol Simpan), supaya path yang dipakai selalu valid dan tidak ada file
+   * yatim bila pengguna keluar tanpa menyimpan.
+   */
+  const addWorkshopPhoto = async () => {
+    if (!sessionUser?.id || uploadingWorkshop) return;
+    if (workshopPhotos.length >= MAX_WORKSHOP_PHOTOS) {
+      Alert.alert('Batas foto', `Maksimal ${MAX_WORKSHOP_PHOTOS} foto bengkel.`);
+      return;
+    }
+    try {
+      const photo = await pickMechanicPhoto([4, 3]);
+      if (!photo) return;
+      setUploadingWorkshop(true);
+      const path = await uploadWorkshopPhoto(sessionUser.id, photo);
+      const next = [...workshopPhotos, path];
+      await updateMechanicProfile({ workshop_photos: next });
+      setWorkshopPhotos(next);
+      const urls = await resolveWorkshopPhotoUrls(next);
+      setWorkshopPhotoUrls(urls);
+      Alert.alert('Berhasil', 'Foto bengkel tersimpan.');
+    } catch (error) {
+      Alert.alert('Gagal', error instanceof Error ? error.message : 'Coba lagi.');
+    } finally {
+      setUploadingWorkshop(false);
+    }
+  };
+
+  const removeWorkshopPhoto = async (path: string) => {
+    try {
+      const next = workshopPhotos.filter((item) => item !== path);
+      await updateMechanicProfile({ workshop_photos: next });
+      setWorkshopPhotos(next);
+      setWorkshopPhotoUrls((current) => {
+        const copy = { ...current };
+        delete copy[path];
+        return copy;
+      });
+      await deleteWorkshopPhotos([path]);
+    } catch (error) {
+      Alert.alert('Gagal', error instanceof Error ? error.message : 'Coba lagi.');
+    }
+  };
+
+  const pickAvatar = async () => {    if (!sessionUser?.id || uploadingAvatar) return;
     try {
       const photo = await pickMechanicPhoto([1, 1]);
       if (!photo) return;
@@ -198,7 +266,8 @@ export default function MechanicProfileScreen() {
           workshop_name: workshop.trim() || null,
           workshop_address: workshopAddress.trim() || null,
           skills: splitList(skills),
-          vehicle_specialization: splitList(specializations),
+          vehicle_specialization: specializations,
+          workshop_photos: workshopPhotos,
           certifications: certifications
             .filter((cert) => cert.title.trim())
             .map(formatCertification),
@@ -406,6 +475,75 @@ export default function MechanicProfileScreen() {
               placeholder="Jalan, nomor, kelurahan, kota"
               multiline
             />
+
+            <View style={styles.photoLabelRow}>
+              <Text style={styles.label}>Foto bengkel</Text>
+              <Text style={styles.photoCounter}>
+                {workshopPhotos.length}/{MAX_WORKSHOP_PHOTOS}
+              </Text>
+            </View>
+            <Text style={styles.helper}>
+              Foto tempat bengkel membantumu lebih mudah dikenali client.
+            </Text>
+
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.photoRow}
+            >
+              {workshopPhotos.map((path, index) => (
+                <View key={path} style={styles.photoItem}>
+                  {workshopPhotoUrls[path] ? (
+                    <Image
+                      source={{ uri: workshopPhotoUrls[path] }}
+                      style={styles.photoImage}
+                      contentFit="cover"
+                      transition={150}
+                    />
+                  ) : (
+                    <View style={[styles.photoImage, styles.photoLoading]}>
+                      <Ionicons name="image-outline" size={20} color={Brand.textMuted} />
+                    </View>
+                  )}
+                  {index === 0 ? (
+                    <View style={styles.coverBadge}>
+                      <Text style={styles.coverText}>Sampul</Text>
+                    </View>
+                  ) : null}
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel={`Hapus foto bengkel ${index + 1}`}
+                    hitSlop={8}
+                    onPress={() => removeWorkshopPhoto(path)}
+                    style={styles.photoRemove}
+                  >
+                    <Ionicons name="close" size={13} color={Brand.white} />
+                  </Pressable>
+                </View>
+              ))}
+
+              {workshopPhotos.length < MAX_WORKSHOP_PHOTOS ? (
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel="Tambah foto bengkel"
+                  disabled={uploadingWorkshop}
+                  onPress={addWorkshopPhoto}
+                  style={({ pressed }) => [
+                    styles.photoAdd,
+                    (pressed || uploadingWorkshop) && styles.pressed,
+                  ]}
+                >
+                  <Ionicons
+                    name={uploadingWorkshop ? 'hourglass-outline' : 'camera-outline'}
+                    size={22}
+                    color={Brand.primary}
+                  />
+                  <Text style={styles.photoAddText}>
+                    {uploadingWorkshop ? 'Mengunggah...' : 'Tambah'}
+                  </Text>
+                </Pressable>
+              ) : null}
+            </ScrollView>
           </Section>
 
           <Section icon="construct-outline" title="Keahlian">
@@ -416,13 +554,39 @@ export default function MechanicProfileScreen() {
               placeholder="tune-up, ganti oli, kelistrikan"
               helper="Pisahkan tiap keahlian dengan koma."
             />
-            <Field
-              label="Spesialisasi kendaraan"
-              value={specializations}
-              onChangeText={setSpecializations}
-              placeholder="motor matic, mobil bensin"
-              helper="Pisahkan dengan koma."
-            />
+
+            <Text style={styles.label}>Spesialisasi kendaraan</Text>
+            <Text style={styles.helper}>
+              Pilih semua yang kamu kuasai — boleh lebih dari satu.
+            </Text>
+            <View style={styles.chips}>
+              {VEHICLE_SPECIALIZATION_OPTIONS.map((option) => {
+                const active = specializations.includes(option.value);
+                return (
+                  <Pressable
+                    key={option.value}
+                    accessibilityRole="button"
+                    accessibilityState={{ selected: active }}
+                    accessibilityLabel={`Spesialisasi ${option.label}`}
+                    onPress={() => toggleSpecialization(option.value)}
+                    style={({ pressed }) => [
+                      styles.chip,
+                      active && styles.chipActive,
+                      pressed && styles.pressed,
+                    ]}
+                  >
+                    <Ionicons
+                      name={active ? 'checkmark-circle' : option.icon}
+                      size={13}
+                      color={active ? Brand.primary : Brand.textMuted}
+                    />
+                    <Text style={[styles.chipText, active && styles.chipTextActive]}>
+                      {option.label}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
           </Section>
 
           <Section icon="ribbon-outline" title="Sertifikasi">
@@ -741,6 +905,71 @@ const styles = StyleSheet.create({
   helper: { fontSize: 10.5, color: Brand.textMuted, marginTop: 5 },
   twoColumns: { flexDirection: 'row', gap: Space.md },
   column: { flex: 1 },
+  photoLabelRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  photoCounter: { fontSize: 10.5, color: Brand.textMuted, fontWeight: '600' },
+  photoRow: { gap: Space.sm, paddingVertical: Space.sm, paddingRight: Space.xs },
+  photoItem: { position: 'relative' },
+  photoImage: {
+    width: 104,
+    height: 84,
+    borderRadius: Radius.md,
+    backgroundColor: Brand.background,
+  },
+  photoLoading: { alignItems: 'center', justifyContent: 'center' },
+  photoRemove: {
+    position: 'absolute',
+    top: 4,
+    right: 4,
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    backgroundColor: 'rgba(17, 24, 39, 0.7)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  coverBadge: {
+    position: 'absolute',
+    left: 4,
+    bottom: 4,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: Radius.pill,
+    backgroundColor: 'rgba(11, 116, 229, 0.9)',
+  },
+  coverText: { fontSize: 9, fontWeight: '700', color: Brand.white },
+  photoAdd: {
+    width: 104,
+    height: 84,
+    borderRadius: Radius.md,
+    borderWidth: 1,
+    borderStyle: 'dashed',
+    borderColor: Brand.primaryBorder,
+    backgroundColor: Brand.primarySoft,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 4,
+  },
+  photoAddText: { fontSize: 10.5, fontWeight: '700', color: Brand.primary },
+  chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: Space.sm },
+  chip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+    borderRadius: Radius.pill,
+    borderWidth: 1,
+    borderColor: Brand.border,
+    backgroundColor: '#F7F9FC',
+  },
+  chipActive: { borderColor: Brand.primary, backgroundColor: Brand.primarySoft },
+  chipText: { fontSize: 11.5, fontWeight: '600', color: Brand.textSecondary },
+  chipTextActive: { color: Brand.primary, fontWeight: '700' },
+  pressed: { opacity: 0.7 },
   muted: { fontSize: 11.5, color: Brand.textSecondary, lineHeight: 17, marginBottom: Space.md },
   itemCard: {
     borderWidth: 1,
