@@ -6,6 +6,7 @@ import {
   ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   View,
 } from 'react-native';
 import { useLocalSearchParams, useFocusEffect, useRouter } from 'expo-router';
@@ -20,8 +21,11 @@ import { supabase } from '@/lib/supabase';
 import {
   cancelServiceRequest,
   getRequest,
+  getReviewForRequest,
   listStatusHistory,
+  submitReview,
   type ClientOrder,
+  type ClientReview,
   type OrderStatusEvent,
 } from '@/features/client/service';
 import {
@@ -64,6 +68,10 @@ export default function ClientOrderDetailScreen() {
   const [payment, setPayment] = useState<OrderPayment | null>(null);
   const [paying, setPaying] = useState(false);
   const [choosingCash, setChoosingCash] = useState(false);
+  const [review, setReview] = useState<ClientReview | null>(null);
+  const [reviewRating, setReviewRating] = useState(0);
+  const [reviewComment, setReviewComment] = useState('');
+  const [submittingReview, setSubmittingReview] = useState(false);
 
   const loadAnalysis = useCallback(async () => {
     if (!id) return;
@@ -78,12 +86,18 @@ export default function ClientOrderDetailScreen() {
   const load = useCallback(async () => {
     if (!id) return;
     try {
-      const [detail, events] = await Promise.all([
+      const [detail, events, existingReview] = await Promise.all([
         getRequest(id),
         listStatusHistory(id),
+        getReviewForRequest(id).catch(() => null),
       ]);
       setOrder(detail);
       setHistory(events);
+      setReview(existingReview);
+      if (existingReview) {
+        setReviewRating(existingReview.rating);
+        setReviewComment(existingReview.comment ?? '');
+      }
       setPayment(await getPaymentForRequest(id).catch(() => null));
       setError(false);
       await loadAnalysis();
@@ -268,6 +282,28 @@ export default function ClientOrderDetailScreen() {
         },
       ],
     );
+  };
+
+  const sendReview = async () => {
+    if (!id || submittingReview) return;
+    if (reviewRating < 1) {
+      Alert.alert('Pilih rating', 'Ketuk bintang untuk memberi penilaian 1 sampai 5.');
+      return;
+    }
+    setSubmittingReview(true);
+    try {
+      await submitReview({
+        requestId: id,
+        rating: reviewRating,
+        comment: reviewComment,
+      });
+      Alert.alert('Terima kasih', 'Ulasanmu tersimpan dan rating montir sudah diperbarui.');
+      await load();
+    } catch (error) {
+      Alert.alert('Gagal mengirim ulasan', error instanceof Error ? error.message : 'Coba lagi.');
+    } finally {
+      setSubmittingReview(false);
+    }
   };
 
   if (loading) {
@@ -499,6 +535,84 @@ export default function ClientOrderDetailScreen() {
                 </>
               )}
             </View>
+          </>
+        ) : null}
+
+        {order.status === 'paid' ? (
+          <>
+            <Text style={styles.section}>Ulasan montir</Text>
+            {review ? (
+              <View style={styles.reviewCard}>
+                <View style={styles.reviewHeader}>
+                  <View style={styles.starsRow}>
+                    {Array.from({ length: 5 }).map((_, index) => (
+                      <Ionicons
+                        key={index}
+                        name={index < review.rating ? 'star' : 'star-outline'}
+                        size={18}
+                        color={Brand.amber}
+                      />
+                    ))}
+                  </View>
+                  <Text style={styles.reviewDate}>{formatDateTime(review.created_at)}</Text>
+                </View>
+                {review.comment ? (
+                  <Text style={styles.reviewComment}>{review.comment}</Text>
+                ) : (
+                  <Text style={styles.reviewMuted}>Kamu tidak menulis komentar.</Text>
+                )}
+                {review.mechanic_reply ? (
+                  <View style={styles.reviewReply}>
+                    <Text style={styles.reviewReplyLabel}>Balasan montir</Text>
+                    <Text style={styles.reviewReplyText}>{review.mechanic_reply}</Text>
+                  </View>
+                ) : null}
+              </View>
+            ) : (
+              <View style={styles.reviewCard}>
+                <Text style={styles.reviewTitle}>Bagaimana pelayanan montir?</Text>
+                <Text style={styles.reviewHint}>
+                  Rating dan ulasanmu tersimpan di database serta membantu client lain memilih
+                  montir.
+                </Text>
+                <View style={styles.ratingPicker}>
+                  {Array.from({ length: 5 }).map((_, index) => {
+                    const value = index + 1;
+                    return (
+                      <Pressable
+                        key={value}
+                        accessibilityRole="button"
+                        accessibilityLabel={`Beri ${value} bintang`}
+                        hitSlop={6}
+                        onPress={() => setReviewRating(value)}
+                      >
+                        <Ionicons
+                          name={value <= reviewRating ? 'star' : 'star-outline'}
+                          size={30}
+                          color={Brand.amber}
+                        />
+                      </Pressable>
+                    );
+                  })}
+                </View>
+                <TextInput
+                  value={reviewComment}
+                  onChangeText={setReviewComment}
+                  placeholder="Tulis pengalamanmu (opsional)"
+                  placeholderTextColor={Brand.textMuted}
+                  selectionColor={Brand.primary}
+                  multiline
+                  style={styles.reviewInput}
+                />
+                <Button
+                  label="Kirim Ulasan"
+                  icon="send-outline"
+                  loading={submittingReview}
+                  onPress={sendReview}
+                  style={styles.reviewButton}
+                />
+              </View>
+            )}
           </>
         ) : null}
 
@@ -757,5 +871,62 @@ const styles = StyleSheet.create({
     marginTop: Space.md,
   },
   cashStatusText: { fontSize: 11, fontWeight: '600', color: Brand.amber },
+  reviewCard: {
+    backgroundColor: Brand.surface,
+    borderRadius: Radius.lg,
+    borderWidth: 1,
+    borderColor: Brand.divider,
+    padding: Space.lg,
+  },
+  reviewHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: Space.sm,
+  },
+  starsRow: { flexDirection: 'row', gap: 2 },
+  reviewDate: { fontSize: 10.5, color: Brand.textMuted },
+  reviewTitle: { fontSize: 13.5, fontWeight: '700', color: Brand.text },
+  reviewHint: {
+    fontSize: 11.5,
+    color: Brand.textSecondary,
+    lineHeight: 17,
+    marginTop: 4,
+  },
+  reviewComment: {
+    fontSize: 12.5,
+    color: Brand.text,
+    lineHeight: 18,
+    marginTop: Space.md,
+  },
+  reviewMuted: { fontSize: 11.5, color: Brand.textMuted, marginTop: Space.md },
+  reviewReply: {
+    marginTop: Space.md,
+    backgroundColor: Brand.primarySoft,
+    borderRadius: Radius.sm,
+    padding: Space.sm,
+  },
+  reviewReplyLabel: { fontSize: 10, fontWeight: '700', color: Brand.primary },
+  reviewReplyText: { fontSize: 11.5, color: Brand.text, marginTop: 2, lineHeight: 17 },
+  ratingPicker: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: Space.sm,
+    marginTop: Space.lg,
+  },
+  reviewInput: {
+    marginTop: Space.md,
+    backgroundColor: '#F7F9FC',
+    borderWidth: 1,
+    borderColor: Brand.border,
+    borderRadius: Radius.md,
+    paddingHorizontal: Space.md,
+    paddingTop: Space.md,
+    minHeight: 80,
+    fontSize: 13,
+    color: Brand.text,
+    textAlignVertical: 'top',
+  },
+  reviewButton: { marginTop: Space.md },
   pressed: { opacity: 0.7 },
 });

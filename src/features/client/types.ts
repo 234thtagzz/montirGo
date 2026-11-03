@@ -45,14 +45,32 @@ export interface ClientOrder {
   mechanic_avatar: string | null;
 }
 
+/** Ringkasan identitas montir untuk Beranda client. */
 export interface NearbyMechanic {
   profile_id: string;
   full_name: string | null;
   avatar_url: string | null;
   workshop_name: string | null;
   rating_avg: number;
+  rating_count: number;
   total_jobs: number;
   is_online: boolean;
+  bio: string | null;
+  experience_years: number | null;
+  skills: string[];
+  vehicle_specialization: string[];
+}
+
+export interface ClientReview {
+  id: string;
+  request_id?: string;
+  mechanic_id: string;
+  rating: number;
+  comment: string | null;
+  mechanic_reply: string | null;
+  replied_at: string | null;
+  created_at: string;
+  reviewer_name?: string | null;
 }
 
 export interface OrderStatusEvent {

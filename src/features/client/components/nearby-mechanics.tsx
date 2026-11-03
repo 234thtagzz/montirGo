@@ -33,6 +33,7 @@ export function NearbyMechanics({ mechanics }: NearbyMechanicsProps) {
     >
       {mechanics.map((mechanic) => {
         const name = mechanic.full_name?.trim() || 'Montir MontirGo';
+        const expertise = mechanic.skills.slice(0, 2).join(' · ');
         return (
           <View key={mechanic.profile_id} style={styles.card}>
             <View style={styles.avatarRow}>
@@ -50,8 +51,23 @@ export function NearbyMechanics({ mechanics }: NearbyMechanicsProps) {
             <View style={styles.stats}>
               <Ionicons name="star" size={12} color="#F59E0B" />
               <Text style={styles.rating}>{mechanic.rating_avg.toFixed(1)}</Text>
-              <Text style={styles.jobs}>• {mechanic.total_jobs} job</Text>
+              <Text style={styles.jobs}>
+                • {mechanic.rating_count} ulasan · {mechanic.total_jobs} job
+              </Text>
             </View>
+
+            {mechanic.experience_years ? (
+              <View style={styles.metaRow}>
+                <Ionicons name="briefcase-outline" size={11} color={Brand.textMuted} />
+                <Text style={styles.metaText}>{mechanic.experience_years} tahun pengalaman</Text>
+              </View>
+            ) : null}
+
+            {expertise ? (
+              <Text style={styles.expertise} numberOfLines={1}>
+                {expertise}
+              </Text>
+            ) : null}
 
             <View style={styles.onlineBadge}>
               <View style={styles.badgeDot} />
@@ -90,6 +106,9 @@ const styles = StyleSheet.create({
   stats: { flexDirection: 'row', alignItems: 'center', gap: 3, marginTop: Space.sm },
   rating: { fontSize: 11.5, fontWeight: '700', color: Brand.text },
   jobs: { fontSize: 10.5, color: Brand.textMuted },
+  metaRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: Space.sm },
+  metaText: { fontSize: 10.5, color: Brand.textSecondary },
+  expertise: { fontSize: 10.5, color: Brand.primary, marginTop: 3 },
   onlineBadge: {
     flexDirection: 'row',
     alignItems: 'center',

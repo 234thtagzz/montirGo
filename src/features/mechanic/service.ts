@@ -5,8 +5,9 @@ import {
   type RawAiAnalysis,
 } from '@/features/service-request/ai';
 import type {
-  ActivityItem, EarningsSummary, IncomingOrder, IncomingRequestDetail, MechanicLocationPoint,
-  MechanicOrderDetail, MechanicProfile, MyOrder, OrderStatus, OrderStatusEvent,
+  ActivityItem, EarningsSummary, IncomingOrder, IncomingRequestDetail, MechanicCertification,
+  MechanicCertificationInput, MechanicLocationPoint, MechanicOrderDetail, MechanicProfile,
+  MechanicProfilePatch, MechanicReview, MyOrder, OrderStatus, OrderStatusEvent,
 } from './types';
 
 export * from './types';
@@ -46,16 +47,120 @@ export async function setOnlineStatus(isOnline: boolean): Promise<void> {
   await logActivity('online_status', isOnline ? 'Montir online, siap menerima order.' : 'Montir offline.');
 }
 
-export async function updateMechanicProfile(patch: {
-  workshop_name?: string;
-  skills?: string[];
-  vehicle_specialization?: string[];
-}): Promise<void> {
+export async function updateMechanicProfile(patch: MechanicProfilePatch): Promise<void> {
   const id = await getMyId();
   const { error } = await supabase
     .from('mechanic_profiles')
     .upsert({ profile_id: id, ...patch }, { onConflict: 'profile_id' });
   if (error) throw error;
+}
+
+// ---------- Data identitas (tabel profiles) ----------
+
+export interface MyProfileRow {
+  full_name: string | null;
+  phone_number: string | null;
+  avatar_url: string | null;
+}
+
+export async function getMyProfileRow(): Promise<MyProfileRow> {
+  const id = await getMyId();
+  const { data, error } = await supabase
+    .from('profiles')
+    .select('full_name, phone_number, avatar_url')
+    .eq('id', id)
+    .maybeSingle();
+  if (error) throw error;
+  return (
+    (data as MyProfileRow | null) ?? {
+      full_name: null,
+      phone_number: null,
+      avatar_url: null,
+    }
+  );
+}
+
+export async function updateMyProfileIdentity(patch: {
+  full_name?: string | null;
+  phone_number?: string | null;
+  avatar_url?: string | null;
+}): Promise<void> {
+  const id = await getMyId();
+  const { error } = await supabase.from('profiles').update(patch).eq('id', id);
+  if (error) throw error;
+}
+
+// ---------- Sertifikasi ----------
+
+export async function listMechanicCertifications(): Promise<MechanicCertification[]> {
+  const id = await getMyId();
+  const { data, error } = await supabase
+    .from('mechanic_certifications')
+    .select('*')
+    .eq('mechanic_id', id)
+    .order('issued_year', { ascending: false });
+  if (error) throw error;
+  return (data ?? []) as MechanicCertification[];
+}
+
+export async function replaceMechanicCertifications(
+  inputs: MechanicCertificationInput[],
+): Promise<void> {
+  const id = await getMyId();
+  const rows = inputs
+    .map((input) => ({
+      mechanic_id: id,
+      title: input.title.trim(),
+      issuer: input.issuer?.trim() || null,
+      issued_year: input.issued_year ?? null,
+      certificate_url: input.certificate_url?.trim() || null,
+      is_verified: false,
+    }))
+    .filter((row) => row.title.length > 0);
+
+  const { error: deleteError } = await supabase
+    .from('mechanic_certifications')
+    .delete()
+    .eq('mechanic_id', id);
+  if (deleteError) throw deleteError;
+
+  if (rows.length === 0) return;
+  const { error } = await supabase.from('mechanic_certifications').insert(rows);
+  if (error) throw error;
+}
+
+// ---------- Ulasan & rating ----------
+
+/** Ulasan publik milik montir. Bisa dipanggil tanpa parameter untuk diri sendiri. */
+export async function listMechanicReviews(
+  mechanicId?: string,
+  limit = 20,
+): Promise<MechanicReview[]> {
+  const id = mechanicId ?? (await getMyId());
+  const { data, error } = await supabase
+    .from('mechanic_review_view')
+    .select('id, mechanic_id, rating, comment, mechanic_reply, replied_at, created_at, reviewer_name')
+    .eq('mechanic_id', id)
+    .order('created_at', { ascending: false })
+    .limit(limit);
+  if (error) throw error;
+  return (data ?? []) as MechanicReview[];
+}
+
+const REVIEW_ERROR_MESSAGES: Record<string, string> = {
+  UNAUTHORIZED: 'Sesi berakhir. Silakan login kembali.',
+  REVIEW_NOT_FOUND: 'Ulasan tidak ditemukan atau bukan milikmu.',
+};
+
+export async function replyToReview(reviewId: string, reply: string): Promise<void> {
+  const { error } = await supabase.rpc('reply_to_review', {
+    p_review_id: reviewId,
+    p_reply: reply,
+  });
+  if (error) {
+    const code = (error.message ?? '').trim();
+    throw new Error(REVIEW_ERROR_MESSAGES[code] ?? code ?? 'Gagal menyimpan balasan.');
+  }
 }
 
 // Order terbuka yang bisa diambil (khusus role mechanic, sesuai RLS).

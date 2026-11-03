@@ -5,16 +5,68 @@ export type OrderStatus =
   | 'on_the_way' | 'arrived' | 'diagnosing' | 'repairing'
   | 'completed' | 'payment' | 'paid' | 'cancelled';
 
+/**
+ * Profil montir — hanya data yang membantu client mengenali identitas montir:
+ * nama, bengkel, pengalaman, keahlian, sertifikasi, dan rating.
+ */
 export interface MechanicProfile {
   profile_id: string;
   workshop_name: string | null;
+  workshop_address: string | null;
+  bio: string | null;
+  experience_years: number | null;
   skills: string[];
   vehicle_specialization: string[];
+  certifications: string[];
   is_online: boolean;
   is_available: boolean;
   is_verified: boolean;
   rating_avg: number;
+  rating_count: number;
   total_jobs: number;
+  verified_at: string | null;
+  created_at?: string;
+  updated_at?: string;
+}
+
+/** Patch profil montir. Nilai `null` menghapus isian, `undefined` tidak diubah. */
+export interface MechanicProfilePatch {
+  workshop_name?: string | null;
+  workshop_address?: string | null;
+  bio?: string | null;
+  experience_years?: number | null;
+  skills?: string[];
+  vehicle_specialization?: string[];
+  certifications?: string[];
+}
+
+export interface MechanicCertification {
+  id: string;
+  mechanic_id: string;
+  title: string;
+  issuer: string | null;
+  issued_year: number | null;
+  certificate_url: string | null;
+  is_verified: boolean;
+  created_at: string;
+}
+
+export interface MechanicCertificationInput {
+  title: string;
+  issuer?: string | null;
+  issued_year?: number | null;
+  certificate_url?: string | null;
+}
+
+export interface MechanicReview {
+  id: string;
+  mechanic_id: string;
+  rating: number;
+  comment: string | null;
+  mechanic_reply: string | null;
+  replied_at: string | null;
+  created_at: string;
+  reviewer_name: string | null;
 }
 
 export interface IncomingOrder {

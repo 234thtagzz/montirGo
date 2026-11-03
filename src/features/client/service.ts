@@ -4,6 +4,7 @@ import type { OrderStatus } from '@/features/service-request/status';
 import type {
   ClientNotification,
   ClientOrder,
+  ClientReview,
   ClientVehicle,
   CreateServiceRequestInput,
   MechanicLocationSnapshot,
@@ -254,8 +255,13 @@ interface RawDirectoryMechanic {
   avatar_url?: string | null;
   workshop_name?: string | null;
   rating_avg?: number | null;
+  rating_count?: number | null;
   total_jobs?: number | null;
   is_online?: boolean | null;
+  bio?: string | null;
+  experience_years?: number | null;
+  skills?: string[] | null;
+  vehicle_specialization?: string[] | null;
 }
 
 function mapMechanic(row: RawDirectoryMechanic): NearbyMechanic {
@@ -265,8 +271,13 @@ function mapMechanic(row: RawDirectoryMechanic): NearbyMechanic {
     avatar_url: row.avatar_url ?? null,
     workshop_name: row.workshop_name ?? null,
     rating_avg: Number(row.rating_avg ?? 0),
+    rating_count: Number(row.rating_count ?? 0),
     total_jobs: Number(row.total_jobs ?? 0),
     is_online: Boolean(row.is_online),
+    bio: row.bio ?? null,
+    experience_years: row.experience_years ?? null,
+    skills: row.skills ?? [],
+    vehicle_specialization: row.vehicle_specialization ?? [],
   };
 }
 
@@ -279,7 +290,7 @@ export async function listOnlineMechanics(limit = 10): Promise<NearbyMechanic[]>
   const { data, error } = await supabase
     .from('mechanic_directory')
     .select(
-      'profile_id, full_name, avatar_url, workshop_name, rating_avg, total_jobs, is_online',
+      'profile_id, full_name, avatar_url, workshop_name, rating_avg, rating_count, total_jobs, is_online, bio, experience_years, skills, vehicle_specialization',
     )
     .eq('is_online', true)
     .order('rating_avg', { ascending: false })
@@ -333,4 +344,76 @@ export async function markNotificationsRead(): Promise<void> {
     .eq('user_id', id)
     .eq('is_read', false);
   if (error) throw error;
+}
+
+// ---------- Ulasan montir ----------
+
+/** Ulasan yang sudah dikirim client untuk satu pesanan (null bila belum). */
+export async function getReviewForRequest(requestId: string): Promise<ClientReview | null> {
+  const { data, error } = await supabase
+    .from('reviews')
+    .select('id, mechanic_id, rating, comment, mechanic_reply, replied_at, created_at')
+    .eq('request_id', requestId)
+    .maybeSingle();
+  if (error) throw error;
+  return (data as ClientReview | null) ?? null;
+}
+
+/** Ulasan publik seorang montir (nama reviewer sudah disamarkan oleh view). */
+export async function listMechanicReviews(
+  mechanicId: string,
+  limit = 20,
+): Promise<ClientReview[]> {
+  const { data, error } = await supabase
+    .from('mechanic_review_view')
+    .select('id, mechanic_id, rating, comment, mechanic_reply, replied_at, created_at, reviewer_name')
+    .eq('mechanic_id', mechanicId)
+    .order('created_at', { ascending: false })
+    .limit(limit);
+  if (error) throw error;
+  return (data ?? []) as ClientReview[];
+}
+
+/**
+ * Client memberi rating untuk order yang sudah lunas.
+ * RLS memastikan hanya order milik client dengan status `paid` yang bisa diulas.
+ */
+export async function submitReview(input: {
+  requestId: string;
+  rating: number;
+  comment?: string | null;
+}): Promise<void> {
+  if (input.rating < 1 || input.rating > 5) {
+    throw new Error('Pilih rating 1 sampai 5 bintang.');
+  }
+
+  const clientId = await getMyId();
+  const { data: request, error: requestError } = await supabase
+    .from('service_requests')
+    .select('id, mechanic_id, status')
+    .eq('id', input.requestId)
+    .eq('client_id', clientId)
+    .maybeSingle();
+  if (requestError) throw requestError;
+  if (!request) throw new Error('Pesanan tidak ditemukan.');
+  if (request.status !== 'paid') {
+    throw new Error('Ulasan bisa dikirim setelah pembayaran pesanan lunas.');
+  }
+  if (!request.mechanic_id) {
+    throw new Error('Pesanan ini belum memiliki montir.');
+  }
+
+  const { error } = await supabase.from('reviews').insert({
+    request_id: input.requestId,
+    client_id: clientId,
+    mechanic_id: request.mechanic_id,
+    rating: Math.round(input.rating),
+    comment: input.comment?.trim() || null,
+  });
+  if (error) {
+    if (error.code === '23505') {
+      throw new Error('Ulasan untuk pesanan ini sudah pernah dikirim.');
+    }
+    throw error;
+  }
 }
