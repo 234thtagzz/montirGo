@@ -5,6 +5,7 @@ import { ScreenHeader } from '@/components/ui/screen-header';
 import { EmptyState, ErrorState, LoadingState } from '@/components/ui/state';
 import { Ionicons } from '@/components/ui/icon';
 import { Brand, Radius, ScreenPadding, Space } from '@/constants/brand';
+import { createRealtimeChannel } from '@/lib/realtime';
 import { supabase } from '@/lib/supabase';
 import {
   acceptOrder,
@@ -60,8 +61,7 @@ export default function MechanicRequestsScreen() {
   // Realtime: request baru/berubah langsung menyegarkan daftar. Pemuatan awal
   // sudah ditangani `useFocusEffect` di atas.
   useEffect(() => {
-    const ch = supabase
-      .channel('mechanic-incoming')
+    const ch = createRealtimeChannel('mechanic-incoming')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'service_requests' }, load)
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'ai_diagnoses' }, load)
       .subscribe();
@@ -87,12 +87,16 @@ export default function MechanicRequestsScreen() {
       // Request langsung hilang dari daftar semua montir...
       setOrders((current) => current.filter((order) => order.id !== id));
       Alert.alert(
-        'Order diterima',
-        'Request sudah berpindah ke Beranda sebagai order aktifmu.',
+        'Pengajuan terkirim',
+        'Client akan meninjau profilmu dan mengonfirmasi dalam 5 menit. Request pindah ke Beranda sebagai pengajuan menunggu konfirmasi.',
         [
           {
-            text: 'Lihat Beranda',
-            onPress: () => router.replace('/(mechanic)/(tabs)'),
+            text: 'Lihat Pengajuan',
+            onPress: () =>
+              router.replace({
+                pathname: '/(mechanic)/active-order/[id]',
+                params: { id },
+              }),
           },
         ],
         { cancelable: false },
@@ -204,8 +208,8 @@ export default function MechanicRequestsScreen() {
                   ? 'Selesaikan Order Dulu'
                   : acceptingId === order.id
                     ? 'Memproses...'
-                    : 'Terima Order',
-                icon: 'checkmark-circle-outline',
+                    : 'Ajukan ke Client',
+                icon: 'paper-plane-outline',
                 loading: acceptingId === order.id,
                 disabled: activeOrderId != null,
                 onPress: () => handleAccept(order.id),

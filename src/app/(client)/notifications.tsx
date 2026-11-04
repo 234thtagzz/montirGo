@@ -1,9 +1,9 @@
 import { useCallback, useState } from 'react';
-import { RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { useFocusEffect } from 'expo-router';
+import { Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { useFocusEffect, useRouter } from 'expo-router';
 import { ScreenHeader } from '@/components/ui/screen-header';
 import { EmptyState, ErrorState, LoadingState } from '@/components/ui/state';
-import { Ionicons } from '@/components/ui/icon';
+import { Ionicons, type IconName } from '@/components/ui/icon';
 import { Brand, Radius, ScreenPadding, Space } from '@/constants/brand';
 import {
   listNotifications,
@@ -12,7 +12,62 @@ import {
 } from '@/features/client/service';
 import { formatDateTime } from '@/utils/format';
 
+interface NotificationVisual {
+  icon: IconName;
+  color: string;
+  background: string;
+}
+
+const VISUALS: Record<string, NotificationVisual> = {
+  assignment_requested: {
+    icon: 'person-add-outline',
+    color: Brand.amber,
+    background: Brand.amberSoft,
+  },
+  assignment_confirmed: {
+    icon: 'checkmark-circle-outline',
+    color: Brand.green,
+    background: Brand.greenSoft,
+  },
+  assignment_rejected: {
+    icon: 'close-circle-outline',
+    color: Brand.red,
+    background: Brand.redSoft,
+  },
+  assignment_expired: {
+    icon: 'time-outline',
+    color: Brand.red,
+    background: Brand.redSoft,
+  },
+  assignment_cancelled: {
+    icon: 'close-circle-outline',
+    color: Brand.red,
+    background: Brand.redSoft,
+  },
+  payment: {
+    icon: 'wallet-outline',
+    color: Brand.primary,
+    background: Brand.primarySoft,
+  },
+  review: {
+    icon: 'star-outline',
+    color: Brand.amber,
+    background: Brand.amberSoft,
+  },
+};
+
+const FALLBACK_VISUAL: NotificationVisual = {
+  icon: 'notifications-outline',
+  color: Brand.primary,
+  background: Brand.primarySoft,
+};
+
+function getVisual(type: string): NotificationVisual {
+  return VISUALS[type] ?? FALLBACK_VISUAL;
+}
+
 export default function NotificationsScreen() {
+  const router = useRouter();
   const [items, setItems] = useState<ClientNotification[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -71,19 +126,40 @@ export default function NotificationsScreen() {
               hint="Pemberitahuan tentang pesanan dan montir akan muncul di sini."
             />
           ) : (
-            items.map((item) => (
-              <View key={item.id} style={styles.card}>
-                <View style={styles.iconBox}>
-                  <Ionicons name="notifications-outline" size={18} color={Brand.primary} />
-                </View>
-                <View style={styles.copy}>
-                  <Text style={styles.title}>{item.title}</Text>
-                  {item.body ? <Text style={styles.body}>{item.body}</Text> : null}
-                  <Text style={styles.time}>{formatDateTime(item.created_at)}</Text>
-                </View>
-                {!item.is_read ? <View style={styles.unreadDot} /> : null}
-              </View>
-            ))
+            items.map((item) => {
+              const visual = getVisual(item.type);
+              const targetId =
+                item.related_entity_type === 'service_request' ? item.related_entity_id : null;
+              return (
+                <Pressable
+                  key={item.id}
+                  accessibilityRole="button"
+                  accessibilityLabel={item.title}
+                  disabled={!targetId}
+                  onPress={() => {
+                    if (!targetId) return;
+                    router.push({
+                      pathname: '/(client)/orders/[id]',
+                      params: { id: targetId },
+                    });
+                  }}
+                  style={({ pressed }) => [styles.card, pressed && styles.pressed]}
+                >
+                  <View style={[styles.iconBox, { backgroundColor: visual.background }]}>
+                    <Ionicons name={visual.icon} size={18} color={visual.color} />
+                  </View>
+                  <View style={styles.copy}>
+                    <Text style={styles.title}>{item.title}</Text>
+                    {item.body ? <Text style={styles.body}>{item.body}</Text> : null}
+                    <Text style={styles.time}>{formatDateTime(item.created_at)}</Text>
+                  </View>
+                  {!item.is_read ? <View style={styles.unreadDot} /> : null}
+                  {targetId ? (
+                    <Ionicons name="chevron-forward" size={15} color={Brand.textMuted} />
+                  ) : null}
+                </Pressable>
+              );
+            })
           )}
         </ScrollView>
       )}
@@ -112,6 +188,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  pressed: { opacity: 0.8 },
   copy: { flex: 1 },
   title: { fontSize: 13.5, fontWeight: '700', color: Brand.text },
   body: { fontSize: 12, color: Brand.textSecondary, marginTop: 2, lineHeight: 17 },

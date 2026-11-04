@@ -9,6 +9,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { EmptyState, ErrorState } from '@/components/ui/state';
 import { Brand, ScreenPadding, Space } from '@/constants/brand';
 import { useSessionUser } from '@/hooks/use-session-user';
+import { createRealtimeChannel } from '@/lib/realtime';
 import { supabase } from '@/lib/supabase';
 import {
   getEarningsSummary,
@@ -23,6 +24,8 @@ import { OnlineCard } from '@/features/mechanic/components/online-card';
 import { OrderCard } from '@/features/mechanic/components/order-card';
 import { formatVehicleLabel } from '@/features/vehicles/constants';
 import { TripEntryCard } from '@/features/mechanic/components/trip/trip-entry-card';
+import { AssignmentPendingCard } from '@/features/mechanic/components/assignment-pending-card';
+import { expireStaleAssignments } from '@/features/service-request/assignments';
 import { StatTiles } from '@/features/mechanic/components/stat-tiles';
 import { BalanceCard } from '@/features/finance/components/balance-card';
 import {
@@ -94,6 +97,7 @@ export default function MechanicDashboardScreen() {
         if (cancelled) return;
         setTodayNet(sum.net);
         setTodayJobs(sum.totalJobs);
+        await expireStaleAssignments();
         let orders = await listMyOrders(true);
         if (await syncMechanicPendingPayments(orders)) {
           orders = await listMyOrders(true);
@@ -112,8 +116,7 @@ export default function MechanicDashboardScreen() {
       }
     })();
     // Realtime: order baru / perubahan status langsung refresh dashboard.
-    const ch = supabase
-      .channel('mechanic-dashboard')
+    const ch = createRealtimeChannel('mechanic-dashboard')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'service_requests' }, load)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'mechanic_wallets' }, load)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'withdrawals' }, load)
@@ -139,18 +142,18 @@ export default function MechanicDashboardScreen() {
   }
 
   const name = sessionUser?.fullName || sessionUser?.email || 'Montir';
+  const pendingAssignment = activeOrders.find(
+    (order) => order.status === 'mechanic_assigned',
+  );
   const tripOrder =
     activeOrders.find((order) => order.status === 'on_the_way') ??
-    activeOrders.find((order) => order.status === 'mechanic_accepted') ??
-    activeOrders.find((order) => order.status === 'mechanic_assigned');
+    activeOrders.find((order) => order.status === 'mechanic_accepted');
   const tripStatus =
     tripOrder?.status === 'on_the_way'
       ? 'on_the_way'
       : tripOrder?.status === 'mechanic_accepted'
         ? 'mechanic_accepted'
-        : tripOrder
-          ? 'mechanic_assigned'
-          : null;
+        : null;
 
   return (
     <View style={styles.screen}>
@@ -188,7 +191,13 @@ export default function MechanicDashboardScreen() {
             onPressAccounts={() => router.push('/(mechanic)/payout-accounts')}
           />
 
-          {tripOrder && tripStatus ? (
+          {pendingAssignment ? (
+            <AssignmentPendingCard
+              onPress={() =>
+                router.push(`/(mechanic)/active-order/${pendingAssignment.id}`)
+              }
+            />
+          ) : tripOrder && tripStatus ? (
             <TripEntryCard
               status={tripStatus}
               onPress={() =>

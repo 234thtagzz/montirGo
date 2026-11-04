@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   Alert,
   Pressable,
@@ -17,6 +17,7 @@ import { Button } from '@/components/ui/button';
 import { EmptyState, ErrorState, LoadingState } from '@/components/ui/state';
 import { Ionicons } from '@/components/ui/icon';
 import { Brand, CardShadow, Radius, ScreenPadding, Space } from '@/constants/brand';
+import { createRealtimeChannel } from '@/lib/realtime';
 import { supabase } from '@/lib/supabase';
 import {
   cancelServiceRequest,
@@ -24,6 +25,7 @@ import {
   getReviewForRequest,
   listStatusHistory,
   submitReview,
+  type AssignmentDecision,
   type ClientOrder,
   type ClientReview,
   type OrderStatusEvent,
@@ -42,6 +44,8 @@ import {
 } from '@/features/finance/service';
 import { AiAnalysisCard } from '@/features/service-request/components/ai-analysis-card';
 import { ClientTripEntryCard } from '@/features/client/components/tracking/client-trip-entry-card';
+import { AssignmentConfirmationSheet } from '@/features/client/components/assignment/assignment-confirmation-sheet';
+import { expireStaleAssignments } from '@/features/service-request/assignments';
 import { VehicleProfileCard } from '@/features/vehicles/components/vehicle-profile-card';
 import {
   getProgressLabel,
@@ -72,6 +76,8 @@ export default function ClientOrderDetailScreen() {
   const [reviewRating, setReviewRating] = useState(0);
   const [reviewComment, setReviewComment] = useState('');
   const [submittingReview, setSubmittingReview] = useState(false);
+  const [assignmentVisible, setAssignmentVisible] = useState(false);
+  const assignmentAutoOpened = useRef<string | null>(null);
 
   const loadAnalysis = useCallback(async () => {
     if (!id) return;
@@ -98,6 +104,17 @@ export default function ClientOrderDetailScreen() {
         setReviewRating(existingReview.rating);
         setReviewComment(existingReview.comment ?? '');
       }
+      // Pengajuan montir wajib dikonfirmasi: buka lembar konfirmasi otomatis
+      // sekali setiap kali order masuk status mechanic_assigned.
+      if (detail?.status === 'mechanic_assigned' && detail.mechanic_id) {
+        if (assignmentAutoOpened.current !== detail.id) {
+          assignmentAutoOpened.current = detail.id;
+          setAssignmentVisible(true);
+        }
+      } else {
+        assignmentAutoOpened.current = null;
+        setAssignmentVisible(false);
+      }
       setPayment(await getPaymentForRequest(id).catch(() => null));
       setError(false);
       await loadAnalysis();
@@ -118,8 +135,7 @@ export default function ClientOrderDetailScreen() {
   // Realtime: detail mengikuti perubahan status dari montir + hasil analisis AI.
   useEffect(() => {
     if (!id) return;
-    const channel = supabase
-      .channel(`client-order-${id}`)
+    const channel = createRealtimeChannel(`client-order-${id}`)
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'service_requests', filter: `id=eq.${id}` },
@@ -140,6 +156,31 @@ export default function ClientOrderDetailScreen() {
       supabase.removeChannel(channel);
     };
   }, [id, load, loadAnalysis]);
+
+  const handleAssignmentResolved = useCallback(
+    async (decision: AssignmentDecision) => {
+      setAssignmentVisible(false);
+      if (decision === 'reject_and_cancel') {
+        assignmentAutoOpened.current = null;
+        await load();
+        Alert.alert(
+          'Pesanan dibatalkan',
+          'Pesanan sudah dibatalkan. Kamu bisa membuat pesanan baru kapan saja.',
+        );
+        return;
+      }
+      // Muat ulang; status terbaru dari server yang menentukan tampilan berikutnya.
+      assignmentAutoOpened.current = decision === 'accept' ? order?.id ?? null : null;
+      await load();
+      if (decision === 'accept') {
+        Alert.alert(
+          'Montir dikonfirmasi',
+          'Montir akan segera menuju lokasimu. Kamu bisa memantau perjalanannya di halaman ini.',
+        );
+      }
+    },
+    [load, order?.id],
+  );
 
   const retryAnalysis = async () => {
     if (!id || analyzing) return;
@@ -406,7 +447,29 @@ export default function ClientOrderDetailScreen() {
           />
         ) : null}
 
-        {order.mechanic_id ? (
+        {order.status === 'mechanic_assigned' ? (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Lihat dan konfirmasi montir"
+            onPress={() => setAssignmentVisible(true)}
+            style={({ pressed }) => [styles.assignmentCard, pressed && styles.pressed]}
+          >
+            <View style={styles.assignmentIcon}>
+              <Ionicons name="person-add-outline" size={20} color={Brand.amber} />
+            </View>
+            <View style={styles.assignmentCopy}>
+              <Text style={styles.assignmentTitle}>Konfirmasi montir</Text>
+              <Text style={styles.assignmentText}>
+                {order.mechanic_name ?? 'Seorang montir'} ingin menangani pesananmu. Lihat
+                rating, ulasan, dan data bengkelnya sebelum menyetujui.
+              </Text>
+            </View>
+            <View style={styles.assignmentAction}>
+              <Text style={styles.assignmentActionText}>Lihat</Text>
+              <Ionicons name="chevron-forward" size={14} color={Brand.amber} />
+            </View>
+          </Pressable>
+        ) : order.mechanic_id ? (
           <View style={styles.mechanicCard}>
             <Avatar name={order.mechanic_name ?? 'Montir'} uri={order.mechanic_avatar} size={46} />
             <View style={styles.mechanicCopy}>
@@ -431,7 +494,7 @@ export default function ClientOrderDetailScreen() {
             <Ionicons name="search-outline" size={18} color={Brand.amber} />
             <Text style={styles.searchingText}>
               Pesananmu sedang dicari montir terdekat. Kamu akan menerima notifikasi saat montir
-              menerima pesanan.
+              mengajukan diri.
             </Text>
           </View>
         )}
@@ -691,6 +754,15 @@ export default function ClientOrderDetailScreen() {
           />
         ) : null}
       </ScrollView>
+
+      <AssignmentConfirmationSheet
+        visible={assignmentVisible && order.status === 'mechanic_assigned'}
+        order={order}
+        onResolved={handleAssignmentResolved}
+        onRefresh={() => {
+          void expireStaleAssignments().then(() => load());
+        }}
+      />
     </View>
   );
 }
@@ -769,6 +841,30 @@ const styles = StyleSheet.create({
     marginTop: Space.md,
   },
   searchingText: { flex: 1, fontSize: 11.5, color: Brand.amber, lineHeight: 16 },
+  assignmentCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Space.md,
+    backgroundColor: Brand.amberSoft,
+    borderRadius: Radius.lg,
+    padding: Space.md,
+    marginTop: Space.md,
+    borderWidth: 1,
+    borderColor: Brand.amber,
+  },
+  assignmentIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: Brand.surface,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  assignmentCopy: { flex: 1 },
+  assignmentTitle: { fontSize: 13.5, fontWeight: '800', color: Brand.text },
+  assignmentText: { fontSize: 11.5, color: Brand.textSecondary, lineHeight: 16, marginTop: 2 },
+  assignmentAction: { flexDirection: 'row', alignItems: 'center', gap: 2 },
+  assignmentActionText: { fontSize: 12, fontWeight: '800', color: Brand.amber },
   section: {
     fontSize: 14,
     fontWeight: '700',

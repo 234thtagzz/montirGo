@@ -6,6 +6,7 @@ import { EmptyState, ErrorState, LoadingState } from '@/components/ui/state';
 import { Ionicons } from '@/components/ui/icon';
 import { Brand, Radius, ScreenPadding, Space } from '@/constants/brand';
 import { useSessionUser } from '@/hooks/use-session-user';
+import { createRealtimeChannel } from '@/lib/realtime';
 import { supabase } from '@/lib/supabase';
 import { listMyRequests, type ClientOrder } from '@/features/client/service';
 import { formatVehicleLabel } from '@/features/vehicles/constants';
@@ -51,8 +52,7 @@ export default function MyRequestsScreen() {
 
   useEffect(() => {
     if (!user?.id) return;
-    const channel = supabase
-      .channel(`client-orders-${user.id}`)
+    const channel = createRealtimeChannel(`client-orders-${user.id}`)
       .on(
         'postgres_changes',
         {
@@ -139,6 +139,8 @@ export default function MyRequestsScreen() {
           ) : (
             visible.map((order) => {
               const meta = getStatusMeta(order.status);
+              const pendingConfirmation =
+                order.status === 'mechanic_assigned' && Boolean(order.mechanic_id);
               const vehicle = formatVehicleLabel(
                 order.vehicle_type,
                 order.vehicle_brand,
@@ -155,7 +157,11 @@ export default function MyRequestsScreen() {
                       params: { id: order.id },
                     })
                   }
-                  style={({ pressed }) => [styles.card, pressed && styles.pressed]}
+                  style={({ pressed }) => [
+                    styles.card,
+                    pendingConfirmation && styles.cardPending,
+                    pressed && styles.pressed,
+                  ]}
                 >
                   <View style={styles.cardTop}>
                     <View style={[styles.statusChip, { backgroundColor: meta.background }]}>
@@ -184,6 +190,17 @@ export default function MyRequestsScreen() {
                       <Ionicons name="chevron-forward" size={16} color={Brand.textMuted} />
                     )}
                   </View>
+
+                  {pendingConfirmation ? (
+                    <View style={styles.pendingRow}>
+                      <Ionicons name="person-add-outline" size={13} color={Brand.amber} />
+                      <Text style={styles.pendingText}>
+                        {order.mechanic_name ?? 'Montir'} menunggu konfirmasimu
+                      </Text>
+                      <Text style={styles.pendingAction}>Konfirmasi</Text>
+                      <Ionicons name="chevron-forward" size={13} color={Brand.amber} />
+                    </View>
+                  ) : null}
                 </Pressable>
               );
             })
@@ -223,6 +240,7 @@ const styles = StyleSheet.create({
     marginBottom: Space.md,
   },
   pressed: { opacity: 0.75 },
+  cardPending: { borderColor: Brand.amber },
   cardTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   statusChip: {
     flexDirection: 'row',
@@ -245,4 +263,16 @@ const styles = StyleSheet.create({
   metaRow: { flexDirection: 'row', alignItems: 'center', gap: 5, flex: 1 },
   metaText: { fontSize: 11.5, color: Brand.textSecondary, flex: 1 },
   price: { fontSize: 13, fontWeight: '700', color: Brand.primary },
+  pendingRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    backgroundColor: Brand.amberSoft,
+    borderRadius: Radius.sm,
+    paddingHorizontal: Space.sm,
+    paddingVertical: 8,
+    marginTop: Space.sm,
+  },
+  pendingText: { flex: 1, fontSize: 11, fontWeight: '600', color: Brand.text },
+  pendingAction: { fontSize: 11, fontWeight: '800', color: Brand.amber },
 });

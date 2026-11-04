@@ -23,6 +23,12 @@ const ACTIVITY_META: Record<string, ActivityMeta> = {
     color: Brand.green,
     background: Brand.greenSoft,
   },
+  order_assigned: {
+    label: 'Pengajuan ke client',
+    icon: 'paper-plane-outline',
+    color: Brand.amber,
+    background: Brand.amberSoft,
+  },
   order_status: {
     label: 'Perbarui status order',
     icon: 'sync-outline',
@@ -88,7 +94,6 @@ export function getActivityMeta(type: string): ActivityMeta {
 const NEXT_ACTION: Partial<
   Record<OrderStatus, { next: OrderStatus; label: string; icon: IconName }>
 > = {
-  mechanic_assigned: { next: 'on_the_way', label: 'Mulai Perjalanan', icon: 'navigate-outline' },
   mechanic_accepted: { next: 'on_the_way', label: 'Mulai Perjalanan', icon: 'navigate-outline' },
   on_the_way: { next: 'arrived', label: 'Sampai di Lokasi', icon: 'location-outline' },
 };
@@ -99,7 +104,7 @@ export function getNextAction(status: string) {
 
 /** Label progres dari sudut pandang montir (bukan client). */
 const PROGRESS_LABEL: Record<string, string> = {
-  mechanic_assigned: 'Order diberikan kepadamu',
+  mechanic_assigned: 'Menunggu konfirmasi client',
   mechanic_accepted: 'Kamu menerima order ini',
   on_the_way: 'Sedang menuju lokasi pelanggan',
   arrived: 'Tiba di lokasi — isi tagihan sekarang',

@@ -2,11 +2,13 @@
 import { supabase } from '@/lib/supabase';
 import type { OrderStatus } from '@/features/service-request/status';
 import type {
+  AssignmentDecision,
   ClientNotification,
   ClientOrder,
   ClientReview,
   ClientVehicle,
   CreateServiceRequestInput,
+  MechanicAssignmentProfile,
   MechanicLocationSnapshot,
   NearbyMechanic,
   OrderStatusEvent,
@@ -15,11 +17,36 @@ import type {
 
 export * from './types';
 
-const ORDER_SELECT =
+const ORDER_RELATIONS =
+  'vehicles ( type, brand, model, year, license_plate, photo_url ), ' +
+  'mechanic:profiles!service_requests_mechanic_id_fkey ( full_name, phone_number, avatar_url )';
+
+const ORDER_COLUMNS =
   'id, status, issue_description, symptoms, address, lat, lng, contact_phone, ' +
   'additional_notes, price_amount, payment_method, created_at, updated_at, vehicle_id, ' +
-  'mechanic_id, vehicles ( type, brand, model, year, license_plate, photo_url ), ' +
-  'mechanic:profiles!service_requests_mechanic_id_fkey ( full_name, phone_number, avatar_url )';
+  'mechanic_id, ';
+
+const ORDER_SELECT =
+  ORDER_COLUMNS +
+  'assignment_requested_at, assignment_expires_at, ' +
+  ORDER_RELATIONS;
+
+/** Dipakai bila migrasi konfirmasi montir belum dijalankan di server. */
+const ORDER_SELECT_LEGACY = ORDER_COLUMNS + ORDER_RELATIONS;
+
+/**
+ * PostgREST menolak kolom yang belum ada setelah migrasi baru dibuat. Deteksi
+ * error itu agar aplikasi tetap bisa menampilkan order lama sebelum migrasi
+ * konfirmasi montir dijalankan.
+ */
+function isMissingColumnError(error: { code?: string; message?: string } | null): boolean {
+  if (!error) return false;
+  return (
+    error.code === '42703' ||
+    error.code === 'PGRST204' ||
+    /column .* does not exist|could not find the '.*' column/i.test(error.message ?? '')
+  );
+}
 
 interface RawOrder {
   id: string;
@@ -37,6 +64,8 @@ interface RawOrder {
   updated_at: string;
   vehicle_id: string | null;
   mechanic_id: string | null;
+  assignment_requested_at: string | null;
+  assignment_expires_at: string | null;
   vehicles: {
     type?: string;
     brand?: string;
@@ -65,6 +94,8 @@ function mapOrder(row: RawOrder): ClientOrder {
     updated_at: row.updated_at,
     vehicle_id: row.vehicle_id,
     mechanic_id: row.mechanic_id,
+    assignment_requested_at: row.assignment_requested_at ?? null,
+    assignment_expires_at: row.assignment_expires_at ?? null,
     vehicle_type: row.vehicles?.type ?? null,
     vehicle_brand: row.vehicles?.brand ?? null,
     vehicle_model: row.vehicles?.model ?? null,
@@ -148,22 +179,30 @@ export async function deleteVehicle(id: string): Promise<void> {
 
 export async function listMyRequests(limit = 50): Promise<ClientOrder[]> {
   const id = await getMyId();
-  const { data, error } = await supabase
-    .from('service_requests')
-    .select(ORDER_SELECT)
-    .eq('client_id', id)
-    .order('created_at', { ascending: false })
-    .limit(limit);
+  const query = (select: string) =>
+    supabase
+      .from('service_requests')
+      .select(select)
+      .eq('client_id', id)
+      .order('created_at', { ascending: false })
+      .limit(limit);
+
+  let { data, error } = await query(ORDER_SELECT);
+  if (isMissingColumnError(error)) {
+    ({ data, error } = await query(ORDER_SELECT_LEGACY));
+  }
   if (error) throw error;
   return ((data ?? []) as unknown as RawOrder[]).map(mapOrder);
 }
 
 export async function getRequest(id: string): Promise<ClientOrder | null> {
-  const { data, error } = await supabase
-    .from('service_requests')
-    .select(ORDER_SELECT)
-    .eq('id', id)
-    .maybeSingle();
+  const query = (select: string) =>
+    supabase.from('service_requests').select(select).eq('id', id).maybeSingle();
+
+  let { data, error } = await query(ORDER_SELECT);
+  if (isMissingColumnError(error)) {
+    ({ data, error } = await query(ORDER_SELECT_LEGACY));
+  }
   if (error) throw error;
   return data ? mapOrder(data as unknown as RawOrder) : null;
 }
@@ -330,7 +369,9 @@ export async function listNotifications(limit = 50): Promise<ClientNotification[
   const id = await getMyId();
   const { data, error } = await supabase
     .from('notifications')
-    .select('id, title, body, type, is_read, created_at')
+    .select(
+      'id, title, body, type, is_read, created_at, related_entity_type, related_entity_id',
+    )
     .eq('user_id', id)
     .order('created_at', { ascending: false })
     .limit(limit);
@@ -374,6 +415,57 @@ export async function listMechanicReviews(
     .limit(limit);
   if (error) throw error;
   return (data ?? []) as ClientReview[];
+}
+
+/**
+ * Profil montir yang sedang mengajukan diri ke salah satu order client.
+ * View `mechanic_assignment_profile` hanya mengembalikan montir yang punya
+ * relasi order dengan client pemanggil, jadi aman dipakai sebelum order lunas.
+ */
+export async function getMechanicAssignmentProfile(
+  mechanicId: string,
+): Promise<MechanicAssignmentProfile | null> {
+  const { data, error } = await supabase
+    .from('mechanic_assignment_profile')
+    .select(
+      'profile_id, full_name, avatar_url, workshop_name, workshop_address, bio, ' +
+        'experience_years, skills, vehicle_specialization, certifications, workshop_photo, ' +
+        'rating_avg, rating_count, total_jobs, is_verified, verified_at',
+    )
+    .eq('profile_id', mechanicId)
+    .maybeSingle();
+  if (error) throw error;
+  return (data as MechanicAssignmentProfile | null) ?? null;
+}
+
+const ASSIGNMENT_ERROR_MESSAGES: Record<string, string> = {
+  UNAUTHORIZED: 'Sesi berakhir. Silakan login kembali.',
+};
+
+/**
+ * Client menjawab pengajuan montir.
+ * `accept` mengubah order menjadi `mechanic_accepted`; `reject` mengembalikan
+ * order ke kolam; `reject_and_cancel` membatalkan order sekaligus.
+ */
+export async function respondToAssignment(
+  requestId: string,
+  decision: AssignmentDecision,
+): Promise<void> {
+  const { error } = await supabase.rpc('respond_to_assignment', {
+    p_request_id: requestId,
+    p_action: decision,
+  });
+  if (!error) return;
+
+  const message = (error.message ?? '').trim();
+  if (error.code === '42883' || /could not find the function|does not exist/i.test(message)) {
+    throw new Error(
+      'Fitur konfirmasi montir belum aktif di server. Jalankan migrasi database lalu coba lagi.',
+    );
+  }
+  throw new Error(
+    ASSIGNMENT_ERROR_MESSAGES[message] ?? (message || 'Gagal mengonfirmasi montir.'),
+  );
 }
 
 /**

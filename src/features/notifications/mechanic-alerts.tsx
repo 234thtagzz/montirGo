@@ -9,6 +9,7 @@ import {
   useState,
   type ReactNode,
 } from 'react';
+import { createRealtimeChannel } from '@/lib/realtime';
 import { supabase } from '@/lib/supabase';
 import { prepareNotifications, presentLocalAlert } from './local';
 import { getUnreadNotificationCount } from './service';
@@ -32,6 +33,7 @@ export function useMechanicAlerts(): MechanicAlertsValue {
 interface RawNotificationRow {
   title?: string | null;
   body?: string | null;
+  type?: string | null;
   related_entity_type?: string | null;
   related_entity_id?: string | null;
 }
@@ -62,13 +64,24 @@ export function MechanicAlertsProvider({ children }: { children: ReactNode }) {
 
     const openFromResponse = (response: Notifications.NotificationResponse | null) => {
       const data = response?.notification.request.content.data as
-        | { requestId?: unknown }
+        | { requestId?: unknown; audience?: unknown; type?: unknown }
         | undefined;
       if (!data || typeof data.requestId !== 'string') return;
-      router.push({
-        pathname: '/(mechanic)/request/[id]',
-        params: { id: data.requestId },
-      });
+      // Notifikasi untuk client memakai data dengan audience 'client'.
+      if (data.audience === 'client') return;
+      const isOpenRequest =
+        typeof data.type !== 'string' || data.type === 'new_request';
+      router.push(
+        isOpenRequest
+          ? {
+              pathname: '/(mechanic)/request/[id]',
+              params: { id: data.requestId },
+            }
+          : {
+              pathname: '/(mechanic)/active-order/[id]',
+              params: { id: data.requestId },
+            },
+      );
       // Hindari navigasi ulang bila respons yang sama dibaca lagi.
       Notifications.clearLastNotificationResponse();
     };
@@ -95,8 +108,7 @@ export function MechanicAlertsProvider({ children }: { children: ReactNode }) {
 
       void refresh();
 
-      channel = supabase
-        .channel(`mechanic-notifications-${user.id}`)
+      channel = createRealtimeChannel(`mechanic-notifications-${user.id}`)
         .on(
           'postgres_changes',
           {
@@ -112,6 +124,8 @@ export function MechanicAlertsProvider({ children }: { children: ReactNode }) {
             void presentLocalAlert({
               title: row.title ?? 'Notifikasi baru',
               body: row.body ?? null,
+              audience: 'mechanic',
+              type: row.type ?? null,
               requestId:
                 row.related_entity_type === 'service_request'
                   ? (row.related_entity_id ?? null)

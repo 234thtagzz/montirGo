@@ -15,6 +15,7 @@ interface ActiveOrderCardProps {
 export function ActiveOrderCard({ order, onPress }: ActiveOrderCardProps) {
   const meta = getStatusMeta(order.status);
   const hasMechanic = Boolean(order.mechanic_id);
+  const pendingConfirmation = order.status === 'mechanic_assigned' && hasMechanic;
   const vehicle = formatVehicleLabel(
     order.vehicle_type,
     order.vehicle_brand,
@@ -26,7 +27,11 @@ export function ActiveOrderCard({ order, onPress }: ActiveOrderCardProps) {
       accessibilityRole="button"
       accessibilityLabel={`Pesanan aktif: ${getProgressLabel(order.status)}`}
       onPress={onPress}
-      style={({ pressed }) => [styles.card, pressed && styles.pressed]}
+      style={({ pressed }) => [
+        styles.card,
+        pendingConfirmation && styles.cardPending,
+        pressed && styles.pressed,
+      ]}
     >
       <View style={styles.topRow}>
         <View style={[styles.chip, { backgroundColor: meta.background }]}>
@@ -64,7 +69,11 @@ export function ActiveOrderCard({ order, onPress }: ActiveOrderCardProps) {
                 <Text style={styles.mechanicName} numberOfLines={1}>
                   {order.mechanic_name ?? 'Montir MontirGo'}
                 </Text>
-                <Text style={styles.mechanicRole}>Montir</Text>
+                <Text
+                  style={[styles.mechanicRole, pendingConfirmation && styles.mechanicRolePending]}
+                >
+                  {pendingConfirmation ? 'Menunggu konfirmasimu' : 'Montir'}
+                </Text>
               </View>
             </>
           ) : (
@@ -78,8 +87,14 @@ export function ActiveOrderCard({ order, onPress }: ActiveOrderCardProps) {
         </View>
 
         <View style={styles.detailButton}>
-          <Text style={styles.detailText}>Lacak</Text>
-          <Ionicons name="chevron-forward" size={14} color={Brand.primary} />
+          <Text style={[styles.detailText, pendingConfirmation && styles.detailTextPending]}>
+            {pendingConfirmation ? 'Konfirmasi' : 'Lacak'}
+          </Text>
+          <Ionicons
+            name="chevron-forward"
+            size={14}
+            color={pendingConfirmation ? Brand.amber : Brand.primary}
+          />
         </View>
       </View>
     </Pressable>
@@ -94,6 +109,7 @@ const styles = StyleSheet.create({
     ...CardShadow,
   },
   pressed: { opacity: 0.94 },
+  cardPending: { borderWidth: 1, borderColor: Brand.amber },
   topRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   chip: {
     flexDirection: 'row',
@@ -128,6 +144,7 @@ const styles = StyleSheet.create({
   mechanicText: { flex: 1 },
   mechanicName: { fontSize: 12.5, fontWeight: '600', color: Brand.text },
   mechanicRole: { fontSize: 10.5, color: Brand.textMuted, marginTop: 1 },
+  mechanicRolePending: { color: Brand.amber, fontWeight: '700' },
   searching: {
     width: 32,
     height: 32,
@@ -138,4 +155,5 @@ const styles = StyleSheet.create({
   },
   detailButton: { flexDirection: 'row', alignItems: 'center', gap: 2 },
   detailText: { fontSize: 12.5, fontWeight: '700', color: Brand.primary },
+  detailTextPending: { color: Brand.amber },
 });

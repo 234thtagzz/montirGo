@@ -46,11 +46,11 @@ const META: Record<OrderStatus, StatusMeta> = {
     step: 1,
   },
   mechanic_assigned: {
-    label: 'Montir ditemukan',
-    shortLabel: 'Montir ditemukan',
-    color: Brand.primary,
-    background: Brand.blueSoft,
-    icon: 'person-add-outline',
+    label: 'Menunggu konfirmasi',
+    shortLabel: 'Menunggu konfirmasi',
+    color: Brand.amber,
+    background: Brand.amberSoft,
+    icon: 'time-outline',
     step: 2,
   },
   mechanic_accepted: {
@@ -144,6 +144,7 @@ export function getProgressLabel(status: string): string {
   const step = getStatusMeta(status).step;
   if (step === 0) return 'Pesanan dibatalkan';
   if (step === 1) return 'Mencari montir terdekat';
+  if (status === 'mechanic_assigned') return 'Menunggu konfirmasimu';
   if (step === 2) return 'Montir menerima pesananmu';
   if (step === 3) return 'Montir sedang menuju lokasi';
   if (step === 4) return 'Montir sudah tiba di lokasi';

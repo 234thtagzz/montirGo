@@ -1,6 +1,7 @@
 import { Redirect, Stack } from "expo-router";
 import { AppLoadingScreen } from "@/components/app-loading-screen";
 import { useSessionUser } from "@/hooks/use-session-user";
+import { ClientAlertsProvider } from "@/features/notifications/client-alerts";
 
 /**
  * Sejak Expo Router SDK 58 route dengan `href: null` di dalam `Tabs` dianggap
@@ -19,5 +20,9 @@ export default function ClientLayout() {
   if (user.role === "MONTIR") return <Redirect href="/(mechanic)/(tabs)" />;
   if (user.role !== "CLIENT") return <Redirect href="/(auth)/login" />;
 
-  return <Stack screenOptions={{ headerShown: false }} />;
+  return (
+    <ClientAlertsProvider>
+      <Stack screenOptions={{ headerShown: false }} />
+    </ClientAlertsProvider>
+  );
 }

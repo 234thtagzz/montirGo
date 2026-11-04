@@ -21,11 +21,12 @@ import {
   formatDuration,
 } from '@/features/mechanic/tracking/geo';
 import { useTripTracking } from '@/features/mechanic/tracking/use-trip-tracking';
+import { createRealtimeChannel } from '@/lib/realtime';
 import { supabase } from '@/lib/supabase';
 import { openWhatsApp } from '@/utils/whatsapp';
 
 const KEEP_AWAKE_TAG = 'montirgo-trip';
-const TRIP_STATUSES = ['mechanic_assigned', 'mechanic_accepted', 'on_the_way', 'arrived'];
+const TRIP_STATUSES = ['mechanic_accepted', 'on_the_way', 'arrived'];
 
 /**
  * Layar perjalanan montir (trip mode) — peta realtime, rute + ETA, dan aksi
@@ -81,8 +82,7 @@ export default function MechanicTripScreen() {
   // Realtime: client bisa membatalkan / mengubah order di tengah perjalanan.
   useEffect(() => {
     if (!id) return;
-    const channel = supabase
-      .channel(`mechanic-trip-${id}`)
+    const channel = createRealtimeChannel(`mechanic-trip-${id}`)
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'service_requests', filter: `id=eq.${id}` },
@@ -271,7 +271,7 @@ export default function MechanicTripScreen() {
         <EmptyState
           icon="checkmark-done-outline"
           message="Tidak ada perjalanan aktif"
-          hint="Layar ini hanya untuk order yang sedang menuju lokasi client."
+          hint="Layar ini hanya untuk order yang sudah disetujui client. Bila masih menunggu konfirmasi, buka detail order."
           actionLabel="Buka Detail Order"
           onPressAction={() =>
             router.replace({

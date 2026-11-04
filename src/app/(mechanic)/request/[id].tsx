@@ -15,6 +15,7 @@ import { Button } from '@/components/ui/button';
 import { EmptyState, ErrorState, LoadingState } from '@/components/ui/state';
 import { Ionicons } from '@/components/ui/icon';
 import { Brand, CardShadow, Radius, ScreenPadding, Space } from '@/constants/brand';
+import { createRealtimeChannel } from '@/lib/realtime';
 import { supabase } from '@/lib/supabase';
 import {
   acceptOrder,
@@ -70,8 +71,7 @@ export default function MechanicRequestDetailScreen() {
   // Realtime: request diambil montir lain, dibatalkan, atau analisis AI selesai.
   useEffect(() => {
     if (!id) return;
-    const channel = supabase
-      .channel(`mechanic-request-${id}`)
+    const channel = createRealtimeChannel(`mechanic-request-${id}`)
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'service_requests', filter: `id=eq.${id}` },
@@ -111,25 +111,28 @@ export default function MechanicRequestDetailScreen() {
       return;
     }
     Alert.alert(
-      'Terima request ini?',
-      'Pastikan kamu bisa menuju lokasi client. Setelah diterima, request akan menjadi order aktifmu.',
+      'Ajukan mengambil request ini?',
+      'Client akan meninjau rating, ulasan, dan profil bengkelmu lalu mengonfirmasi dalam 5 menit. Kamu baru bisa berangkat setelah pengajuan disetujui.',
       [
         { text: 'Batal', style: 'cancel' },
         {
-          text: 'Ya, terima',
+          text: 'Ya, ajukan',
           onPress: async () => {
             setAccepting(true);
             try {
               await acceptOrder(order.id);
-              // Langsung masuk mode perjalanan: montir melihat rute + ETA, lalu
-              // menekan "Mulai Perjalanan" saat benar-benar berangkat.
+              // Pengajuan belum menjadi order aktif sampai client menyetujui.
               router.replace({
-                pathname: '/(mechanic)/trip/[id]',
+                pathname: '/(mechanic)/active-order/[id]',
                 params: { id: order.id },
               });
+              Alert.alert(
+                'Pengajuan terkirim',
+                'Menunggu konfirmasi client. Kamu akan mendapat notifikasi begitu disetujui.',
+              );
             } catch (e) {
               Alert.alert(
-                'Gagal menerima',
+                'Gagal mengajukan',
                 e instanceof Error ? e.message : 'Request mungkin sudah diambil montir lain.',
               );
               await load();
@@ -303,9 +306,9 @@ export default function MechanicRequestDetailScreen() {
               ? 'Selesaikan Order Dulu'
               : accepting
                 ? 'Memproses...'
-                : 'Terima Order'
+                : 'Ajukan ke Client'
           }
-          icon="checkmark-circle-outline"
+          icon="paper-plane-outline"
           loading={accepting}
           disabled={activeOrderId != null}
           onPress={confirmAccept}

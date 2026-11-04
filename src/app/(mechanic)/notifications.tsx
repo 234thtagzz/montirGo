@@ -16,6 +16,11 @@ import { formatDateTime } from '@/utils/format';
 function iconFor(type: string) {
   if (type === 'new_request') return 'flash-outline' as const;
   if (type === 'payment') return 'cash-outline' as const;
+  if (type === 'assignment_requested') return 'hourglass-outline' as const;
+  if (type === 'assignment_confirmed') return 'checkmark-circle-outline' as const;
+  if (type === 'assignment_rejected') return 'close-circle-outline' as const;
+  if (type === 'assignment_expired') return 'time-outline' as const;
+  if (type === 'assignment_cancelled') return 'close-circle-outline' as const;
   return 'notifications-outline' as const;
 }
 
@@ -57,8 +62,17 @@ export default function MechanicNotificationsScreen() {
 
   const openNotification = (item: AppNotification) => {
     if (item.related_entity_type === 'service_request' && item.related_entity_id) {
+      // Notifikasi request baru membuka detail request; sisanya (pengajuan,
+      // konfirmasi, pembayaran) membuka detail order aktif.
+      if (item.type === 'new_request') {
+        router.push({
+          pathname: '/(mechanic)/request/[id]',
+          params: { id: item.related_entity_id },
+        });
+        return;
+      }
       router.push({
-        pathname: '/(mechanic)/request/[id]',
+        pathname: '/(mechanic)/active-order/[id]',
         params: { id: item.related_entity_id },
       });
     }

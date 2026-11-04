@@ -27,12 +27,19 @@ Atau lewat CLI (akan menjalankan semua migrasi yang belum tercatat):
 npx supabase db push
 ```
 
+> Fitur **konfirmasi montir** membutuhkan file
+> `supabase/migrations/20261104120000_assignment_confirmation.sql`. Jalankan file
+> itu dengan cara yang sama bila migrasi sebelumnya sudah diterapkan.
+
 Migrasi yang relevan:
 
 - `20261015000001_mechanic_actions.sql` — policy montir menerima/memajukan order
 - `20261019000000_client_home.sql` — direktori montir online
 - `20261022000000_request_ai_analysis.sql` — view request terbuka + akses AI
 - `20261023000000_fix_request_accept_flow.sql` — RPC ambil order atomik + perbaikan view
+- `20261104120000_assignment_confirmation.sql` — konfirmasi client sebelum montir mulai
+  (status `mechanic_assigned`, RPC `respond_to_assignment`, batas waktu 5 menit,
+  dan jadwal `pg_cron` bila tersedia)
 
 Jika `db push` menolak karena riwayat migrasi remote tidak cocok, gunakan cara
 SQL Editor di atas (file migrasi idempotent, aman dijalankan ulang).

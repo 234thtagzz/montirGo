@@ -33,6 +33,10 @@ export interface ClientOrder {
   updated_at: string;
   vehicle_id: string | null;
   mechanic_id: string | null;
+  /** Waktu montir mengajukan diri (status `mechanic_assigned`). */
+  assignment_requested_at: string | null;
+  /** Batas waktu client mengonfirmasi montir. */
+  assignment_expires_at: string | null;
   vehicle_type: string | null;
   vehicle_brand: string | null;
   vehicle_model: string | null;
@@ -75,6 +79,30 @@ export interface ClientReview {
   reviewer_name?: string | null;
 }
 
+/** Data montir yang ditampilkan ke client sebelum menyetujui pengajuan. */
+export interface MechanicAssignmentProfile {
+  profile_id: string;
+  full_name: string | null;
+  avatar_url: string | null;
+  workshop_name: string | null;
+  workshop_address: string | null;
+  bio: string | null;
+  experience_years: number | null;
+  skills: string[];
+  vehicle_specialization: string[];
+  certifications: string[];
+  /** Path foto utama bengkel di bucket privat `workshop-photos`. */
+  workshop_photo: string | null;
+  rating_avg: number;
+  rating_count: number;
+  total_jobs: number;
+  is_verified: boolean;
+  verified_at: string | null;
+}
+
+/** Keputusan client pada layar konfirmasi montir. */
+export type AssignmentDecision = 'accept' | 'reject' | 'reject_and_cancel';
+
 export interface OrderStatusEvent {
   id: string;
   from_status: string | null;
@@ -90,6 +118,8 @@ export interface ClientNotification {
   type: string;
   is_read: boolean;
   created_at: string;
+  related_entity_type: string | null;
+  related_entity_id: string | null;
 }
 
 /** Titik posisi montir terakhir yang dipublikasikan selama perjalanan. */

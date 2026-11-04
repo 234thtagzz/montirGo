@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { createRealtimeChannel } from '@/lib/realtime';
 import { supabase } from '@/lib/supabase';
 import {
   getLatestMechanicLocation,
@@ -143,8 +144,7 @@ export function useMechanicTracking({
   // Realtime: setiap titik baru dari montir langsung ditampilkan.
   useEffect(() => {
     if (!enabled || !requestId) return;
-    const channel = supabase
-      .channel(`client-mechanic-tracking-${requestId}`)
+    const channel = createRealtimeChannel(`client-mechanic-tracking-${requestId}`)
       .on(
         'postgres_changes',
         {

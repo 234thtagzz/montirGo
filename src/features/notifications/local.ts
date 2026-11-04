@@ -9,6 +9,10 @@ import { Platform } from 'react-native';
 import { Brand } from '@/constants/brand';
 
 export const REQUESTS_CHANNEL_ID = 'requests';
+export const ORDERS_CHANNEL_ID = 'orders';
+
+/** Menentukan layar yang dibuka saat notifikasi lokal diketuk. */
+export type LocalAlertAudience = 'client' | 'mechanic';
 
 // Banner tetap tampil walau aplikasi sedang dibuka.
 Notifications.setNotificationHandler({
@@ -46,6 +50,17 @@ export async function prepareNotifications(): Promise<boolean> {
     }).catch(() => {
       // Channel gagal dibuat — notifikasi tetap memakai channel bawaan sistem.
     });
+
+    await Notifications.setNotificationChannelAsync(ORDERS_CHANNEL_ID, {
+      name: 'Pesanan',
+      description: 'Pemberitahuan status pesanan dan konfirmasi montir.',
+      importance: ANDROID_IMPORTANCE_HIGH as Notifications.AndroidImportance,
+      vibrationPattern: [0, 250, 250, 250],
+      lightColor: Brand.primary,
+      sound: 'default',
+    }).catch(() => {
+      // Channel gagal dibuat — notifikasi tetap memakai channel bawaan sistem.
+    });
   }
 
   try {
@@ -64,6 +79,10 @@ interface LocalAlertInput {
   body?: string | null;
   /** Request yang bisa dibuka saat notifikasi diketuk. */
   requestId?: string | null;
+  /** Jenis notifikasi (`assignment_requested`, `new_request`, dst.). */
+  type?: string | null;
+  /** Siapa penerima notifikasi; menentukan tujuan navigasi. */
+  audience?: LocalAlertAudience;
 }
 
 /** Tampilkan notifikasi lokal seketika di notification shade HP. */
@@ -71,6 +90,8 @@ export async function presentLocalAlert({
   title,
   body,
   requestId,
+  type,
+  audience = 'mechanic',
 }: LocalAlertInput): Promise<void> {
   try {
     await Notifications.scheduleNotificationAsync({
@@ -78,9 +99,11 @@ export async function presentLocalAlert({
         title,
         body: body ?? undefined,
         sound: 'default',
-        data: requestId ? { requestId } : {},
+        data: requestId ? { requestId, audience, type: type ?? null } : {},
       },
-      trigger: { channelId: REQUESTS_CHANNEL_ID },
+      trigger: {
+        channelId: audience === 'client' ? ORDERS_CHANNEL_ID : REQUESTS_CHANNEL_ID,
+      },
     });
   } catch {
     // Notifikasi bersifat pelengkap — jangan sampai mengganggu alur aplikasi.

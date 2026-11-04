@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useFocusEffect, useRouter } from 'expo-router';import { StatusBar } from 'expo-status-bar';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -8,6 +8,7 @@ import { SectionHeader } from '@/components/ui/section-header';
 import { Ionicons } from '@/components/ui/icon';
 import { Brand, ScreenPadding, Space } from '@/constants/brand';
 import { useSessionUser } from '@/hooks/use-session-user';
+import { createRealtimeChannel } from '@/lib/realtime';
 import { supabase } from '@/lib/supabase';
 import {
   getUnreadNotificationCount,
@@ -19,6 +20,7 @@ import {
   type NearbyMechanic,
 } from '@/features/client/service';
 import { isActiveStatus } from '@/features/service-request/status';
+import { expireStaleAssignments } from '@/features/service-request/assignments';
 import {
   SERVICE_CATEGORIES,
   type ServiceCategory,
@@ -46,6 +48,7 @@ export default function ClientHomeScreen() {
   const [focused, setFocused] = useState(true);
 
   const load = useCallback(async () => {
+    await expireStaleAssignments();
     const results = await Promise.allSettled([
       listMyRequests(20),
       listMyVehicles(),
@@ -78,8 +81,7 @@ export default function ClientHomeScreen() {
   // Realtime: status pesanan client berubah tanpa perlu tarik-refresh.
   useEffect(() => {
     if (!user?.id) return;
-    const channel = supabase
-      .channel(`client-home-${user.id}`)
+    const channel = createRealtimeChannel(`client-home-${user.id}`)
       .on(
         'postgres_changes',
         {
@@ -149,6 +151,10 @@ export default function ClientHomeScreen() {
   };
 
   const activeOrder = orders.find((order) => isActiveStatus(order.status)) ?? null;
+  const pendingAssignment =
+    orders.find(
+      (order) => order.status === 'mechanic_assigned' && Boolean(order.mechanic_id),
+    ) ?? null;
   const name = user?.fullName || user?.email || 'Pengguna';
 
   if (sessionLoading || loading) {
@@ -203,6 +209,30 @@ export default function ClientHomeScreen() {
                     Sebagian data gagal dimuat. Tarik ke bawah untuk mencoba lagi.
                   </Text>
                 </View>
+              ) : null}
+
+              {pendingAssignment ? (
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel="Konfirmasi montir untuk pesanan aktif"
+                  onPress={() => openOrder(pendingAssignment)}
+                  style={({ pressed }) => [styles.confirmBanner, pressed && styles.pressed]}
+                >
+                  <View style={styles.confirmIcon}>
+                    <Ionicons name="person-add-outline" size={20} color={Brand.amber} />
+                  </View>
+                  <View style={styles.confirmCopy}>
+                    <Text style={styles.confirmTitle}>Montir menunggu konfirmasimu</Text>
+                    <Text style={styles.confirmText} numberOfLines={2}>
+                      {pendingAssignment.mechanic_name ?? 'Seorang montir'} ingin menangani
+                      pesananmu. Cek rating, ulasan, dan bengkelnya sebelum menyetujui.
+                    </Text>
+                  </View>
+                  <View style={styles.confirmAction}>
+                    <Text style={styles.confirmActionText}>Konfirmasi</Text>
+                    <Ionicons name="chevron-forward" size={14} color={Brand.amber} />
+                  </View>
+                </Pressable>
               ) : null}
 
               <SectionHeader
@@ -313,6 +343,31 @@ const styles = StyleSheet.create({
     marginTop: Space.md,
   },
   partialText: { flex: 1, fontSize: 11, color: Brand.amber },
+  confirmBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Space.md,
+    backgroundColor: Brand.amberSoft,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: Brand.amber,
+    padding: Space.md,
+    marginTop: Space.md,
+  },
+  pressed: { opacity: 0.85 },
+  confirmIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: Brand.surface,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  confirmCopy: { flex: 1 },
+  confirmTitle: { fontSize: 13, fontWeight: '800', color: Brand.text },
+  confirmText: { fontSize: 11, color: Brand.textSecondary, lineHeight: 15, marginTop: 2 },
+  confirmAction: { flexDirection: 'row', alignItems: 'center', gap: 2 },
+  confirmActionText: { fontSize: 11.5, fontWeight: '800', color: Brand.amber },
   skeletonScreen: { flex: 1, backgroundColor: Brand.background },
   skeletonHeader: {
     backgroundColor: Brand.primary,

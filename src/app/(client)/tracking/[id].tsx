@@ -6,6 +6,7 @@ import { EmptyState, ErrorState, LoadingState } from '@/components/ui/state';
 import { Brand } from '@/constants/brand';
 import { ClientTripView } from '@/features/client/components/tracking/client-trip-view';
 import { getRequest, type ClientOrder } from '@/features/client/service';
+import { createRealtimeChannel } from '@/lib/realtime';
 import { supabase } from '@/lib/supabase';
 
 /**
@@ -44,8 +45,7 @@ export default function ClientTrackingScreen() {
   // Status order bisa berubah di tengah perjalanan (tiba / dibatalkan).
   useEffect(() => {
     if (!id) return;
-    const channel = supabase
-      .channel(`client-tracking-${id}`)
+    const channel = createRealtimeChannel(`client-tracking-${id}`)
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'service_requests', filter: `id=eq.${id}` },

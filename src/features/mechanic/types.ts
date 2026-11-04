@@ -143,6 +143,10 @@ export interface MechanicOrderDetail extends MyOrder {
   lng: number;
   accepted_at: string | null;
   arrived_at: string | null;
+  /** Waktu montir mengajukan diri (status `mechanic_assigned`). */
+  assignment_requested_at: string | null;
+  /** Batas waktu client mengonfirmasi pengajuan. */
+  assignment_expires_at: string | null;
 }
 
 /** Satu titik jejak perjalanan montir. */

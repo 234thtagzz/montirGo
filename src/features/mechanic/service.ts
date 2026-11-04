@@ -15,7 +15,8 @@ export * from './types';
 const OPEN_REQUEST_STATUSES = ['requested', 'matching'];
 
 const ACTIVE_STATUSES = [
-  'mechanic_accepted', 'on_the_way', 'arrived', 'diagnosing', 'repairing', 'completed', 'payment',
+  'mechanic_assigned', 'mechanic_accepted', 'on_the_way', 'arrived', 'diagnosing', 'repairing',
+  'completed', 'payment',
 ];
 
 export async function getMyId(): Promise<string> {
@@ -370,17 +371,35 @@ export async function getMyActiveOrderId(mechanicId?: string): Promise<string | 
 
 export async function getMyOrder(id: string): Promise<MechanicOrderDetail | null> {
   const mechanicId = await getMyId();
-  const { data, error } = await supabase
-    .from('service_requests')
-    .select(
-      'id, issue_description, symptoms, address, lat, lng, contact_phone, additional_notes, status, ' +
-        'price_amount, payment_method, created_at, updated_at, accepted_at, arrived_at, ' +
-        'vehicles (type, brand, model, year, license_plate, photo_url), ' +
-        'client:profiles!service_requests_client_id_fkey (full_name, phone_number)',
-    )
-    .eq('id', id)
-    .eq('mechanic_id', mechanicId)
-    .maybeSingle();
+  const baseSelect =
+    'id, issue_description, symptoms, address, lat, lng, contact_phone, additional_notes, status, ' +
+    'price_amount, payment_method, created_at, updated_at, accepted_at, arrived_at, ' +
+    'vehicles (type, brand, model, year, license_plate, photo_url), ' +
+    'client:profiles!service_requests_client_id_fkey (full_name, phone_number)';
+  const query = (select: string) =>
+    supabase
+      .from('service_requests')
+      .select(select)
+      .eq('id', id)
+      .eq('mechanic_id', mechanicId)
+      .maybeSingle();
+
+  let { data, error } = await query(
+    'id, issue_description, symptoms, address, lat, lng, contact_phone, additional_notes, status, ' +
+      'price_amount, payment_method, created_at, updated_at, accepted_at, arrived_at, ' +
+      'assignment_requested_at, assignment_expires_at, ' +
+      'vehicles (type, brand, model, year, license_plate, photo_url), ' +
+      'client:profiles!service_requests_client_id_fkey (full_name, phone_number)',
+  );
+  if (
+    error &&
+    (error.code === '42703' ||
+      error.code === 'PGRST204' ||
+      /column .* does not exist|could not find the '.*' column/i.test(error.message ?? ''))
+  ) {
+    // Migration konfirmasi montir belum dijalankan — tetap tampilkan order.
+    ({ data, error } = await query(baseSelect));
+  }
   if (error) throw error;
   if (!data) return null;
   const r = data as unknown as Record<string, unknown>;
@@ -400,6 +419,8 @@ export async function getMyOrder(id: string): Promise<MechanicOrderDetail | null
     lng: Number(r.lng),
     accepted_at: (r.accepted_at as string | null) ?? null,
     arrived_at: (r.arrived_at as string | null) ?? null,
+    assignment_requested_at: (r.assignment_requested_at as string | null) ?? null,
+    assignment_expires_at: (r.assignment_expires_at as string | null) ?? null,
     vehicle_type: (r.vehicles as { type?: string } | null)?.type ?? null,
     vehicle_brand: (r.vehicles as { brand?: string } | null)?.brand ?? null,
     vehicle_model: (r.vehicles as { model?: string } | null)?.model ?? null,
@@ -491,7 +512,8 @@ function isRpcMissing(error: { code?: string; message?: string } | null): boolea
  * bersamaan dan tidak bergantung pada policy RLS dari client.
  *
  * Fallback: update langsung dengan syarat `mechanic_id is null` (untuk database
- * yang belum menjalankan migrasi RPC).
+ * yang belum menjalankan migrasi RPC). Status yang dipakai tetap
+ * `mechanic_assigned` supaya client tetap harus mengonfirmasi.
  */
 export async function acceptOrder(requestId: string): Promise<void> {
   const id = await getMyId();
@@ -516,9 +538,16 @@ export async function acceptOrder(requestId: string): Promise<void> {
     throw new Error(error.message || 'Request sudah diambil montir lain atau tidak tersedia.');
   }
 
+  const requestedAt = new Date();
   const { data: accepted, error: updateError } = await supabase
     .from('service_requests')
-    .update({ mechanic_id: id, status: 'mechanic_accepted', accepted_at: new Date().toISOString() })
+    .update({
+      mechanic_id: id,
+      status: 'mechanic_assigned',
+      accepted_at: null,
+      assignment_requested_at: requestedAt.toISOString(),
+      assignment_expires_at: new Date(requestedAt.getTime() + 5 * 60_000).toISOString(),
+    })
     .eq('id', requestId)
     .is('mechanic_id', null)
     .in('status', ['requested', 'matching'])
@@ -567,6 +596,21 @@ export async function updateOrderStatus(requestId: string, toStatus: OrderStatus
     .select('status')
     .eq('id', requestId)
     .single();
+  const currentStatus = (current as { status?: string } | null)?.status ?? null;
+
+  // `mechanic_assigned` berarti montir baru mengajukan diri. Hanya client yang
+  // boleh keluar dari status ini lewat RPC `respond_to_assignment`.
+  if (currentStatus === 'mechanic_assigned') {
+    throw new Error(
+      'Pesanan masih menunggu konfirmasi client. Kamu bisa mulai setelah client menyetujui.',
+    );
+  }
+  if (toStatus === 'mechanic_assigned' || toStatus === 'mechanic_accepted') {
+    throw new Error(
+      'Status ini hanya bisa diubah lewat alur pengajuan montir dan konfirmasi client.',
+    );
+  }
+
   const timestampColumn = STATUS_TIMESTAMP[toStatus];
   const patch: Record<string, unknown> = { status: toStatus };
   if (timestampColumn) patch[timestampColumn] = new Date().toISOString();
@@ -583,7 +627,7 @@ export async function updateOrderStatus(requestId: string, toStatus: OrderStatus
   }
   await supabase.from('service_request_status_history').insert({
     request_id: requestId,
-    from_status: (current as { status?: string } | null)?.status ?? null,
+    from_status: currentStatus,
     to_status: toStatus,
     changed_by: id,
   });
@@ -596,7 +640,7 @@ export async function updateOrderStatus(requestId: string, toStatus: OrderStatus
 
 /** Kalimat aktivitas yang ramah dibaca di layar Aktivitas montir. */
 const ACTIVITY_DESCRIPTION: Partial<Record<OrderStatus, (shortId: string) => string>> = {
-  mechanic_assigned: (shortId) => `Order #${shortId} diberikan kepadamu.`,
+  mechanic_assigned: (shortId) => `Mengajukan diri untuk order #${shortId}, menunggu konfirmasi client.`,
   mechanic_accepted: (shortId) => `Kamu menerima order #${shortId}.`,
   on_the_way: (shortId) => `Kamu mulai menuju lokasi order #${shortId}.`,
   arrived: (shortId) =>

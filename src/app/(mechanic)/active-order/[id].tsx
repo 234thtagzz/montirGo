@@ -36,7 +36,9 @@ import {
 import { AiAnalysisCard } from "@/features/service-request/components/ai-analysis-card";
 import { getStatusMeta, TOTAL_STEPS } from "@/features/service-request/status";
 import { TripEntryCard } from "@/features/mechanic/components/trip/trip-entry-card";
+import { AssignmentPendingCard } from "@/features/mechanic/components/assignment-pending-card";
 import { VehicleProfileCard } from "@/features/vehicles/components/vehicle-profile-card";
+import { createRealtimeChannel } from "@/lib/realtime";
 import { supabase } from "@/lib/supabase";
 import { formatDateTime, formatIDR } from "@/utils/format";
 import { openWhatsApp } from "@/utils/whatsapp";
@@ -116,8 +118,7 @@ export default function MechanicOrderDetailScreen() {
   // Realtime: perubahan status order + hasil analisis AI.
   useEffect(() => {
     if (!id) return;
-    const channel = supabase
-      .channel(`mechanic-order-${id}`)
+    const channel = createRealtimeChannel(`mechanic-order-${id}`)
       .on(
         "postgres_changes",
         {
@@ -324,10 +325,9 @@ export default function MechanicOrderDetailScreen() {
   };
 
   const nextAction = order ? getNextAction(order.status) : null;
-  const tripStatus: 'mechanic_assigned' | 'mechanic_accepted' | 'on_the_way' | null =
-    order?.status === 'mechanic_assigned' ||
-    order?.status === 'mechanic_accepted' ||
-    order?.status === 'on_the_way'
+  const pendingConfirmation = order?.status === "mechanic_assigned";
+  const tripStatus: "mechanic_accepted" | "on_the_way" | null =
+    order?.status === "mechanic_accepted" || order?.status === "on_the_way"
       ? order.status
       : null;
   // Transisi "Mulai Perjalanan"/"Sampai di Lokasi" dimiliki layar trip agar
@@ -458,7 +458,9 @@ export default function MechanicOrderDetailScreen() {
           ) : null}
         </View>
 
-        {tripStatus ? (
+        {pendingConfirmation ? (
+          <AssignmentPendingCard expiresAt={order.assignment_expires_at} />
+        ) : tripStatus ? (
           <TripEntryCard
             status={tripStatus}
             onPress={() =>
@@ -724,7 +726,7 @@ export default function MechanicOrderDetailScreen() {
             onPress={advance}
             style={styles.action}
           />
-        ) : canEditPrice || tripStatus ? null : (
+        ) : canEditPrice || tripStatus || pendingConfirmation ? null : (
           <View style={styles.doneCard}>
             <Ionicons
               name="checkmark-done-outline"
