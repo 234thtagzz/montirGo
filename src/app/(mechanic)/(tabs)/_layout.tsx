@@ -55,8 +55,8 @@ export default function MechanicTabsLayout() {
             <TabIcon
               focused={focused}
               color={iconColor(color, Brand.textMuted)}
-              name="sparkles-outline"
-              focusedName="sparkles"
+              name="robot-outline"
+              focusedName="robot"
             />
           ),
         }}

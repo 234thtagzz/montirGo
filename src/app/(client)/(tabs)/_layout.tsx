@@ -27,8 +27,8 @@ export default function ClientTabsLayout() {
             <TabIcon
               focused={focused}
               color={iconColor(color, Brand.textMuted)}
-              name="home-outline"
-              focusedName="home"
+              name="grid-outline"
+              focusedName="grid"
             />
           ),
         }}
