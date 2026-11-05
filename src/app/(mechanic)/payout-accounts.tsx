@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import {
   Alert,
   KeyboardAvoidingView,
@@ -10,13 +10,17 @@ import {
   Text,
   TextInput,
   View,
+  type ScrollViewInstance,
 } from 'react-native';
 import { useFocusEffect } from 'expo-router';
 import { ScreenHeader } from '@/components/ui/screen-header';
 import { Button } from '@/components/ui/button';
+import { ConfirmSheet } from '@/components/ui/confirm-sheet';
+import { Segmented, type SegmentedOption } from '@/components/ui/segmented';
+import { SectionHeader } from '@/components/ui/section-header';
 import { Ionicons } from '@/components/ui/icon';
 import { EmptyState, ErrorState, LoadingState } from '@/components/ui/state';
-import { Brand, Radius, ScreenPadding, Space } from '@/constants/brand';
+import { Brand, Radius, ScreenPadding, Space, Tabular, Type } from '@/constants/brand';
 import {
   BANKS,
   EWALLETS,
@@ -32,12 +36,20 @@ import {
   type PayoutAccountType,
 } from '@/features/finance/service';
 
+const TYPE_OPTIONS: SegmentedOption<PayoutAccountType>[] = [
+  { value: 'bank', label: 'Bank' },
+  { value: 'ewallet', label: 'E-wallet' },
+];
+
 export default function PayoutAccountsScreen() {
+  const scrollRef = useRef<ScrollViewInstance>(null);
   const [accounts, setAccounts] = useState<PayoutAccount[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const [error, setError] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<PayoutAccount | null>(null);
 
   const [type, setType] = useState<PayoutAccountType>('bank');
   const [channelCode, setChannelCode] = useState('BCA');
@@ -109,26 +121,18 @@ export default function PayoutAccountsScreen() {
     }
   };
 
-  const confirmDelete = (account: PayoutAccount) => {
-    Alert.alert(
-      'Hapus rekening?',
-      `${channelLabel(account.bank_code)} ${maskAccountNumber(account.account_number)} akan dihapus.`,
-      [
-        { text: 'Batal', style: 'cancel' },
-        {
-          text: 'Hapus',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              await deletePayoutAccount(account.id);
-              await load();
-            } catch (e) {
-              Alert.alert('Gagal menghapus', e instanceof Error ? e.message : 'Coba lagi.');
-            }
-          },
-        },
-      ],
-    );
+  const removeAccount = async () => {
+    if (!deleteTarget) return;
+    setDeleting(true);
+    try {
+      await deletePayoutAccount(deleteTarget.id);
+      setDeleteTarget(null);
+      await load();
+    } catch (e) {
+      Alert.alert('Gagal menghapus', e instanceof Error ? e.message : 'Coba lagi.');
+    } finally {
+      setDeleting(false);
+    }
   };
 
   const confirmSetPrimary = async (account: PayoutAccount) => {
@@ -167,6 +171,7 @@ export default function PayoutAccountsScreen() {
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       >
         <ScrollView
+          ref={scrollRef}
           contentContainerStyle={styles.content}
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
@@ -182,54 +187,92 @@ export default function PayoutAccountsScreen() {
             />
           }
         >
-          <Text style={styles.section}>Rekening tersimpan</Text>
+          <View style={styles.summaryStrip}>
+            <View style={styles.summaryIcon}>
+              <Ionicons name="shield-checkmark-outline" size={18} color={Brand.primary} />
+            </View>
+            <View style={styles.summaryCopy}>
+              <Text style={styles.summaryTitle}>
+                {accounts.length > 0
+                  ? `${accounts.length} rekening tersimpan`
+                  : 'Belum ada rekening tersimpan'}
+              </Text>
+              <Text style={styles.summaryText}>
+                Pencairan dikirim ke rekening utama lewat Xendit. Data harus sesuai nama pemilik.
+              </Text>
+            </View>
+          </View>
+
+          <SectionHeader
+            eyebrow="TERSIMPAN"
+            title="Rekening tujuan"
+            actionLabel={accounts.length > 0 ? 'Tambah baru' : undefined}
+            onPressAction={
+              accounts.length > 0
+                ? () => scrollRef.current?.scrollToEnd({ animated: true })
+                : undefined
+            }
+          />
           {accounts.length === 0 ? (
             <EmptyState
               icon="card-outline"
               message="Belum ada rekening"
-              hint="Tambahkan rekening bank atau e-wallet di bawah ini."
+              hint="Tambahkan rekening bank atau e-wallet di formulir bawah."
             />
           ) : (
             <View style={styles.list}>
               {accounts.map((account) => (
                 <View key={account.id} style={styles.accountCard}>
                   <View style={styles.accountTop}>
-                    <View style={styles.accountIcon}>
-                      <Ionicons
-                        name={account.type === 'ewallet' ? 'phone-portrait-outline' : 'business-outline'}
-                        size={18}
-                        color={Brand.primary}
-                      />
+                    <View style={styles.accountTile}>
+                      <Text style={styles.accountTileText} numberOfLines={1}>
+                        {channelLabel(account.bank_code)}
+                      </Text>
                     </View>
                     <View style={styles.accountCopy}>
-                      <Text style={styles.accountTitle}>
-                        {channelLabel(account.bank_code)}
-                        {account.is_primary ? ' · Utama' : ''}
+                      <View style={styles.accountTitleRow}>
+                        <Text style={styles.accountTitle}>
+                          {channelLabel(account.bank_code)}
+                        </Text>
+                        {account.is_primary ? (
+                          <View style={styles.primaryChip}>
+                            <Text style={styles.primaryChipText}>UTAMA</Text>
+                          </View>
+                        ) : null}
+                      </View>
+                      <Text style={[styles.accountNumber, Tabular]}>
+                        {maskAccountNumber(account.account_number)}
                       </Text>
-                      <Text style={styles.accountSub}>
-                        {maskAccountNumber(account.account_number)} · {account.account_holder_name}
+                      <Text style={styles.accountHolder} numberOfLines={1}>
+                        {account.account_holder_name}
                       </Text>
                     </View>
+                  </View>
+
+                  <View style={styles.accountActions}>
                     {account.is_primary ? (
-                      <View style={styles.primaryChip}>
-                        <Text style={styles.primaryChipText}>Utama</Text>
+                      <View style={styles.activeNote}>
+                        <Ionicons name="checkmark-circle" size={14} color={Brand.green} />
+                        <Text style={styles.activeNoteText}>Dipakai untuk pencairan</Text>
                       </View>
                     ) : (
                       <Pressable
                         accessibilityRole="button"
                         accessibilityLabel="Jadikan rekening utama"
                         onPress={() => confirmSetPrimary(account)}
-                        style={({ pressed }) => [styles.linkButton, pressed && styles.pressed]}
+                        style={({ pressed }) => [
+                          styles.primaryAction,
+                          pressed && styles.pressed,
+                        ]}
                       >
-                        <Text style={styles.linkButtonText}>Jadikan utama</Text>
+                        <Ionicons name="arrow-up-circle-outline" size={14} color={Brand.primary} />
+                        <Text style={styles.primaryActionText}>Jadikan utama</Text>
                       </Pressable>
                     )}
-                  </View>
-                  <View style={styles.accountActions}>
                     <Pressable
                       accessibilityRole="button"
                       accessibilityLabel="Hapus rekening"
-                      onPress={() => confirmDelete(account)}
+                      onPress={() => setDeleteTarget(account)}
                       style={({ pressed }) => [styles.deleteButton, pressed && styles.pressed]}
                     >
                       <Ionicons name="trash-outline" size={14} color={Brand.red} />
@@ -241,41 +284,10 @@ export default function PayoutAccountsScreen() {
             </View>
           )}
 
-          <Text style={styles.section}>Tambah rekening baru</Text>
+          <SectionHeader eyebrow="TAMBAH" title="Rekening baru" />
           <View style={styles.formCard}>
             <Text style={styles.label}>Jenis rekening</Text>
-            <View style={styles.segment}>
-              {(
-                [
-                  { value: 'bank', label: 'Bank', icon: 'business-outline' },
-                  { value: 'ewallet', label: 'E-wallet', icon: 'phone-portrait-outline' },
-                ] as const
-              ).map((option) => {
-                const active = type === option.value;
-                return (
-                  <Pressable
-                    key={option.value}
-                    accessibilityRole="button"
-                    accessibilityState={{ selected: active }}
-                    onPress={() => switchType(option.value)}
-                    style={({ pressed }) => [
-                      styles.segmentItem,
-                      active && styles.segmentItemActive,
-                      pressed && styles.pressed,
-                    ]}
-                  >
-                    <Ionicons
-                      name={option.icon}
-                      size={15}
-                      color={active ? Brand.primary : Brand.textSecondary}
-                    />
-                    <Text style={[styles.segmentText, active && styles.segmentTextActive]}>
-                      {option.label}
-                    </Text>
-                  </Pressable>
-                );
-              })}
-            </View>
+            <Segmented options={TYPE_OPTIONS} value={type} onChange={switchType} />
 
             <Text style={styles.label}>{type === 'bank' ? 'Bank' : 'E-wallet'}</Text>
             <View style={styles.chips}>
@@ -311,7 +323,7 @@ export default function PayoutAccountsScreen() {
               placeholderTextColor={Brand.textMuted}
               keyboardType="number-pad"
               selectionColor={Brand.primary}
-              style={styles.input}
+              style={[styles.input, Tabular]}
             />
 
             <Text style={styles.label}>Nama pemilik</Text>
@@ -325,23 +337,33 @@ export default function PayoutAccountsScreen() {
               style={styles.input}
             />
 
-            <Pressable
-              accessibilityRole="checkbox"
-              accessibilityState={{ checked: makePrimary }}
-              onPress={() => setMakePrimary((value) => !value)}
-              style={({ pressed }) => [styles.checkboxRow, pressed && styles.pressed]}
-            >
-              <Ionicons
-                name={makePrimary ? 'checkbox' : 'square-outline'}
-                size={19}
-                color={makePrimary ? Brand.primary : Brand.textMuted}
-              />
-              <Text style={styles.checkboxText}>Jadikan rekening utama</Text>
-            </Pressable>
+            {accounts.length === 0 ? (
+              <View style={styles.firstNote}>
+                <Ionicons name="information-circle-outline" size={15} color={Brand.primary} />
+                <Text style={styles.firstNoteText}>
+                  Rekening pertama otomatis menjadi rekening utama.
+                </Text>
+              </View>
+            ) : (
+              <Pressable
+                accessibilityRole="checkbox"
+                accessibilityState={{ checked: makePrimary }}
+                onPress={() => setMakePrimary((value) => !value)}
+                style={({ pressed }) => [styles.checkboxRow, pressed && styles.pressed]}
+              >
+                <Ionicons
+                  name={makePrimary ? 'checkbox' : 'square-outline'}
+                  size={19}
+                  color={makePrimary ? Brand.primary : Brand.textMuted}
+                />
+                <Text style={styles.checkboxText}>Jadikan rekening utama</Text>
+              </Pressable>
+            )}
 
             <Button
               label="Simpan Rekening"
               icon="add-circle-outline"
+              variant="ink"
               loading={saving}
               disabled={saving}
               onPress={addAccount}
@@ -354,6 +376,24 @@ export default function PayoutAccountsScreen() {
           </Text>
         </ScrollView>
       </KeyboardAvoidingView>
+
+      <ConfirmSheet
+        visible={deleteTarget !== null}
+        title="Hapus rekening?"
+        message={
+          deleteTarget
+            ? `${channelLabel(deleteTarget.bank_code)} ${maskAccountNumber(
+                deleteTarget.account_number,
+              )} akan dihapus dari daftar tujuan pencairan.`
+            : undefined
+        }
+        confirmLabel="Hapus rekening"
+        destructive
+        icon="trash-outline"
+        loading={deleting}
+        onConfirm={removeAccount}
+        onCancel={() => setDeleteTarget(null)}
+      />
     </View>
   );
 }
@@ -362,85 +402,81 @@ const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: Brand.background },
   flex: { flex: 1 },
   content: { padding: ScreenPadding, paddingBottom: Space.xxxl },
-  section: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: Brand.text,
-    marginTop: Space.lg,
-    marginBottom: Space.md,
+  summaryStrip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Space.md,
+    backgroundColor: Brand.surface,
+    borderRadius: Radius.lg,
+    borderWidth: 1,
+    borderColor: Brand.border,
+    padding: Space.lg,
   },
+  summaryIcon: {
+    width: 38,
+    height: 38,
+    borderRadius: Radius.md,
+    backgroundColor: Brand.primarySoft,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  summaryCopy: { flex: 1 },
+  summaryTitle: { ...Type.bodyStrong, color: Brand.text, fontWeight: '700' },
+  summaryText: { ...Type.meta, color: Brand.textSecondary, marginTop: 2, lineHeight: 16 },
   list: { gap: Space.sm },
   accountCard: {
     backgroundColor: Brand.surface,
     borderRadius: Radius.lg,
     borderWidth: 1,
-    borderColor: Brand.divider,
+    borderColor: Brand.border,
     padding: Space.md,
   },
   accountTop: { flexDirection: 'row', alignItems: 'center', gap: Space.md },
-  accountIcon: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
-    backgroundColor: Brand.primarySoft,
+  accountTile: {
+    width: 46,
+    height: 46,
+    borderRadius: Radius.md,
+    backgroundColor: Brand.ink,
     alignItems: 'center',
     justifyContent: 'center',
+    paddingHorizontal: 4,
   },
+  accountTileText: { ...Type.micro, color: Brand.volt, fontSize: 9, letterSpacing: 0.2 },
   accountCopy: { flex: 1 },
-  accountTitle: { fontSize: 13.5, fontWeight: '700', color: Brand.text },
-  accountSub: { fontSize: 11.5, color: Brand.textSecondary, marginTop: 2 },
+  accountTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  accountTitle: { ...Type.bodyStrong, color: Brand.text, fontWeight: '700' },
+  accountNumber: { ...Type.bodyStrong, color: Brand.text, marginTop: 2, letterSpacing: 0.6 },
+  accountHolder: { ...Type.meta, color: Brand.textSecondary, marginTop: 1 },
   primaryChip: {
     backgroundColor: Brand.greenSoft,
     borderRadius: Radius.pill,
-    paddingHorizontal: 9,
-    paddingVertical: 4,
+    paddingHorizontal: 7,
+    paddingVertical: 2,
   },
-  primaryChipText: { fontSize: 10, fontWeight: '700', color: Brand.green },
-  linkButton: { paddingVertical: 4 },
-  linkButtonText: { fontSize: 11, fontWeight: '700', color: Brand.primary },
+  primaryChipText: { ...Type.micro, color: Brand.green, fontSize: 8.5 },
   accountActions: {
     flexDirection: 'row',
-    justifyContent: 'flex-end',
-    marginTop: Space.sm,
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: Space.md,
+    paddingTop: Space.sm,
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: Brand.divider,
-    paddingTop: Space.sm,
   },
-  deleteButton: { flexDirection: 'row', alignItems: 'center', gap: 4, padding: 4 },
-  deleteButtonText: { fontSize: 11, fontWeight: '600', color: Brand.red },
+  activeNote: { flexDirection: 'row', alignItems: 'center', gap: 5 },
+  activeNoteText: { ...Type.meta, color: Brand.green, fontWeight: '600' },
+  primaryAction: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingVertical: 4 },
+  primaryActionText: { ...Type.meta, color: Brand.primary, fontWeight: '700' },
+  deleteButton: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingVertical: 4 },
+  deleteButtonText: { ...Type.meta, color: Brand.red, fontWeight: '600' },
   formCard: {
     backgroundColor: Brand.surface,
     borderRadius: Radius.lg,
     borderWidth: 1,
-    borderColor: Brand.divider,
+    borderColor: Brand.border,
     padding: Space.lg,
   },
-  label: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: Brand.text,
-    marginBottom: Space.sm,
-    marginTop: Space.md,
-  },
-  segment: {
-    flexDirection: 'row',
-    backgroundColor: Brand.background,
-    borderRadius: Radius.md,
-    padding: 4,
-    gap: 4,
-  },
-  segmentItem: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 6,
-    borderRadius: Radius.sm,
-    paddingVertical: 9,
-  },
-  segmentItemActive: { backgroundColor: Brand.surface },
-  segmentText: { fontSize: 12.5, fontWeight: '600', color: Brand.textSecondary },
-  segmentTextActive: { color: Brand.primary, fontWeight: '700' },
+  label: { ...Type.meta, color: Brand.text, fontWeight: '700', marginBottom: Space.sm, marginTop: Space.lg },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
   chip: {
     borderWidth: 1,
@@ -451,8 +487,8 @@ const styles = StyleSheet.create({
     backgroundColor: Brand.surface,
   },
   chipActive: { borderColor: Brand.primary, backgroundColor: Brand.primarySoft },
-  chipText: { fontSize: 11.5, fontWeight: '600', color: Brand.textSecondary },
-  chipTextActive: { color: Brand.primary, fontWeight: '700' },
+  chipText: { ...Type.meta, color: Brand.textSecondary, fontWeight: '600' },
+  chipTextActive: { color: Brand.primaryDark, fontWeight: '800' },
   input: {
     backgroundColor: '#F7F9FC',
     borderWidth: 1,
@@ -460,9 +496,20 @@ const styles = StyleSheet.create({
     borderRadius: Radius.md,
     paddingHorizontal: Space.md,
     minHeight: 48,
-    fontSize: 13.5,
+    fontSize: 14,
     color: Brand.text,
   },
+  firstNote: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: Brand.primarySoft,
+    borderRadius: Radius.sm,
+    padding: Space.sm,
+    marginTop: Space.lg,
+    marginBottom: Space.lg,
+  },
+  firstNoteText: { flex: 1, ...Type.meta, color: Brand.primaryDark, lineHeight: 16 },
   checkboxRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -470,7 +517,7 @@ const styles = StyleSheet.create({
     marginTop: Space.lg,
     marginBottom: Space.lg,
   },
-  checkboxText: { fontSize: 12.5, color: Brand.text, fontWeight: '600' },
-  note: { fontSize: 11, color: Brand.textMuted, marginTop: Space.lg, lineHeight: 16 },
-  pressed: { opacity: 0.75 },
+  checkboxText: { ...Type.meta, color: Brand.text, fontWeight: '600' },
+  note: { ...Type.meta, color: Brand.textMuted, marginTop: Space.lg, lineHeight: 16 },
+  pressed: { opacity: 0.72 },
 });

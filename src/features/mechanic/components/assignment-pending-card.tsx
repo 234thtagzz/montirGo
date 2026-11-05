@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@/components/ui/icon';
-import { Brand, Radius, Space } from '@/constants/brand';
+import { Brand, Radius, Space, Type } from '@/constants/brand';
 
 interface AssignmentPendingCardProps {
   /** Batas waktu client mengonfirmasi; null bila tidak diketahui. */
@@ -46,18 +46,17 @@ export function AssignmentPendingCard({ expiresAt, onPress }: AssignmentPendingC
       style={({ pressed }) => [styles.card, pressed && styles.pressed]}
     >
       <View style={styles.iconWrap}>
-        <Ionicons name="hourglass-outline" size={20} color={Brand.amber} />
+        <Ionicons name="hourglass-outline" size={19} color={Brand.amber} />
       </View>
       <View style={styles.copy}>
         <Text style={styles.title}>Menunggu konfirmasi client</Text>
         <Text style={styles.desc}>
-          Client sedang meninjau rating, ulasan, dan profil bengkelmu. Kamu bisa berangkat
-          setelah client menyetujui pengajuan.
+          Client sedang meninjau profil & ratingmu. Kamu bisa berangkat setelah pengajuan
+          disetujui.
         </Text>
       </View>
       {remaining != null ? (
         <View style={styles.countdown}>
-          <Ionicons name="time-outline" size={12} color={Brand.amber} />
           <Text style={styles.countdownText}>{formatRemaining(remaining)}</Text>
         </View>
       ) : null}
@@ -73,30 +72,27 @@ const styles = StyleSheet.create({
     backgroundColor: Brand.amberSoft,
     borderRadius: Radius.lg,
     borderWidth: 1,
-    borderColor: Brand.amber,
-    padding: Space.lg,
+    borderColor: '#F2D48A',
+    padding: Space.md,
     marginTop: Space.md,
   },
   pressed: { opacity: 0.9 },
   iconWrap: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+    width: 38,
+    height: 38,
+    borderRadius: Radius.sm,
     backgroundColor: Brand.surface,
     alignItems: 'center',
     justifyContent: 'center',
   },
   copy: { flex: 1 },
-  title: { fontSize: 13.5, fontWeight: '800', color: Brand.text },
-  desc: { fontSize: 11, color: Brand.textSecondary, lineHeight: 16, marginTop: 3 },
+  title: { ...Type.bodyStrong, color: Brand.text, fontWeight: '700' },
+  desc: { ...Type.meta, color: '#7C5A12', lineHeight: 15, marginTop: 2 },
   countdown: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 3,
     backgroundColor: Brand.surface,
     paddingHorizontal: 8,
     paddingVertical: 5,
-    borderRadius: Radius.pill,
+    borderRadius: Radius.xs,
   },
-  countdownText: { fontSize: 11, fontWeight: '800', color: Brand.amber },
+  countdownText: { ...Type.label, color: Brand.amber, fontWeight: '800' },
 });

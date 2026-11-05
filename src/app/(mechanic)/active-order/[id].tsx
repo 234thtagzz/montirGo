@@ -1,5 +1,8 @@
 import { Avatar } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
+import { ConfirmSheet } from "@/components/ui/confirm-sheet";
+import { Money } from "@/components/ui/money";
+import { SectionHeader } from "@/components/ui/section-header";
 import { Ionicons } from "@/components/ui/icon";
 import { ScreenHeader } from "@/components/ui/screen-header";
 import { EmptyState, ErrorState, LoadingState } from "@/components/ui/state";
@@ -9,6 +12,8 @@ import {
   Radius,
   ScreenPadding,
   Space,
+  Tabular,
+  Type,
 } from "@/constants/brand";
 import {
   getMechanicProgressLabel,
@@ -77,6 +82,8 @@ export default function MechanicOrderDetailScreen() {
   const [priceDraft, setPriceDraft] = useState<string | null>(null);
   const [sendingPrice, setSendingPrice] = useState(false);
   const [confirmingCash, setConfirmingCash] = useState(false);
+  const [priceConfirmOpen, setPriceConfirmOpen] = useState(false);
+  const [cashConfirmOpen, setCashConfirmOpen] = useState(false);
 
   const loadAnalysis = useCallback(async () => {
     if (!id) return;
@@ -233,67 +240,50 @@ export default function MechanicOrderDetailScreen() {
     order != null &&
     ["arrived", "diagnosing", "repairing", "completed"].includes(order.status);
 
-  const submitPrice = () => {
+  const openPriceConfirm = () => {
     if (!order || !canSendPrice) return;
-    Alert.alert(
-      "Kirim tagihan?",
-      `Client akan menerima tagihan ${formatIDR(priceValue)}. ` +
-        `Pendapatan bersihmu ${formatIDR(netPrice)} setelah fee ${feePercent}%.`,
-      [
-        { text: "Batal", style: "cancel" },
-        {
-          text: "Kirim tagihan",
-          onPress: async () => {
-            setSendingPrice(true);
-            try {
-              await setOrderPrice(order.id, priceValue);
-              setPriceDraft(null);
-              await load();
-            } catch (e) {
-              Alert.alert(
-                "Gagal mengirim tagihan",
-                e instanceof Error ? e.message : "Coba lagi.",
-              );
-            } finally {
-              setSendingPrice(false);
-            }
-          },
-        },
-      ],
-    );
+    setPriceConfirmOpen(true);
+  };
+
+  const sendPrice = async () => {
+    if (!order || !canSendPrice) return;
+    setSendingPrice(true);
+    try {
+      await setOrderPrice(order.id, priceValue);
+      setPriceConfirmOpen(false);
+      setPriceDraft(null);
+      await load();
+    } catch (e) {
+      Alert.alert(
+        "Gagal mengirim tagihan",
+        e instanceof Error ? e.message : "Coba lagi.",
+      );
+    } finally {
+      setSendingPrice(false);
+    }
   };
 
   /** Montir mengonfirmasi uang tunai sudah diterima dari client. */
-  const confirmCash = () => {
+  const openCashConfirm = () => {
     if (!order || confirmingCash) return;
-    const amount = order.price_amount ?? 0;
-    const chosen = order.payment_method === 'cash';
-    Alert.alert(
-      'Konfirmasi pembayaran tunai?',
-      `Pastikan kamu sudah menerima uang tunai ${formatIDR(amount)} dari client.` +
-        (chosen ? '' : '\n\nClient belum memilih metode tunai di aplikasi.') +
-        '\n\nPendapatan tunai dicatat di menu Pendapatan, tetapi tidak masuk saldo dompet MontirGo.',
-      [
-        { text: 'Batal', style: 'cancel' },
-        {
-          text: 'Ya, sudah diterima',
-          onPress: async () => {
-            setConfirmingCash(true);
-            try {
-              await confirmCashPayment(order.id);
-              await load();
-            } catch (e) {
-              Alert.alert(
-                'Gagal mengonfirmasi',
-                e instanceof Error ? e.message : 'Coba lagi.',
-              );
-            } finally {
-              setConfirmingCash(false);
-            }
-          },
-        },
-      ],
-    );
+    setCashConfirmOpen(true);
+  };
+
+  const submitCash = async () => {
+    if (!order) return;
+    setConfirmingCash(true);
+    try {
+      await confirmCashPayment(order.id);
+      setCashConfirmOpen(false);
+      await load();
+    } catch (e) {
+      Alert.alert(
+        'Gagal mengonfirmasi',
+        e instanceof Error ? e.message : 'Coba lagi.',
+      );
+    } finally {
+      setConfirmingCash(false);
+    }
   };
 
   const retryAnalysis = async () => {
@@ -396,6 +386,7 @@ export default function MechanicOrderDetailScreen() {
   }
 
   const meta = getStatusMeta(order.status);
+  const cashAmount = order.price_amount ?? 0;
   const hasVehicle = Boolean(
     order.vehicle_type ||
       order.vehicle_brand ||
@@ -426,36 +417,62 @@ export default function MechanicOrderDetailScreen() {
           />
         }
       >
-        <View style={styles.statusCard}>
-          <View style={styles.statusTop}>
-            <View style={[styles.chip, { backgroundColor: meta.background }]}>
-              <Ionicons name={meta.icon} size={13} color={meta.color} />
-              <Text style={[styles.chipText, { color: meta.color }]}>
-                {meta.shortLabel}
-              </Text>
+        <View style={styles.hero}>
+          <View style={styles.heroTop}>
+            <View style={styles.heroChip}>
+              <View style={[styles.heroChipDot, { backgroundColor: meta.color }]} />
+              <Text style={styles.heroChipText}>{meta.shortLabel}</Text>
             </View>
-            <Text style={styles.statusTime}>
-              {formatDateTime(order.created_at)}
-            </Text>
+            <Text style={styles.heroTime}>{formatDateTime(order.created_at)}</Text>
           </View>
-          <Text style={styles.statusTitle}>
+          <Text style={styles.heroTitle}>
             {getMechanicProgressLabel(order.status)}
           </Text>
-          <Text style={styles.statusSub}>{meta.label}</Text>
+          <Text style={styles.heroSub}>{meta.label}</Text>
 
           {meta.step > 0 ? (
-            <View style={styles.progress}>
-              {Array.from({ length: TOTAL_STEPS }).map((_, index) => (
-                <View
-                  key={index}
-                  style={[
-                    styles.segment,
-                    index < meta.step && styles.segmentActive,
-                  ]}
-                />
-              ))}
+            <View style={styles.progressWrap}>
+              <View style={styles.progress}>
+                {Array.from({ length: TOTAL_STEPS }).map((_, index) => (
+                  <View
+                    key={index}
+                    style={[
+                      styles.segment,
+                      index < meta.step && styles.segmentActive,
+                    ]}
+                  />
+                ))}
+              </View>
+              <Text style={styles.progressLabel}>
+                Tahap {meta.step} dari {TOTAL_STEPS}
+              </Text>
             </View>
           ) : null}
+
+          <View style={styles.heroDivider} />
+
+          <View style={styles.clientRow}>
+            <Avatar name={order.client_name ?? "Client"} size={42} />
+            <View style={styles.clientCopy}>
+              <Text style={styles.clientName} numberOfLines={1}>
+                {order.client_name ?? "Client MontirGo"}
+              </Text>
+              <Text style={styles.clientRole}>Pelanggan yang kamu tangani</Text>
+            </View>
+            {order.client_phone || order.contact_phone ? (
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Hubungi pelanggan lewat WhatsApp"
+                onPress={chatClient}
+                style={({ pressed }) => [
+                  styles.chatButton,
+                  pressed && styles.pressed,
+                ]}
+              >
+                <Ionicons name="logo-whatsapp" size={19} color={Brand.ink} />
+              </Pressable>
+            ) : null}
+          </View>
         </View>
 
         {pendingConfirmation ? (
@@ -472,32 +489,9 @@ export default function MechanicOrderDetailScreen() {
           />
         ) : null}
 
-        <View style={styles.clientCard}>
-          <Avatar name={order.client_name ?? "Client"} size={46} />
-          <View style={styles.clientCopy}>
-            <Text style={styles.clientName} numberOfLines={1}>
-              {order.client_name ?? "Client MontirGo"}
-            </Text>
-            <Text style={styles.clientRole}>Pelanggan yang kamu tangani</Text>
-          </View>
-          {order.client_phone || order.contact_phone ? (
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel="Hubungi pelanggan lewat WhatsApp"
-              onPress={chatClient}
-              style={({ pressed }) => [
-                styles.chatButton,
-                pressed && styles.pressed,
-              ]}
-            >
-              <Ionicons name="logo-whatsapp" size={18} color={Brand.white} />
-            </Pressable>
-          ) : null}
-        </View>
-
         {hasVehicle ? (
           <>
-            <Text style={styles.section}>Kendaraan client</Text>
+            <SectionHeader eyebrow="KENDARAAN" title="Kendaraan client" />
             <VehicleProfileCard
               title="Data kendaraan"
               photo={order.vehicle_photo_url}
@@ -510,7 +504,7 @@ export default function MechanicOrderDetailScreen() {
           </>
         ) : null}
 
-        <Text style={styles.section}>Detail permintaan</Text>
+        <SectionHeader eyebrow="KELUHAN" title="Detail permintaan" />
         <View style={styles.detailCard}>
           <DetailRow label="Keluhan" value={order.issue_description} />
           {order.symptoms ? (
@@ -537,7 +531,7 @@ export default function MechanicOrderDetailScreen() {
         </View>
 
         <View onLayout={handleBillingLayout} />
-        <Text style={styles.section}>Tagihan & pembayaran</Text>
+        <SectionHeader eyebrow="PEMBAYARAN" title="Tagihan & pembayaran" />
         {canEditPrice ? (
           <View style={styles.billingCard}>
             <Text style={styles.billingLabel}>Nominal tagihan ke client</Text>
@@ -552,34 +546,38 @@ export default function MechanicOrderDetailScreen() {
                 placeholderTextColor={Brand.textMuted}
                 keyboardType="number-pad"
                 selectionColor={Brand.primary}
-                style={styles.priceInput}
+                style={[styles.priceInput, Tabular]}
               />
             </View>
             {priceError ? (
               <Text style={styles.priceError}>{priceError}</Text>
-            ) : null}
-            <View style={styles.priceMeta}>
-              <View style={styles.priceMetaItem}>
-                <Text style={styles.priceMetaLabel}>
-                  Fee platform ({feePercent}%)
-                </Text>
-                <Text style={styles.priceMetaValue}>
-                  - {formatIDR(platformFee)}
-                </Text>
+            ) : (
+              <Text style={styles.priceHelper}>
+                Rentang {formatIDR(minPrice)} – {formatIDR(maxPrice)}
+              </Text>
+            )}
+            <View style={styles.priceRow}>
+              <Text style={styles.priceMetaLabel}>
+                Fee platform ({feePercent}%)
+              </Text>
+              <Text style={[styles.priceMetaValue, Tabular]}>
+                − {formatIDR(platformFee)}
+              </Text>
+            </View>
+            <View style={styles.netBand}>
+              <View style={styles.netCopy}>
+                <Text style={styles.netLabel}>Kamu terima</Text>
+                <Text style={styles.netHint}>Setelah fee platform</Text>
               </View>
-              <View style={styles.priceMetaItem}>
-                <Text style={styles.priceMetaLabel}>Kamu terima</Text>
-                <Text style={styles.priceMetaValueNet}>
-                  {formatIDR(netPrice)}
-                </Text>
-              </View>
+              <Money value={netPrice} size="md" color={Brand.green} />
             </View>
             <Button
               label="Kirim Tagihan ke Client"
               icon="receipt-outline"
+              variant="ink"
               loading={sendingPrice}
               disabled={!canSendPrice}
-              onPress={submitPrice}
+              onPress={openPriceConfirm}
               style={styles.sendPrice}
             />
             <Text style={styles.billingHint}>
@@ -615,8 +613,9 @@ export default function MechanicOrderDetailScreen() {
               <Button
                 label="Konfirmasi Pembayaran Cash"
                 icon="cash-outline"
+                variant="ink"
                 loading={confirmingCash}
-                onPress={confirmCash}
+                onPress={openCashConfirm}
                 style={styles.cashConfirm}
               />
             ) : (
@@ -625,7 +624,7 @@ export default function MechanicOrderDetailScreen() {
                 icon="cash-outline"
                 variant="secondary"
                 loading={confirmingCash}
-                onPress={confirmCash}
+                onPress={openCashConfirm}
                 style={styles.cashConfirm}
               />
             )}
@@ -668,7 +667,7 @@ export default function MechanicOrderDetailScreen() {
           </View>
         )}
 
-        <Text style={styles.section}>Analisis AI</Text>
+        <SectionHeader eyebrow="AI" title="Analisis awal" />
         <AiAnalysisCard
           analysis={analysis}
           error={analysisError}
@@ -683,7 +682,7 @@ export default function MechanicOrderDetailScreen() {
 
         {history.length > 0 ? (
           <>
-            <Text style={styles.section}>Riwayat status</Text>
+            <SectionHeader eyebrow="RIWAYAT" title="Riwayat status" />
             <View style={styles.detailCard}>
               {history.map((event, index) => {
                 const eventMeta = getStatusMeta(event.to_status);
@@ -722,6 +721,7 @@ export default function MechanicOrderDetailScreen() {
           <Button
             label={stageAction.label}
             icon={stageAction.icon}
+            variant="ink"
             loading={updating}
             onPress={advance}
             style={styles.action}
@@ -741,6 +741,59 @@ export default function MechanicOrderDetailScreen() {
           </View>
         )}
       </ScrollView>
+
+      <ConfirmSheet
+        visible={priceConfirmOpen}
+        title="Kirim tagihan?"
+        message={`Client akan menerima tagihan ${formatIDR(priceValue)} dan bisa langsung membayar.`}
+        confirmLabel="Kirim tagihan"
+        icon="receipt-outline"
+        loading={sendingPrice}
+        onConfirm={sendPrice}
+        onCancel={() => setPriceConfirmOpen(false)}
+      >
+        <View style={styles.sheetBox}>
+          <View style={styles.sheetRow}>
+            <Text style={styles.sheetLabel}>Tagihan</Text>
+            <Money value={priceValue} size="sm" color={Brand.text} />
+          </View>
+          <View style={styles.sheetRow}>
+            <Text style={styles.sheetLabel}>Fee platform ({feePercent}%)</Text>
+            <Text style={[styles.sheetValue, Tabular]}>
+              − {formatIDR(platformFee)}
+            </Text>
+          </View>
+          <View style={styles.sheetDivider} />
+          <View style={styles.sheetRow}>
+            <Text style={styles.sheetLabel}>Kamu terima</Text>
+            <Money value={netPrice} size="md" color={Brand.green} />
+          </View>
+        </View>
+      </ConfirmSheet>
+
+      <ConfirmSheet
+        visible={cashConfirmOpen}
+        title="Konfirmasi pembayaran tunai?"
+        message={
+          `Pastikan kamu sudah menerima uang tunai ${formatIDR(cashAmount)} dari client.` +
+          (order.payment_method === "cash"
+            ? ""
+            : "\n\nClient belum memilih metode tunai di aplikasi.")
+        }
+        confirmLabel="Ya, sudah diterima"
+        icon="cash-outline"
+        loading={confirmingCash}
+        onConfirm={submitCash}
+        onCancel={() => setCashConfirmOpen(false)}
+      >
+        <View style={styles.sheetCash}>
+          <Ionicons name="cash-outline" size={18} color={Brand.green} />
+          <Text style={styles.sheetCashText}>
+            Pendapatan tunai tercatat di menu Pendapatan, tetapi tidak masuk saldo dompet
+            MontirGo.
+          </Text>
+        </View>
+      </ConfirmSheet>
     </View>
   );
 }
@@ -769,70 +822,59 @@ function DetailRow({
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: Brand.background },
   content: { padding: ScreenPadding, paddingBottom: Space.xxxl },
-  statusCard: {
-    backgroundColor: Brand.surface,
-    borderRadius: Radius.lg,
+  hero: {
+    backgroundColor: Brand.ink,
+    borderRadius: Radius.xxl,
+    borderWidth: 1,
+    borderColor: Brand.inkBorder,
     padding: Space.lg,
     ...CardShadow,
   },
-  statusTop: {
+  heroTop: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
   },
-  chip: {
+  heroChip: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 4,
-    paddingHorizontal: 8,
+    gap: 6,
+    paddingHorizontal: 9,
     paddingVertical: 4,
     borderRadius: Radius.pill,
+    backgroundColor: "rgba(255,255,255,0.08)",
   },
-  chipText: { fontSize: 10.5, fontWeight: "700" },
-  statusTime: { fontSize: 11, color: Brand.textMuted },
-  statusTitle: {
-    fontSize: 17,
-    fontWeight: "700",
-    color: Brand.text,
-    marginTop: Space.md,
-  },
-  statusSub: { fontSize: 12, color: Brand.textSecondary, marginTop: 2 },
-  progress: { flexDirection: "row", gap: 4, marginTop: Space.md },
+  heroChipDot: { width: 6, height: 6, borderRadius: 3 },
+  heroChipText: { ...Type.micro, color: Brand.inkText, fontSize: 9.5, letterSpacing: 0.3 },
+  heroTime: { ...Type.meta, color: Brand.inkMuted, fontSize: 10 },
+  heroTitle: { ...Type.h2, color: Brand.white, marginTop: Space.md },
+  heroSub: { ...Type.meta, color: Brand.inkMuted, marginTop: 3 },
+  progressWrap: { marginTop: Space.lg },
+  progress: { flexDirection: "row", gap: 4 },
   segment: {
     flex: 1,
     height: 4,
     borderRadius: 2,
-    backgroundColor: Brand.divider,
+    backgroundColor: Brand.inkBorder,
   },
-  segmentActive: { backgroundColor: Brand.primary },
-  clientCard: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: Space.md,
-    backgroundColor: Brand.surface,
-    borderRadius: Radius.lg,
-    padding: Space.md,
-    marginTop: Space.md,
-    borderWidth: 1,
-    borderColor: Brand.divider,
+  segmentActive: { backgroundColor: Brand.volt },
+  progressLabel: { ...Type.micro, color: Brand.inkMuted, fontSize: 9, marginTop: 6 },
+  heroDivider: {
+    height: 1,
+    backgroundColor: Brand.inkBorder,
+    marginVertical: Space.lg,
   },
+  clientRow: { flexDirection: "row", alignItems: "center", gap: Space.md },
   clientCopy: { flex: 1 },
-  clientName: { fontSize: 14, fontWeight: "700", color: Brand.text },
-  clientRole: { fontSize: 11.5, color: Brand.textSecondary, marginTop: 2 },
+  clientName: { ...Type.bodyStrong, color: Brand.white, fontWeight: "700" },
+  clientRole: { ...Type.meta, color: Brand.inkMuted, marginTop: 2 },
   chatButton: {
     width: 42,
     height: 42,
     borderRadius: 21,
-    backgroundColor: Brand.whatsapp,
+    backgroundColor: Brand.volt,
     alignItems: "center",
     justifyContent: "center",
-  },
-  section: {
-    fontSize: 14,
-    fontWeight: "700",
-    color: Brand.text,
-    marginTop: Space.xxl,
-    marginBottom: Space.md,
   },
   detailCard: {
     backgroundColor: Brand.surface,
@@ -840,7 +882,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: Space.lg,
     paddingVertical: Space.xs,
     borderWidth: 1,
-    borderColor: Brand.divider,
+    borderColor: Brand.border,
   },
   detailRow: {
     paddingVertical: Space.md,
@@ -881,11 +923,12 @@ const styles = StyleSheet.create({
     backgroundColor: Brand.surface,
     borderRadius: Radius.lg,
     borderWidth: 1,
-    borderColor: Brand.divider,
+    borderColor: Brand.border,
     padding: Space.lg,
+    ...CardShadow,
   },
   billingLabel: {
-    fontSize: 12,
+    ...Type.meta,
     fontWeight: "700",
     color: Brand.text,
     marginBottom: Space.sm,
@@ -901,47 +944,53 @@ const styles = StyleSheet.create({
     paddingHorizontal: Space.md,
   },
   priceCurrency: {
-    fontSize: 14,
-    fontWeight: "700",
+    ...Type.title,
     color: Brand.textSecondary,
   },
   priceInput: {
     flex: 1,
-    minHeight: 46,
-    fontSize: 20,
-    fontWeight: "700",
+    minHeight: 52,
+    fontSize: 24,
+    fontWeight: "800",
+    letterSpacing: -0.6,
     color: Brand.text,
     paddingVertical: 0,
   },
-  priceError: { fontSize: 11, color: Brand.red, marginTop: 6 },
-  priceMeta: {
+  priceError: { ...Type.meta, color: Brand.red, marginTop: 6 },
+  priceHelper: { ...Type.meta, color: Brand.textMuted, marginTop: 6, fontSize: 10.5 },
+  priceRow: {
     flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
     gap: Space.md,
     marginTop: Space.md,
     paddingTop: Space.md,
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: Brand.divider,
   },
-  priceMetaItem: { flex: 1 },
-  priceMetaLabel: { fontSize: 10.5, color: Brand.textMuted, fontWeight: "600" },
-  priceMetaValue: {
-    fontSize: 13,
-    fontWeight: "700",
-    color: Brand.text,
-    marginTop: 2,
+  priceMetaLabel: { ...Type.meta, color: Brand.textMuted, fontWeight: "600" },
+  priceMetaValue: { ...Type.label, color: Brand.text, fontWeight: "700" },
+  netBand: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: Space.md,
+    backgroundColor: Brand.greenSoft,
+    borderRadius: Radius.md,
+    paddingHorizontal: Space.md,
+    paddingVertical: Space.sm,
+    marginTop: Space.sm,
   },
-  priceMetaValueNet: {
-    fontSize: 14,
-    fontWeight: "700",
-    color: Brand.green,
-    marginTop: 2,
-  },
+  netCopy: { flex: 1 },
+  netLabel: { ...Type.label, color: Brand.green, fontWeight: "700" },
+  netHint: { ...Type.meta, color: Brand.green, fontSize: 9.5, opacity: 0.8, marginTop: 1 },
   sendPrice: { marginTop: Space.lg },
   billingHint: {
-    fontSize: 10.5,
+    ...Type.meta,
     color: Brand.textMuted,
     marginTop: Space.sm,
     lineHeight: 15,
+    fontSize: 10.5,
   },
   pendingCard: {
     flexDirection: "row",
@@ -994,6 +1043,39 @@ const styles = StyleSheet.create({
     color: Brand.green,
     fontWeight: "600",
     lineHeight: 17,
+  },
+  sheetBox: {
+    backgroundColor: Brand.background,
+    borderRadius: Radius.md,
+    padding: Space.md,
+  },
+  sheetRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: Space.md,
+    paddingVertical: 5,
+  },
+  sheetLabel: { ...Type.meta, color: Brand.textSecondary },
+  sheetValue: { ...Type.meta, color: Brand.text, fontWeight: "700" },
+  sheetDivider: {
+    height: StyleSheet.hairlineWidth,
+    backgroundColor: Brand.border,
+    marginVertical: Space.xs,
+  },
+  sheetCash: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: Space.sm,
+    backgroundColor: Brand.greenSoft,
+    borderRadius: Radius.md,
+    padding: Space.md,
+  },
+  sheetCashText: {
+    flex: 1,
+    ...Type.meta,
+    color: Brand.green,
+    lineHeight: 16,
   },
   pressed: { opacity: 0.7 },
 });

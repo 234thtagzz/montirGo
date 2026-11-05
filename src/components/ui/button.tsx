@@ -6,10 +6,10 @@ import {
   type StyleProp,
   type ViewStyle,
 } from 'react-native';
-import { Brand, Radius, Space } from '@/constants/brand';
+import { Brand, Radius, Space, Type } from '@/constants/brand';
 import { Ionicons, type IconName } from '@/components/ui/icon';
 
-type ButtonVariant = 'primary' | 'secondary' | 'ghost' | 'danger';
+type ButtonVariant = 'primary' | 'secondary' | 'ghost' | 'ink' | 'danger';
 
 interface ButtonProps {
   label: string;
@@ -22,11 +22,40 @@ interface ButtonProps {
   style?: StyleProp<ViewStyle>;
 }
 
-const VARIANTS: Record<ButtonVariant, { background: string; border: string; text: string }> = {
-  primary: { background: Brand.primary, border: Brand.primary, text: Brand.white },
-  secondary: { background: Brand.primarySoft, border: Brand.primarySoft, text: Brand.primary },
-  ghost: { background: 'transparent', border: Brand.border, text: Brand.text },
-  danger: { background: Brand.redSoft, border: Brand.redSoft, text: Brand.red },
+const VARIANTS: Record<
+  ButtonVariant,
+  { background: string; border: string; text: string; spinner: string }
+> = {
+  primary: {
+    background: Brand.primary,
+    border: Brand.primary,
+    text: Brand.white,
+    spinner: Brand.white,
+  },
+  secondary: {
+    background: Brand.primarySoft,
+    border: Brand.primarySoft,
+    text: Brand.primaryDark,
+    spinner: Brand.primary,
+  },
+  ghost: {
+    background: 'transparent',
+    border: Brand.border,
+    text: Brand.text,
+    spinner: Brand.text,
+  },
+  ink: {
+    background: Brand.ink,
+    border: Brand.ink,
+    text: Brand.white,
+    spinner: Brand.white,
+  },
+  danger: {
+    background: Brand.redSoft,
+    border: Brand.redSoft,
+    text: Brand.red,
+    spinner: Brand.red,
+  },
 };
 
 export function Button({
@@ -54,16 +83,18 @@ export function Button({
         {
           backgroundColor: palette.background,
           borderColor: palette.border,
-          opacity: isDisabled ? 0.55 : pressed ? 0.85 : 1,
+          opacity: isDisabled ? 0.5 : pressed ? 0.86 : 1,
         },
         style,
       ]}
     >
       {loading ? (
-        <ActivityIndicator size="small" color={palette.text} />
+        <ActivityIndicator size="small" color={palette.spinner} />
       ) : (
         <>
-          {icon ? <Ionicons name={icon} size={compact ? 16 : 18} color={palette.text} /> : null}
+          {icon ? (
+            <Ionicons name={icon} size={compact ? 16 : 18} color={palette.text} />
+          ) : null}
           <Text
             numberOfLines={1}
             style={[styles.label, compact && styles.labelCompact, { color: palette.text }]}
@@ -78,7 +109,7 @@ export function Button({
 
 const styles = StyleSheet.create({
   base: {
-    minHeight: 48,
+    minHeight: 50,
     paddingHorizontal: Space.xl,
     borderRadius: Radius.md,
     borderWidth: 1,
@@ -87,7 +118,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: Space.sm,
   },
-  compact: { minHeight: 38, paddingHorizontal: Space.md, borderRadius: Radius.sm },
-  label: { fontSize: 15, fontWeight: '700' },
+  compact: { minHeight: 40, paddingHorizontal: Space.lg, borderRadius: Radius.sm },
+  label: { ...Type.bodyStrong, fontWeight: '700', fontSize: 15 },
   labelCompact: { fontSize: 13 },
 });

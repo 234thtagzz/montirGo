@@ -3,7 +3,7 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@/components/ui/icon';
-import { Brand, Radius, ScreenPadding, Space } from '@/constants/brand';
+import { Brand, Radius, ScreenPadding, Space, Type } from '@/constants/brand';
 
 interface ScreenHeaderProps {
   title: string;
@@ -13,6 +13,10 @@ interface ScreenHeaderProps {
   right?: ReactNode;
 }
 
+/**
+ * Header layar pendalaman. Sengaja tanpa border tebal: pemisah dibuat oleh
+ * latar halaman, bukan garis, agar terasa lebih ringan.
+ */
 export function ScreenHeader({ title, subtitle, showBack = true, right }: ScreenHeaderProps) {
   const insets = useSafeAreaInsets();
   const router = useRouter();
@@ -25,7 +29,9 @@ export function ScreenHeader({ title, subtitle, showBack = true, right }: Screen
             accessibilityRole="button"
             accessibilityLabel="Kembali"
             hitSlop={8}
-            onPress={() => (router.canGoBack() ? router.back() : router.replace('/(client)/(tabs)'))}
+            onPress={() =>
+              router.canGoBack() ? router.back() : router.replace('/(client)/(tabs)')
+            }
             style={({ pressed }) => [styles.back, pressed && styles.pressed]}
           >
             <Ionicons name="arrow-back" size={20} color={Brand.text} />
@@ -53,25 +59,25 @@ export function ScreenHeader({ title, subtitle, showBack = true, right }: Screen
 
 const styles = StyleSheet.create({
   header: {
-    backgroundColor: Brand.surface,
+    backgroundColor: Brand.background,
     paddingHorizontal: ScreenPadding,
     paddingBottom: Space.md,
-    borderBottomWidth: 1,
-    borderBottomColor: Brand.divider,
   },
   row: { flexDirection: 'row', alignItems: 'center', gap: Space.md },
   back: {
-    width: 38,
-    height: 38,
-    borderRadius: Radius.sm,
-    backgroundColor: Brand.background,
+    width: 40,
+    height: 40,
+    borderRadius: Radius.md,
+    backgroundColor: Brand.surface,
+    borderWidth: 1,
+    borderColor: Brand.border,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  backPlaceholder: { width: 38 },
+  backPlaceholder: { width: 40 },
   titleBox: { flex: 1 },
-  title: { fontSize: 17, fontWeight: '700', color: Brand.text },
-  subtitle: { fontSize: 11.5, color: Brand.textSecondary, marginTop: 1 },
-  right: { minWidth: 38, alignItems: 'flex-end' },
+  title: { ...Type.h2, color: Brand.text },
+  subtitle: { ...Type.meta, color: Brand.textSecondary, marginTop: 1 },
+  right: { minWidth: 40, alignItems: 'flex-end' },
   pressed: { opacity: 0.6 },
 });

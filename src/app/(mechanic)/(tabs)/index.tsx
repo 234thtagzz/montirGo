@@ -215,17 +215,24 @@ export default function MechanicDashboardScreen() {
             </View>
           ) : (
             <>
-              <StatTiles
-                netToday={todayNet}
-                jobsToday={todayJobs}
-                activeOrders={activeOrders.length}
-                onPressEarnings={() => router.push('/(mechanic)/earnings')}
-              />
+              <View style={styles.performance}>
+                <StatTiles
+                  netToday={todayNet}
+                  jobsToday={todayJobs}
+                  activeOrders={activeOrders.length}
+                  onPressEarnings={() => router.push('/(mechanic)/earnings')}
+                />
+              </View>
 
               <SectionHeader
+                eyebrow="PEKERJAAN"
                 title="Order aktif"
-                actionLabel="Lihat semua"
-                onPressAction={() => router.push('/(mechanic)/active-orders')}
+                actionLabel={activeOrders.length > 0 ? 'Lihat semua' : undefined}
+                onPressAction={
+                  activeOrders.length > 0
+                    ? () => router.push('/(mechanic)/active-orders')
+                    : undefined
+                }
               />
               {activeOrders.length === 0 ? (
                 <EmptyState
@@ -257,11 +264,11 @@ export default function MechanicDashboardScreen() {
                   ))
               )}
 
-              <SectionHeader title="Aksi cepat" />
               <View style={styles.actions}>
                 <Button
-                  label="Lihat Request Masuk"
+                  label="Request Masuk"
                   icon="flash-outline"
+                  variant="ink"
                   onPress={() => router.push('/(mechanic)/(tabs)/requests')}
                 />
                 <Button
@@ -286,25 +293,21 @@ function DashboardSkeleton() {
       <StatusBar style="light" />
       <View style={[styles.skeletonHeader, { paddingTop: insets.top + Space.md }]}>
         <View style={styles.skeletonRow}>
-          <Skeleton width={44} height={44} radius={22} style={styles.onBlue} />
+          <Skeleton width={46} height={46} radius={23} style={styles.onBlue} />
           <View style={styles.skeletonUser}>
-            <Skeleton width={80} height={10} style={styles.onBlue} />
-            <Skeleton width={120} height={14} style={styles.onBlue} />
+            <Skeleton width={90} height={9} style={styles.onBlue} />
+            <Skeleton width={150} height={15} style={styles.onBlue} />
           </View>
-          <Skeleton width={78} height={30} radius={15} style={styles.onBlue} />
+          <Skeleton width={42} height={42} radius={14} style={styles.onBlue} />
         </View>
-        <Skeleton width={230} height={20} style={[styles.onBlue, { marginTop: Space.lg }]} />
       </View>
 
       <View style={styles.skeletonBody}>
-        <Skeleton height={104} radius={18} style={{ marginTop: -44 }} />
-        <Skeleton height={84} radius={18} style={{ marginTop: Space.md }} />
-        <View style={styles.skeletonGrid}>
-          <Skeleton height={96} radius={18} style={styles.skeletonHalf} />
-          <Skeleton height={96} radius={18} style={styles.skeletonHalf} />
-        </View>
-        <Skeleton width={120} height={14} />
-        <Skeleton height={96} radius={18} style={{ marginTop: Space.md }} />
+        <Skeleton height={120} radius={18} style={{ marginTop: -40 }} />
+        <Skeleton height={210} radius={18} style={{ marginTop: Space.md }} />
+        <Skeleton height={132} radius={18} style={{ marginTop: Space.md }} />
+        <Skeleton width={120} height={14} style={{ marginTop: Space.xxl }} />
+        <Skeleton height={104} radius={18} style={{ marginTop: Space.md }} />
       </View>
     </View>
   );
@@ -321,16 +324,17 @@ const styles = StyleSheet.create({
     marginTop: Space.md,
     paddingVertical: Space.lg,
   },
-  actions: { gap: Space.md },
+  performance: { marginTop: Space.md },
+  actions: { gap: Space.sm, marginTop: Space.xxl },
   skeletonHeader: {
-    backgroundColor: Brand.primary,
+    backgroundColor: Brand.ink,
     paddingHorizontal: ScreenPadding,
-    paddingBottom: 64,
+    paddingBottom: 58,
+    borderBottomLeftRadius: 28,
+    borderBottomRightRadius: 28,
   },
   skeletonRow: { flexDirection: 'row', alignItems: 'center', gap: Space.sm },
-  skeletonUser: { flex: 1, gap: 6 },
-  onBlue: { backgroundColor: 'rgba(255,255,255,0.28)' },
+  skeletonUser: { flex: 1, gap: 7 },
+  onBlue: { backgroundColor: 'rgba(255,255,255,0.16)' },
   skeletonBody: { paddingHorizontal: ScreenPadding },
-  skeletonGrid: { flexDirection: 'row', gap: Space.md, marginTop: Space.md },
-  skeletonHalf: { flex: 1 },
 });

@@ -1,10 +1,11 @@
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { Button } from '@/components/ui/button';
+import { Money } from '@/components/ui/money';
 import { Ionicons, type IconName } from '@/components/ui/icon';
-import { Brand, Radius, Space } from '@/constants/brand';
+import { Brand, Radius, Space, Type } from '@/constants/brand';
 import { getStatusMeta } from '@/features/service-request/status';
 import { getRiskMeta, type AiRiskLevel } from '@/features/service-request/ai';
-import { formatDateTime, formatIDR } from '@/utils/format';
+import { formatDateTime } from '@/utils/format';
 
 interface OrderBadge {
   label: string;
@@ -35,7 +36,7 @@ interface OrderCardProps {
   };
 }
 
-/** Kartu order yang dipakai di dashboard, request masuk, dan order aktif. */
+/** Kartu order bergaya "job ticket": rail status di kiri, isi ringkas. */
 export function OrderCard({
   issue,
   status,
@@ -59,7 +60,7 @@ export function OrderCard({
   };
 
   const body = (
-    <>
+    <View style={styles.inner}>
       <View style={styles.top}>
         <View style={[styles.chip, { backgroundColor: chip.background }]}>
           <Ionicons name={chip.icon} size={12} color={chip.color} />
@@ -80,16 +81,25 @@ export function OrderCard({
           <View style={styles.metaRow}>
             <Ionicons name="sparkles-outline" size={13} color={riskMeta.color} />
             <Text style={[styles.metaText, { color: riskMeta.color, fontWeight: '600' }]}>
-              AI: {riskMeta.label.toLowerCase()}
+              Analisis AI: {riskMeta.label.toLowerCase()}
             </Text>
           </View>
         ) : null}
       </View>
 
-      {price != null ? (
-        <View style={styles.priceRow}>
-          <Text style={styles.priceLabel}>Biaya</Text>
-          <Text style={styles.price}>{formatIDR(price)}</Text>
+      {price != null || onPress ? (
+        <View style={styles.footer}>
+          {price != null ? (
+            <View>
+              <Text style={styles.priceLabel}>BIAYA</Text>
+              <Money value={price} size="md" color={Brand.text} />
+            </View>
+          ) : (
+            <Text style={styles.footerHint}>Buka detail order</Text>
+          )}
+          {onPress ? (
+            <Ionicons name="arrow-forward" size={16} color={Brand.textMuted} />
+          ) : null}
         </View>
       ) : null}
 
@@ -103,18 +113,21 @@ export function OrderCard({
           style={styles.action}
         />
       ) : null}
-    </>
+    </View>
   );
 
+  const cardStyle = [styles.card, { borderLeftColor: chip.color }];
+
   if (!onPress) {
-    return <View style={styles.card}>{body}</View>;
+    return <View style={cardStyle}>{body}</View>;
   }
 
   return (
     <Pressable
       accessibilityRole="button"
+      accessibilityLabel={`${chip.label}: ${issue}`}
       onPress={onPress}
-      style={({ pressed }) => [styles.card, pressed && styles.pressed]}
+      style={({ pressed }) => [cardStyle, pressed && styles.pressed]}
     >
       {body}
     </Pressable>
@@ -137,11 +150,13 @@ const styles = StyleSheet.create({
     backgroundColor: Brand.surface,
     borderRadius: Radius.lg,
     borderWidth: 1,
-    borderColor: Brand.divider,
-    padding: Space.lg,
+    borderColor: Brand.border,
+    borderLeftWidth: 3,
+    overflow: 'hidden',
     marginBottom: Space.md,
   },
-  pressed: { opacity: 0.75 },
+  pressed: { opacity: 0.78 },
+  inner: { padding: Space.lg },
   top: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   chip: {
     flexDirection: 'row',
@@ -151,19 +166,22 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
     borderRadius: Radius.pill,
   },
-  chipText: { fontSize: 10.5, fontWeight: '700' },
-  date: { fontSize: 10.5, color: Brand.textMuted },
-  issue: { fontSize: 13.5, fontWeight: '600', color: Brand.text, marginTop: Space.md, lineHeight: 19 },
+  chipText: { ...Type.micro, fontSize: 9.5, letterSpacing: 0.2 },
+  date: { ...Type.meta, color: Brand.textMuted },
+  issue: { ...Type.bodyStrong, color: Brand.text, marginTop: Space.md, lineHeight: 20 },
   metas: { gap: 5, marginTop: Space.md },
   metaRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  metaText: { flex: 1, fontSize: 11.5, color: Brand.textSecondary },
-  priceRow: {
+  metaText: { flex: 1, ...Type.meta, color: Brand.textSecondary },
+  footer: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     marginTop: Space.md,
+    paddingTop: Space.md,
+    borderTopWidth: 1,
+    borderTopColor: Brand.divider,
   },
-  priceLabel: { fontSize: 11, color: Brand.textMuted, fontWeight: '600' },
-  price: { fontSize: 14, fontWeight: '700', color: Brand.primary },
+  priceLabel: { ...Type.micro, color: Brand.textMuted, marginBottom: 1 },
+  footerHint: { ...Type.meta, color: Brand.textMuted },
   action: { marginTop: Space.lg },
 });

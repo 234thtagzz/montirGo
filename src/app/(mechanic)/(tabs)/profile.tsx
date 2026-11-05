@@ -19,12 +19,14 @@ import {
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Image } from 'expo-image';
+import { StatusBar } from 'expo-status-bar';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ScreenHeader } from '@/components/ui/screen-header';
 import { Avatar } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { LoadingState } from '@/components/ui/state';
 import { Ionicons, type IconName } from '@/components/ui/icon';
-import { Brand, Radius, ScreenPadding, Space } from '@/constants/brand';
+import { Brand, CardShadow, Radius, ScreenPadding, Space, Type } from '@/constants/brand';
 import { useAuth } from '@/features/auth/service';
 import { useSessionUser } from '@/hooks/use-session-user';
 import { formatDateTime } from '@/utils/format';
@@ -104,6 +106,7 @@ function formatCertification(draft: CertificationDraft): string {
 export default function MechanicProfileScreen() {
   const { logout } = useAuth();
   const { user: sessionUser, loading: sessionLoading } = useSessionUser();
+  const insets = useSafeAreaInsets();
   const router = useRouter();
 
   const [profile, setProfile] = useState<MechanicProfile | null>(null);
@@ -231,7 +234,8 @@ export default function MechanicProfileScreen() {
     }
   };
 
-  const pickAvatar = async () => {    if (!sessionUser?.id || uploadingAvatar) return;
+  const pickAvatar = async () => {
+    if (!sessionUser?.id || uploadingAvatar) return;
     try {
       const photo = await pickMechanicPhoto([1, 1]);
       if (!photo) return;
@@ -332,7 +336,7 @@ export default function MechanicProfileScreen() {
 
   return (
     <View style={styles.screen}>
-      <ScreenHeader title="Profil Montir" showBack={false} />
+      <StatusBar style="light" />
       <KeyboardAvoidingView
         style={styles.flex}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
@@ -342,101 +346,109 @@ export default function MechanicProfileScreen() {
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
-          <View style={styles.identity}>
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel="Ganti foto profil"
-              disabled={uploadingAvatar}
-              onPress={pickAvatar}
-              style={styles.avatarWrap}
-            >
-              <Avatar name={name} uri={avatarUrl} size={64} />
-              <View style={styles.avatarEdit}>
+          <View style={[styles.hero, { paddingTop: insets.top + Space.md }]}>
+            <View style={styles.heroTop}>
+              <Text style={styles.heroEyebrow}>PROFIL MONTIR</Text>
+              <View
+                style={styles.verifyBadge}
+              >
                 <Ionicons
-                  name={uploadingAvatar ? 'hourglass-outline' : 'camera'}
-                  size={12}
-                  color={Brand.white}
+                  name={verified ? 'shield-checkmark' : 'alert-circle-outline'}
+                  size={11}
+                  color={verified ? Brand.green : Brand.amber}
                 />
+                <Text
+                  style={[
+                    styles.verifyText,
+                    { color: verified ? Brand.green : Brand.amber },
+                  ]}
+                >
+                  {verified ? 'Terverifikasi' : 'Belum verifikasi'}
+                </Text>
               </View>
-            </Pressable>
-            <View style={styles.identityCopy}>
-              <Text style={styles.name} numberOfLines={1}>
-                {name}
-              </Text>
-              <Text style={styles.email} numberOfLines={1}>
-                {sessionUser?.email ?? '-'}
-              </Text>
-              <View style={styles.badges}>
-                <View style={styles.roleBadge}>
-                  <Ionicons name="construct" size={11} color={Brand.primary} />
+            </View>
+
+            <View style={styles.identity}>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Ganti foto profil"
+                disabled={uploadingAvatar}
+                onPress={pickAvatar}
+                style={styles.avatarWrap}
+              >
+                <Avatar name={name} uri={avatarUrl} size={72} />
+                <View style={styles.avatarEdit}>
+                  <Ionicons
+                    name={uploadingAvatar ? 'hourglass-outline' : 'camera'}
+                    size={12}
+                    color={Brand.ink}
+                  />
+                </View>
+              </Pressable>
+              <View style={styles.identityCopy}>
+                <Text style={styles.name} numberOfLines={1}>
+                  {name}
+                </Text>
+                <Text style={styles.email} numberOfLines={1}>
+                  {sessionUser?.email ?? '-'}
+                </Text>
+                <View style={styles.roleInline}>
+                  <Ionicons name="construct" size={11} color={Brand.volt} />
                   <Text style={styles.roleText}>Akun Montir</Text>
                 </View>
-                <View
-                  style={[styles.verifyBadge, verified ? styles.verifyOk : styles.verifyPending]}
-                >
-                  <Ionicons
-                    name={verified ? 'shield-checkmark' : 'alert-circle-outline'}
-                    size={11}
-                    color={verified ? Brand.green : Brand.amber}
-                  />
-                  <Text
-                    style={[
-                      styles.verifyText,
-                      { color: verified ? Brand.green : Brand.amber },
-                    ]}
-                  >
-                    {verified ? 'Terverifikasi' : 'Belum verifikasi'}
-                  </Text>
-                </View>
               </View>
             </View>
-          </View>
 
-          <View style={styles.statsRow}>
-            <Stat
-              icon="star"
-              iconColor={Brand.amber}
-              value={rating.toFixed(1)}
-              label="Rating"
-            />
-            <Stat
-              icon="chatbubble-ellipses-outline"
-              iconColor={Brand.primary}
-              value={(profile?.rating_count ?? 0).toString()}
-              label="Ulasan"
-            />
-            <Stat
-              icon="checkmark-done-outline"
-              iconColor={Brand.green}
-              value={(profile?.total_jobs ?? 0).toString()}
-              label="Job selesai"
-            />
-          </View>
-
-          <View style={styles.onlineCard}>
-            <View style={[styles.onlineIcon, online && styles.onlineIconActive]}>
-              <Ionicons
-                name="power-outline"
-                size={19}
-                color={online ? Brand.primary : Brand.textSecondary}
+            <View style={styles.statsRow}>
+              <Stat
+                icon="star"
+                iconColor={Brand.amber}
+                value={rating.toFixed(1)}
+                label="Rating"
+              />
+              <Stat
+                icon="chatbubble-ellipses-outline"
+                iconColor={Brand.inkText}
+                value={(profile?.rating_count ?? 0).toString()}
+                label="Ulasan"
+              />
+              <Stat
+                icon="checkmark-done-outline"
+                iconColor={Brand.green}
+                value={(profile?.total_jobs ?? 0).toString()}
+                label="Job selesai"
               />
             </View>
-            <View style={styles.onlineCopy}>
-              <Text style={styles.onlineTitle}>{online ? 'Online' : 'Offline'}</Text>
-              <Text style={styles.onlineSub}>
-                {online ? 'Siap menerima order' : 'Tidak menerima order'}
-              </Text>
-            </View>
-            <Switch
-              value={online}
-              onValueChange={toggleOnline}
-              trackColor={{ false: Brand.border, true: Brand.primary }}
-              thumbColor={Brand.white}
-              ios_backgroundColor={Brand.border}
-            />
           </View>
 
-          <Section icon="person-outline" title="Identitas montir">
+          <View style={styles.body}>
+            <View style={styles.onlineCard}>
+              <View style={[styles.onlineIcon, online && styles.onlineIconActive]}>
+                <Ionicons
+                  name="power-outline"
+                  size={19}
+                  color={online ? Brand.ink : Brand.textSecondary}
+                />
+              </View>
+              <View style={styles.onlineCopy}>
+                <View style={styles.onlineTitleRow}>
+                  <Text style={styles.onlineTitle}>{online ? 'Online' : 'Offline'}</Text>
+                  {online ? <View style={styles.onlineDot} /> : null}
+                </View>
+                <Text style={styles.onlineSub}>
+                  {online ? 'Siap menerima order' : 'Tidak menerima order'}
+                </Text>
+              </View>
+              <Switch
+                value={online}
+                onValueChange={toggleOnline}
+                trackColor={{ false: Brand.border, true: Brand.volt }}
+                thumbColor={online ? Brand.ink : Brand.white}
+                ios_backgroundColor={Brand.border}
+              />
+            </View>
+
+            <Section icon="person-outline" title="Identitas montir">
             <Field label="Nama lengkap" value={fullName} onChangeText={setFullName} />
             <Field
               label="Nomor WhatsApp"
@@ -658,6 +670,7 @@ export default function MechanicProfileScreen() {
           <Button
             label="Simpan Profil"
             icon="save-outline"
+            variant="ink"
             loading={saving}
             onPress={handleSave}
             style={styles.save}
@@ -670,6 +683,7 @@ export default function MechanicProfileScreen() {
             onPress={handleLogout}
             style={styles.logout}
           />
+          </View>
         </ScrollView>
       </KeyboardAvoidingView>
     </View>
@@ -774,75 +788,68 @@ function ReviewRow({ review }: { review: MechanicReview }) {
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: Brand.background },
   flex: { flex: 1 },
-  content: { padding: ScreenPadding, paddingBottom: Space.xxxl },
-  identity: {
+  content: { paddingBottom: Space.xxxl },
+  hero: {
+    backgroundColor: Brand.ink,
+    paddingHorizontal: ScreenPadding,
+    paddingBottom: Space.xxxl,
+    borderBottomLeftRadius: Radius.xxl,
+    borderBottomRightRadius: Radius.xxl,
+  },
+  heroTop: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: Space.lg,
-    backgroundColor: Brand.surface,
-    borderRadius: Radius.lg,
-    padding: Space.lg,
-    borderWidth: 1,
-    borderColor: Brand.divider,
+    justifyContent: 'space-between',
+    marginBottom: Space.xl,
   },
+  heroEyebrow: { ...Type.micro, color: Brand.inkMuted },
+  identity: { flexDirection: 'row', alignItems: 'center', gap: Space.lg },
   avatarWrap: { position: 'relative' },
   avatarEdit: {
     position: 'absolute',
     right: -2,
     bottom: -2,
-    width: 22,
-    height: 22,
-    borderRadius: 11,
-    backgroundColor: Brand.primary,
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: Brand.volt,
     borderWidth: 2,
-    borderColor: Brand.surface,
+    borderColor: Brand.ink,
     alignItems: 'center',
     justifyContent: 'center',
   },
   identityCopy: { flex: 1 },
-  name: { fontSize: 17, fontWeight: '700', color: Brand.text },
-  email: { fontSize: 12, color: Brand.textSecondary, marginTop: 2 },
-  badges: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: Space.sm },
-  roleBadge: {
+  name: { ...Type.h1, color: Brand.white },
+  email: { ...Type.meta, color: Brand.inkMuted, marginTop: 2 },
+  roleInline: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: Radius.pill,
-    backgroundColor: Brand.primarySoft,
+    gap: 5,
+    marginTop: Space.sm,
   },
-  roleText: { fontSize: 10.5, fontWeight: '700', color: Brand.primary },
+  roleText: { ...Type.micro, color: Brand.volt, fontSize: 9.5 },
   verifyBadge: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
-    paddingHorizontal: 8,
-    paddingVertical: 3,
+    paddingHorizontal: 9,
+    paddingVertical: 4,
     borderRadius: Radius.pill,
-  },
-  verifyOk: { backgroundColor: Brand.greenSoft },
-  verifyPending: { backgroundColor: Brand.amberSoft },
-  verifyText: { fontSize: 10.5, fontWeight: '700' },
-  statsRow: { flexDirection: 'row', gap: Space.sm, marginTop: Space.md },
-  stat: {
-    flex: 1,
     backgroundColor: Brand.surface,
-    borderRadius: Radius.lg,
-    padding: Space.md,
-    borderWidth: 1,
-    borderColor: Brand.divider,
   },
-  statIcon: {
-    width: 32,
-    height: 32,
-    borderRadius: Radius.sm,
-    backgroundColor: Brand.background,
-    alignItems: 'center',
-    justifyContent: 'center',
+  verifyText: { ...Type.micro, fontSize: 9.5, letterSpacing: 0.2 },
+  statsRow: {
+    flexDirection: 'row',
+    marginTop: Space.xl,
+    paddingTop: Space.lg,
+    borderTopWidth: 1,
+    borderTopColor: Brand.inkBorder,
   },
-  statValue: { fontSize: 17, fontWeight: '700', color: Brand.text, marginTop: Space.sm },
-  statLabel: { fontSize: 10.5, color: Brand.textSecondary, marginTop: 2 },
+  stat: { flex: 1 },
+  statIcon: { height: 20, justifyContent: 'center' },
+  statValue: { ...Type.h2, color: Brand.white, marginTop: Space.xs },
+  statLabel: { ...Type.meta, color: Brand.inkMuted, marginTop: 1, fontSize: 10 },
+  body: { paddingHorizontal: ScreenPadding },
   onlineCard: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -850,9 +857,10 @@ const styles = StyleSheet.create({
     backgroundColor: Brand.surface,
     borderRadius: Radius.lg,
     padding: Space.lg,
-    marginTop: Space.md,
+    marginTop: -24,
     borderWidth: 1,
-    borderColor: Brand.divider,
+    borderColor: Brand.border,
+    ...CardShadow,
   },
   onlineIcon: {
     width: 42,
@@ -862,10 +870,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  onlineIconActive: { backgroundColor: Brand.primarySoft },
+  onlineIconActive: { backgroundColor: Brand.volt },
   onlineCopy: { flex: 1 },
-  onlineTitle: { fontSize: 14.5, fontWeight: '700', color: Brand.text },
-  onlineSub: { fontSize: 11.5, color: Brand.textSecondary, marginTop: 2 },
+  onlineTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  onlineTitle: { ...Type.title, color: Brand.text },
+  onlineDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: Brand.green },
+  onlineSub: { ...Type.meta, color: Brand.textSecondary, marginTop: 2 },
   sectionBlock: { marginTop: Space.xxl },
   sectionHeader: {
     flexDirection: 'row',

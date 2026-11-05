@@ -1,10 +1,10 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { ScreenHeader } from '@/components/ui/screen-header';
 import { EmptyState, ErrorState, LoadingState } from '@/components/ui/state';
-import { Ionicons } from '@/components/ui/icon';
-import { Brand, Radius, ScreenPadding, Space } from '@/constants/brand';
+import { Ionicons, type IconName } from '@/components/ui/icon';
+import { Brand, Radius, ScreenPadding, Space, Type } from '@/constants/brand';
 import { useMechanicAlerts } from '@/features/notifications/mechanic-alerts';
 import {
   listMyNotifications,
@@ -13,15 +13,64 @@ import {
 } from '@/features/notifications/service';
 import { formatDateTime } from '@/utils/format';
 
-function iconFor(type: string) {
-  if (type === 'new_request') return 'flash-outline' as const;
-  if (type === 'payment') return 'cash-outline' as const;
-  if (type === 'assignment_requested') return 'hourglass-outline' as const;
-  if (type === 'assignment_confirmed') return 'checkmark-circle-outline' as const;
-  if (type === 'assignment_rejected') return 'close-circle-outline' as const;
-  if (type === 'assignment_expired') return 'time-outline' as const;
-  if (type === 'assignment_cancelled') return 'close-circle-outline' as const;
-  return 'notifications-outline' as const;
+interface Tone {
+  icon: IconName;
+  color: string;
+  background: string;
+}
+
+function toneFor(type: string): Tone {
+  if (type === 'new_request') {
+    return { icon: 'flash-outline', color: Brand.primary, background: Brand.primarySoft };
+  }
+  if (type === 'payment') {
+    return { icon: 'cash-outline', color: Brand.green, background: Brand.greenSoft };
+  }
+  if (type === 'assignment_requested') {
+    return { icon: 'hourglass-outline', color: Brand.amber, background: Brand.amberSoft };
+  }
+  if (type === 'assignment_confirmed') {
+    return {
+      icon: 'checkmark-circle-outline',
+      color: Brand.green,
+      background: Brand.greenSoft,
+    };
+  }
+  if (type === 'assignment_expired') {
+    return { icon: 'time-outline', color: Brand.amber, background: Brand.amberSoft };
+  }
+  if (
+    type === 'assignment_rejected' ||
+    type === 'assignment_cancelled'
+  ) {
+    return { icon: 'close-circle-outline', color: Brand.red, background: Brand.redSoft };
+  }
+  return {
+    icon: 'notifications-outline',
+    color: Brand.textSecondary,
+    background: Brand.background,
+  };
+}
+
+function dayKey(iso: string): string {
+  const d = new Date(iso);
+  return `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
+}
+
+function dayLabel(iso: string): string {
+  const d = new Date(iso);
+  const today = new Date();
+  const yesterday = new Date();
+  yesterday.setDate(today.getDate() - 1);
+  if (dayKey(iso) === dayKey(today.toISOString())) return 'Hari ini';
+  if (dayKey(iso) === dayKey(yesterday.toISOString())) return 'Kemarin';
+  return d.toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' });
+}
+
+interface DayGroup {
+  key: string;
+  label: string;
+  items: AppNotification[];
 }
 
 export default function MechanicNotificationsScreen() {
@@ -59,6 +108,20 @@ export default function MechanicNotificationsScreen() {
       load();
     }, [load]),
   );
+
+  const groups = useMemo<DayGroup[]>(() => {
+    const map = new Map<string, DayGroup>();
+    for (const item of items) {
+      const key = dayKey(item.created_at);
+      const existing = map.get(key);
+      if (existing) {
+        existing.items.push(item);
+      } else {
+        map.set(key, { key, label: dayLabel(item.created_at), items: [item] });
+      }
+    }
+    return Array.from(map.values());
+  }, [items]);
 
   const openNotification = (item: AppNotification) => {
     if (item.related_entity_type === 'service_request' && item.related_entity_id) {
@@ -108,32 +171,51 @@ export default function MechanicNotificationsScreen() {
               hint="Saat ada request baru di sekitarmu, pemberitahuannya muncul di sini."
             />
           ) : (
-            items.map((item) => {
-              const actionable =
-                item.related_entity_type === 'service_request' && item.related_entity_id != null;
-              return (
-                <Pressable
-                  key={item.id}
-                  accessibilityRole={actionable ? 'button' : undefined}
-                  disabled={!actionable}
-                  onPress={() => openNotification(item)}
-                  style={({ pressed }) => [styles.card, pressed && styles.pressed]}
-                >
-                  <View style={styles.iconBox}>
-                    <Ionicons name={iconFor(item.type)} size={18} color={Brand.primary} />
-                  </View>
-                  <View style={styles.copy}>
-                    <Text style={styles.title}>{item.title}</Text>
-                    {item.body ? <Text style={styles.body}>{item.body}</Text> : null}
-                    <Text style={styles.time}>{formatDateTime(item.created_at)}</Text>
-                  </View>
-                  {!item.is_read ? <View style={styles.unreadDot} /> : null}
-                  {actionable ? (
-                    <Ionicons name="chevron-forward" size={15} color={Brand.textMuted} />
-                  ) : null}
-                </Pressable>
-              );
-            })
+            groups.map((group) => (
+              <View key={group.key} style={styles.group}>
+                <Text style={styles.groupLabel}>{group.label}</Text>
+                <View style={styles.inbox}>
+                  {group.items.map((item, index) => {
+                    const tone = toneFor(item.type);
+                    const actionable =
+                      item.related_entity_type === 'service_request' &&
+                      item.related_entity_id != null;
+                    return (
+                      <Pressable
+                        key={item.id}
+                        accessibilityRole={actionable ? 'button' : undefined}
+                        disabled={!actionable}
+                        onPress={() => openNotification(item)}
+                        style={({ pressed }) => [
+                          styles.row,
+                          index > 0 && styles.rowBorder,
+                          !item.is_read && styles.rowUnread,
+                          pressed && actionable && styles.pressed,
+                        ]}
+                      >
+                        <View style={[styles.iconBox, { backgroundColor: tone.background }]}>
+                          <Ionicons name={tone.icon} size={17} color={tone.color} />
+                        </View>
+                        <View style={styles.copy}>
+                          <Text style={styles.title}>{item.title}</Text>
+                          {item.body ? (
+                            <Text style={styles.body} numberOfLines={3}>
+                              {item.body}
+                            </Text>
+                          ) : null}
+                          <Text style={styles.time}>{formatDateTime(item.created_at)}</Text>
+                        </View>
+                        {!item.is_read ? (
+                          <View style={styles.unreadDot} />
+                        ) : actionable ? (
+                          <Ionicons name="chevron-forward" size={15} color={Brand.textMuted} />
+                        ) : null}
+                      </Pressable>
+                    );
+                  })}
+                </View>
+              </View>
+            ))
           )}
         </ScrollView>
       )}
@@ -144,34 +226,40 @@ export default function MechanicNotificationsScreen() {
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: Brand.background },
   content: { padding: ScreenPadding, paddingBottom: Space.xxxl },
-  card: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Space.md,
+  group: { marginBottom: Space.xl },
+  groupLabel: { ...Type.micro, color: Brand.textMuted, marginBottom: Space.sm },
+  inbox: {
     backgroundColor: Brand.surface,
     borderRadius: Radius.lg,
-    padding: Space.md,
-    marginBottom: Space.md,
     borderWidth: 1,
-    borderColor: Brand.divider,
+    borderColor: Brand.border,
+    overflow: 'hidden',
   },
-  pressed: { opacity: 0.8 },
+  row: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: Space.md,
+    padding: Space.md,
+  },
+  rowBorder: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: Brand.divider },
+  rowUnread: { backgroundColor: Brand.primarySoft },
+  pressed: { opacity: 0.75 },
   iconBox: {
-    width: 38,
-    height: 38,
+    width: 36,
+    height: 36,
     borderRadius: Radius.sm,
-    backgroundColor: Brand.primarySoft,
     alignItems: 'center',
     justifyContent: 'center',
   },
   copy: { flex: 1 },
-  title: { fontSize: 13.5, fontWeight: '700', color: Brand.text },
-  body: { fontSize: 12, color: Brand.textSecondary, marginTop: 2, lineHeight: 17 },
-  time: { fontSize: 10.5, color: Brand.textMuted, marginTop: 6 },
+  title: { ...Type.bodyStrong, color: Brand.text, fontWeight: '700' },
+  body: { ...Type.meta, color: Brand.textSecondary, marginTop: 2, lineHeight: 17 },
+  time: { ...Type.meta, color: Brand.textMuted, marginTop: 6, fontSize: 10 },
   unreadDot: {
     width: 8,
     height: 8,
     borderRadius: 4,
     backgroundColor: Brand.primary,
+    marginTop: 6,
   },
 });

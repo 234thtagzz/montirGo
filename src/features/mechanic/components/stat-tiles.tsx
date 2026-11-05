@@ -1,7 +1,7 @@
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@/components/ui/icon';
-import { Brand, Radius, Space } from '@/constants/brand';
-import { formatIDR } from '@/utils/format';
+import { Money } from '@/components/ui/money';
+import { Brand, Radius, Space, Type } from '@/constants/brand';
 
 interface StatTilesProps {
   netToday: number;
@@ -10,88 +10,71 @@ interface StatTilesProps {
   onPressEarnings?: () => void;
 }
 
+/**
+ * Ringkasan performa harian. Satu panel dengan hierarki jelas:
+ * pendapatan adalah fokus, jumlah job & order menjadi konteks.
+ */
 export function StatTiles({ netToday, jobsToday, activeOrders, onPressEarnings }: StatTilesProps) {
   return (
-    <View>
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel="Lihat rincian pendapatan"
-        onPress={onPressEarnings}
-        style={({ pressed }) => [styles.earnings, pressed && styles.pressed]}
-      >
-        <View style={styles.earningsIcon}>
-          <Ionicons name="wallet-outline" size={20} color={Brand.green} />
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel="Lihat rincian pendapatan"
+      onPress={onPressEarnings}
+      style={({ pressed }) => [styles.card, pressed && styles.pressed]}
+    >
+      <View style={styles.topRow}>
+        <View style={styles.labelRow}>
+          <View style={styles.dot} />
+          <Text style={styles.label}>Pendapatan bersih hari ini</Text>
         </View>
-        <View style={styles.earningsCopy}>
-          <Text style={styles.earningsLabel}>Pendapatan bersih hari ini</Text>
-          <Text style={styles.earningsValue} numberOfLines={1}>
-            {formatIDR(netToday)}
-          </Text>
+        <Ionicons name="arrow-forward" size={15} color={Brand.textMuted} />
+      </View>
+
+      <Money value={netToday} size="lg" color={Brand.text} style={styles.amount} />
+
+      <View style={styles.metaRow}>
+        <View style={styles.metaItem}>
+          <Ionicons name="construct-outline" size={14} color={Brand.textMuted} />
+          <Text style={styles.metaValue}>{jobsToday}</Text>
+          <Text style={styles.metaLabel}>job selesai</Text>
         </View>
-        <Ionicons name="chevron-forward" size={16} color={Brand.textMuted} />
-      </Pressable>
-
-      <View style={styles.tilesRow}>
-        <Tile icon="construct-outline" value={String(jobsToday)} label="Job hari ini" />
-        <Tile icon="receipt-outline" value={String(activeOrders)} label="Order aktif" />
+        <View style={styles.metaDivider} />
+        <View style={styles.metaItem}>
+          <Ionicons name="pulse-outline" size={14} color={Brand.textMuted} />
+          <Text style={styles.metaValue}>{activeOrders}</Text>
+          <Text style={styles.metaLabel}>order aktif</Text>
+        </View>
+        <Text style={styles.metaFootnote}>Diperbarui otomatis</Text>
       </View>
-    </View>
-  );
-}
-
-function Tile({ icon, value, label }: { icon: 'construct-outline' | 'receipt-outline'; value: string; label: string }) {
-  return (
-    <View style={styles.tile}>
-      <View style={styles.tileIcon}>
-        <Ionicons name={icon} size={17} color={Brand.primary} />
-      </View>
-      <Text style={styles.tileValue}>{value}</Text>
-      <Text style={styles.tileLabel}>{label}</Text>
-    </View>
+    </Pressable>
   );
 }
 
 const styles = StyleSheet.create({
-  earnings: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Space.md,
+  card: {
     backgroundColor: Brand.surface,
     borderRadius: Radius.lg,
     padding: Space.lg,
-    marginTop: Space.md,
     borderWidth: 1,
-    borderColor: Brand.divider,
+    borderColor: Brand.border,
   },
   pressed: { opacity: 0.85 },
-  earningsIcon: {
-    width: 42,
-    height: 42,
-    borderRadius: 21,
-    backgroundColor: Brand.greenSoft,
+  topRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  labelRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  dot: { width: 6, height: 6, borderRadius: 3, backgroundColor: Brand.green },
+  label: { ...Type.meta, color: Brand.textSecondary, fontWeight: '600' },
+  amount: { marginTop: Space.sm },
+  metaRow: {
+    flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
+    marginTop: Space.lg,
+    paddingTop: Space.md,
+    borderTopWidth: 1,
+    borderTopColor: Brand.divider,
   },
-  earningsCopy: { flex: 1 },
-  earningsLabel: { fontSize: 11.5, color: Brand.textSecondary, fontWeight: '600' },
-  earningsValue: { fontSize: 19, fontWeight: '700', color: Brand.text, marginTop: 2 },
-  tilesRow: { flexDirection: 'row', gap: Space.md, marginTop: Space.md },
-  tile: {
-    flex: 1,
-    backgroundColor: Brand.surface,
-    borderRadius: Radius.lg,
-    padding: Space.lg,
-    borderWidth: 1,
-    borderColor: Brand.divider,
-  },
-  tileIcon: {
-    width: 34,
-    height: 34,
-    borderRadius: Radius.sm,
-    backgroundColor: Brand.primarySoft,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  tileValue: { fontSize: 17, fontWeight: '700', color: Brand.text, marginTop: Space.sm },
-  tileLabel: { fontSize: 11.5, color: Brand.textSecondary, marginTop: 2 },
+  metaItem: { flexDirection: 'row', alignItems: 'center', gap: 5 },
+  metaDivider: { width: 1, height: 16, backgroundColor: Brand.divider, marginHorizontal: Space.md },
+  metaValue: { ...Type.bodyStrong, color: Brand.text, fontWeight: '700' },
+  metaLabel: { ...Type.meta, color: Brand.textMuted },
+  metaFootnote: { flex: 1, textAlign: 'right', ...Type.micro, color: Brand.textMuted, fontSize: 9 },
 });

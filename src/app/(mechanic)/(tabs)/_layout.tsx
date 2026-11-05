@@ -1,5 +1,6 @@
 import { Tabs } from 'expo-router';
 import { iconColor, Ionicons } from '@/components/ui/icon';
+import { TabIcon } from '@/components/ui/tab-icon';
 import { Brand } from '@/constants/brand';
 import { useTabBarStyle } from '@/hooks/use-tab-bar-style';
 
@@ -13,7 +14,8 @@ export default function MechanicTabsLayout() {
         tabBarActiveTintColor: Brand.primary,
         tabBarInactiveTintColor: Brand.textMuted,
         tabBarStyle,
-        tabBarLabelStyle: { fontSize: 11, fontWeight: '600' },
+        tabBarLabelStyle: { fontSize: 10.5, fontWeight: '600', marginTop: 1 },
+        tabBarItemStyle: { paddingTop: 2 },
         tabBarHideOnKeyboard: true,
       }}
     >
@@ -21,11 +23,12 @@ export default function MechanicTabsLayout() {
         name="index"
         options={{
           title: 'Beranda',
-          tabBarIcon: ({ color, size, focused }) => (
-            <Ionicons
-              name={focused ? 'grid' : 'grid-outline'}
-              size={size}
+          tabBarIcon: ({ color, focused }) => (
+            <TabIcon
+              focused={focused}
               color={iconColor(color, Brand.textMuted)}
+              name="grid-outline"
+              focusedName="grid"
             />
           ),
         }}
@@ -34,11 +37,12 @@ export default function MechanicTabsLayout() {
         name="requests"
         options={{
           title: 'Request',
-          tabBarIcon: ({ color, size, focused }) => (
-            <Ionicons
-              name={focused ? 'flash' : 'flash-outline'}
-              size={size}
+          tabBarIcon: ({ color, focused }) => (
+            <TabIcon
+              focused={focused}
               color={iconColor(color, Brand.textMuted)}
+              name="flash-outline"
+              focusedName="flash"
             />
           ),
         }}
@@ -47,11 +51,12 @@ export default function MechanicTabsLayout() {
         name="ai-assistant"
         options={{
           title: 'AI Asisten',
-          tabBarIcon: ({ color, size, focused }) => (
-            <Ionicons
-              name={focused ? 'sparkles' : 'sparkles-outline'}
-              size={size}
+          tabBarIcon: ({ color, focused }) => (
+            <TabIcon
+              focused={focused}
               color={iconColor(color, Brand.textMuted)}
+              name="sparkles-outline"
+              focusedName="sparkles"
             />
           ),
         }}
@@ -60,11 +65,12 @@ export default function MechanicTabsLayout() {
         name="activity"
         options={{
           title: 'Aktivitas',
-          tabBarIcon: ({ color, size, focused }) => (
-            <Ionicons
-              name={focused ? 'pulse' : 'pulse-outline'}
-              size={size}
+          tabBarIcon: ({ color, focused }) => (
+            <TabIcon
+              focused={focused}
               color={iconColor(color, Brand.textMuted)}
+              name="pulse-outline"
+              focusedName="pulse"
             />
           ),
         }}
@@ -73,11 +79,12 @@ export default function MechanicTabsLayout() {
         name="profile"
         options={{
           title: 'Profil',
-          tabBarIcon: ({ color, size, focused }) => (
-            <Ionicons
-              name={focused ? 'person' : 'person-outline'}
-              size={size}
+          tabBarIcon: ({ color, focused }) => (
+            <TabIcon
+              focused={focused}
               color={iconColor(color, Brand.textMuted)}
+              name="person-outline"
+              focusedName="person"
             />
           ),
         }}

@@ -1,12 +1,14 @@
 import { useCallback, useEffect, useState } from 'react';
-import { RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
+import { RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { ScreenHeader } from '@/components/ui/screen-header';
+import { Ionicons } from '@/components/ui/icon';
 import { EmptyState, ErrorState, LoadingState } from '@/components/ui/state';
-import { Brand, ScreenPadding, Space } from '@/constants/brand';
+import { Brand, Radius, ScreenPadding, Space, Type } from '@/constants/brand';
 import { listMyOrders, type MyOrder } from '@/features/mechanic/service';
 import { syncMechanicPendingPayments } from '@/features/finance/service';
 import { OrderCard } from '@/features/mechanic/components/order-card';
+import { formatVehicleLabel } from '@/features/vehicles/constants';
 
 export default function MechanicActiveOrdersScreen() {
   const [orders, setOrders] = useState<MyOrder[]>([]);
@@ -89,19 +91,38 @@ export default function MechanicActiveOrdersScreen() {
               onPressAction={() => router.push('/(mechanic)/(tabs)/requests')}
             />
           ) : (
-            orders.map((order) => (
-              <OrderCard
-                key={order.id}
-                issue={order.issue_description}
-                status={order.status}
-                createdAt={order.created_at}
-                vehicle={[order.vehicle_brand, order.vehicle_model].filter(Boolean).join(' ')}
-                clientName={order.client_name}
-                address={order.address}
-                price={order.price_amount}
-                onPress={() => router.push(`/(mechanic)/active-order/${order.id}`)}
-              />
-            ))
+            <>
+              <View style={styles.summary}>
+                <View style={styles.summaryIcon}>
+                  <Ionicons name="construct-outline" size={17} color={Brand.primary} />
+                </View>
+                <View style={styles.summaryCopy}>
+                  <Text style={styles.summaryTitle}>
+                    {orders.length} order sedang berjalan
+                  </Text>
+                  <Text style={styles.summaryText}>
+                    Status diperbarui otomatis saat client dan pembayaran berubah.
+                  </Text>
+                </View>
+              </View>
+              {orders.map((order) => (
+                <OrderCard
+                  key={order.id}
+                  issue={order.issue_description}
+                  status={order.status}
+                  createdAt={order.created_at}
+                  vehicle={formatVehicleLabel(
+                    order.vehicle_type,
+                    order.vehicle_brand,
+                    order.vehicle_model,
+                  )}
+                  clientName={order.client_name}
+                  address={order.address}
+                  price={order.price_amount}
+                  onPress={() => router.push(`/(mechanic)/active-order/${order.id}`)}
+                />
+              ))}
+            </>
           )}
         </ScrollView>
       )}
@@ -112,4 +133,26 @@ export default function MechanicActiveOrdersScreen() {
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: Brand.background },
   content: { padding: ScreenPadding, paddingBottom: Space.xxxl },
+  summary: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Space.md,
+    backgroundColor: Brand.surface,
+    borderRadius: Radius.lg,
+    borderWidth: 1,
+    borderColor: Brand.border,
+    padding: Space.md,
+    marginBottom: Space.md,
+  },
+  summaryIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: Radius.sm,
+    backgroundColor: Brand.primarySoft,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  summaryCopy: { flex: 1 },
+  summaryTitle: { ...Type.bodyStrong, color: Brand.text, fontWeight: '700' },
+  summaryText: { ...Type.meta, color: Brand.textSecondary, marginTop: 1 },
 });

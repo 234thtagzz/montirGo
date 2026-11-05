@@ -1,7 +1,7 @@
 import { Pressable, StyleSheet, Text, View } from 'react-native';
-import { Ionicons } from '@/components/ui/icon';
-import { Brand, Gradient, Radius, Space } from '@/constants/brand';
 import { LinearGradient } from 'expo-linear-gradient';
+import { Ionicons } from '@/components/ui/icon';
+import { Brand, Gradient, Radius, Space, Type } from '@/constants/brand';
 
 interface TripEntryCardProps {
   /** Status order yang sedang berada di fase perjalanan. */
@@ -24,25 +24,29 @@ export function TripEntryCard({ status, onPress }: TripEntryCardProps) {
       style={({ pressed }) => [styles.wrap, pressed && styles.pressed]}
     >
       <LinearGradient
-        colors={Gradient.header}
+        colors={Gradient.ink}
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 1 }}
         style={styles.gradient}
       >
         <View style={styles.iconWrap}>
-          <Ionicons name={enroute ? 'navigate' : 'map-outline'} size={20} color={Brand.primary} />
+          <Ionicons name={enroute ? 'navigate' : 'map-outline'} size={20} color={Brand.ink} />
         </View>
         <View style={styles.copy}>
+          <View style={styles.labelRow}>
+            <View style={styles.liveDot} />
+            <Text style={styles.label}>{enroute ? 'TRIP MODE · LIVE' : 'TRIP MODE'}</Text>
+          </View>
           <Text style={styles.title}>
             {enroute ? 'Perjalanan sedang berlangsung' : 'Siap berangkat ke lokasi client'}
           </Text>
-          <Text style={styles.desc}>
+          <Text style={styles.desc} numberOfLines={2}>
             {enroute
-              ? 'Lanjutkan navigasi realtime dan tekan "Sampai di Lokasi" saat tiba.'
-              : 'Buka layar perjalanan untuk melihat rute, ETA, dan mulai berkendara.'}
+              ? 'Lanjutkan navigasi realtime, lalu konfirmasi saat tiba.'
+              : 'Buka rute, ETA, dan mulai perjalanan dari sini.'}
           </Text>
         </View>
-        <Ionicons name="chevron-forward" size={18} color={Brand.white} />
+        <Ionicons name="arrow-forward" size={18} color={Brand.inkMuted} />
       </LinearGradient>
     </Pressable>
   );
@@ -57,15 +61,18 @@ const styles = StyleSheet.create({
     padding: Space.lg,
   },
   iconWrap: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: Brand.white,
+    width: 44,
+    height: 44,
+    borderRadius: Radius.md,
+    backgroundColor: Brand.volt,
     alignItems: 'center',
     justifyContent: 'center',
   },
   copy: { flex: 1 },
-  title: { fontSize: 13.5, fontWeight: '700', color: Brand.white },
-  desc: { fontSize: 11, color: 'rgba(255,255,255,0.9)', marginTop: 3, lineHeight: 16 },
+  labelRow: { flexDirection: 'row', alignItems: 'center', gap: 5, marginBottom: 4 },
+  liveDot: { width: 5, height: 5, borderRadius: 3, backgroundColor: Brand.volt },
+  label: { ...Type.micro, color: Brand.inkMuted, fontSize: 9, letterSpacing: 1 },
+  title: { ...Type.bodyStrong, color: Brand.white, fontWeight: '700' },
+  desc: { ...Type.meta, color: Brand.inkMuted, marginTop: 2, lineHeight: 15 },
   pressed: { opacity: 0.85 },
 });

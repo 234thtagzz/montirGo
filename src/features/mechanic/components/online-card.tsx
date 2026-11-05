@@ -1,6 +1,6 @@
 import { StyleSheet, Switch, Text, View } from 'react-native';
 import { Ionicons } from '@/components/ui/icon';
-import { Brand, CardShadow, Radius, Space } from '@/constants/brand';
+import { Brand, CardShadow, Radius, Space, Type } from '@/constants/brand';
 
 interface OnlineCardProps {
   online: boolean;
@@ -10,45 +10,45 @@ interface OnlineCardProps {
 /** Kartu utama dashboard: saklar siap menerima order (PRD §8). */
 export function OnlineCard({ online, onToggle }: OnlineCardProps) {
   return (
-    <View style={styles.card}>
+    <View style={[styles.card, online && styles.cardOnline]}>
       <View style={styles.top}>
         <View style={[styles.iconCircle, online && styles.iconCircleOnline]}>
           <Ionicons
-            name="power-outline"
-            size={22}
-            color={online ? Brand.primary : Brand.textSecondary}
+            name="power"
+            size={20}
+            color={online ? Brand.ink : Brand.textSecondary}
           />
         </View>
 
         <View style={styles.copy}>
-          <Text style={styles.title}>{online ? 'Kamu Online' : 'Kamu Offline'}</Text>
+          <Text style={styles.title}>{online ? 'Siap menerima order' : 'Kamu sedang offline'}</Text>
           <Text style={styles.subtitle}>
             {online
-              ? 'Request masuk akan tampil di tab Request.'
-              : 'Nyalakan untuk mulai menerima order.'}
+              ? 'Request client terdekat akan masuk ke tab Request.'
+              : 'Aktifkan agar client bisa menemukanmu.'}
           </Text>
         </View>
 
         <Switch
           value={online}
           onValueChange={onToggle}
-          trackColor={{ false: Brand.border, true: Brand.primary }}
-          thumbColor={Brand.white}
-          ios_backgroundColor={Brand.border}
+          trackColor={{ false: '#D7DEE9', true: Brand.ink }}
+          thumbColor={online ? Brand.volt : Brand.white}
+          ios_backgroundColor="#D7DEE9"
+          accessibilityLabel="Status menerima order"
         />
       </View>
 
-      <View style={[styles.footer, online ? styles.footerOnline : styles.footerOffline]}>
-        <Ionicons
-          name={online ? 'flash' : 'moon-outline'}
-          size={13}
-          color={online ? Brand.green : Brand.textSecondary}
-        />
-        <Text style={[styles.footerText, { color: online ? Brand.green : Brand.textSecondary }]}>
-          {online
-            ? 'Kamu siap menerima request dari client terdekat.'
-            : 'Aktifkan agar client bisa menemukanmu.'}
+      <View style={styles.footer}>
+        <View style={[styles.statusDot, { backgroundColor: online ? Brand.green : Brand.textMuted }]} />
+        <Text style={styles.footerText}>
+          {online ? 'Status online tersinkron ke server MontirGo' : 'Kamu tidak akan menerima request baru'}
         </Text>
+        {online ? (
+          <View style={styles.liveTag}>
+            <Text style={styles.liveTagText}>LIVE</Text>
+          </View>
+        ) : null}
       </View>
     </View>
   );
@@ -59,32 +59,41 @@ const styles = StyleSheet.create({
     backgroundColor: Brand.surface,
     borderRadius: Radius.lg,
     padding: Space.lg,
-    marginTop: -44,
+    marginTop: -40,
+    borderWidth: 1,
+    borderColor: Brand.border,
     ...CardShadow,
   },
+  cardOnline: { borderColor: '#D7E4F8' },
   top: { flexDirection: 'row', alignItems: 'center', gap: Space.md },
   iconCircle: {
-    width: 46,
-    height: 46,
-    borderRadius: 23,
+    width: 44,
+    height: 44,
+    borderRadius: Radius.md,
     backgroundColor: Brand.background,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  iconCircleOnline: { backgroundColor: Brand.primarySoft },
+  iconCircleOnline: { backgroundColor: Brand.volt },
   copy: { flex: 1 },
-  title: { fontSize: 16, fontWeight: '700', color: Brand.text },
-  subtitle: { fontSize: 12, color: Brand.textSecondary, marginTop: 2, lineHeight: 16 },
+  title: { ...Type.title, color: Brand.text },
+  subtitle: { ...Type.meta, color: Brand.textSecondary, marginTop: 2, lineHeight: 16 },
   footer: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    borderRadius: Radius.md,
-    paddingHorizontal: Space.md,
-    paddingVertical: Space.sm,
-    marginTop: Space.lg,
+    borderTopWidth: 1,
+    borderTopColor: Brand.divider,
+    paddingTop: Space.md,
+    marginTop: Space.md,
   },
-  footerOnline: { backgroundColor: Brand.greenSoft },
-  footerOffline: { backgroundColor: Brand.background },
-  footerText: { flex: 1, fontSize: 11.5, fontWeight: '600', lineHeight: 16 },
+  statusDot: { width: 6, height: 6, borderRadius: 3 },
+  footerText: { ...Type.meta, color: Brand.textSecondary, flex: 1, lineHeight: 15 },
+  liveTag: {
+    backgroundColor: Brand.greenSoft,
+    borderRadius: Radius.xs,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+  },
+  liveTagText: { ...Type.micro, color: Brand.green, fontSize: 9, letterSpacing: 0.8 },
 });

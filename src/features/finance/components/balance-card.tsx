@@ -1,9 +1,8 @@
 import { Pressable, StyleSheet, Text, View } from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@/components/ui/icon';
-import { Brand, CardShadow, Gradient, Radius, Space } from '@/constants/brand';
+import { Money } from '@/components/ui/money';
+import { Brand, CardShadow, Radius, Space, Type } from '@/constants/brand';
 import type { MechanicWallet } from '@/features/finance/types';
-import { formatIDR } from '@/utils/format';
 
 interface BalanceCardProps {
   wallet: MechanicWallet | null;
@@ -24,42 +23,42 @@ export function BalanceCard({
   const held = wallet?.held_balance ?? 0;
 
   return (
-    <LinearGradient
-      colors={Gradient.promoGreen}
-      start={{ x: 0, y: 0 }}
-      end={{ x: 1, y: 1 }}
-      style={styles.card}
-    >
-      <View style={styles.topRow}>
+    <View style={styles.card}>
+      <View style={styles.headerRow}>
         <View style={styles.labelRow}>
-          <Ionicons name="wallet-outline" size={14} color="rgba(255,255,255,0.9)" />
-          <Text style={styles.label}>Saldo bisa ditarik</Text>
+          <View style={styles.walletIcon}>
+            <Ionicons name="wallet-outline" size={15} color={Brand.primary} />
+          </View>
+          <Text style={styles.label}>Saldo MontirGo Pay</Text>
         </View>
-        <View style={styles.livePill}>
-          <Text style={styles.livePillText}>{loading ? 'Memuat…' : 'MontirGo Pay'}</Text>
+        <View style={styles.availablePill}>
+          <View style={styles.availableDot} />
+          <Text style={styles.availableText}>{loading ? 'Memuat' : 'Tersedia'}</Text>
         </View>
       </View>
 
-      <Text style={styles.value} numberOfLines={1}>
-        {formatIDR(available)}
-      </Text>
+      <Money
+        value={available}
+        size="hero"
+        color={Brand.text}
+        prefixColor={Brand.textSecondary}
+        style={styles.amount}
+      />
 
       <View style={styles.metaRow}>
         <View style={styles.metaItem}>
           <Text style={styles.metaLabel}>Menunggu settlement</Text>
-          <Text style={styles.metaValue}>{formatIDR(pending)}</Text>
+          <Money value={pending} size="sm" color={Brand.text} />
         </View>
-        {held > 0 ? (
-          <View style={styles.metaItem}>
-            <Text style={styles.metaLabel}>Sedang dicairkan</Text>
-            <Text style={styles.metaValue}>{formatIDR(held)}</Text>
-          </View>
-        ) : (
-          <View style={styles.metaItem}>
-            <Text style={styles.metaLabel}>Total pendapatan</Text>
-            <Text style={styles.metaValue}>{formatIDR(wallet?.total_earned ?? 0)}</Text>
-          </View>
-        )}
+        <View style={styles.metaDivider} />
+        <View style={styles.metaItem}>
+          <Text style={styles.metaLabel}>{held > 0 ? 'Sedang dicairkan' : 'Total pendapatan'}</Text>
+          <Money
+            value={held > 0 ? held : (wallet?.total_earned ?? 0)}
+            size="sm"
+            color={Brand.text}
+          />
+        </View>
       </View>
 
       <View style={styles.actions}>
@@ -74,8 +73,8 @@ export function BalanceCard({
             !onPressWithdraw && styles.disabled,
           ]}
         >
-          <Ionicons name="arrow-up-circle-outline" size={16} color={Brand.green} />
-          <Text style={styles.actionPrimaryText}>Tarik Saldo</Text>
+          <Text style={styles.actionPrimaryText}>Tarik saldo</Text>
+          <Ionicons name="arrow-up" size={16} color={Brand.volt} />
         </Pressable>
         <Pressable
           accessibilityRole="button"
@@ -88,66 +87,84 @@ export function BalanceCard({
             !onPressAccounts && styles.disabled,
           ]}
         >
-          <Ionicons name="card-outline" size={16} color={Brand.white} />
+          <Ionicons name="card-outline" size={16} color={Brand.textSecondary} />
           <Text style={styles.actionGhostText}>Rekening</Text>
         </Pressable>
       </View>
-    </LinearGradient>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   card: {
+    backgroundColor: Brand.surface,
     borderRadius: Radius.lg,
     padding: Space.lg,
     marginTop: Space.md,
+    borderWidth: 1,
+    borderColor: Brand.border,
     ...CardShadow,
   },
-  topRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  labelRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  label: { color: 'rgba(255,255,255,0.9)', fontSize: 12, fontWeight: '600' },
-  livePill: {
-    backgroundColor: 'rgba(255,255,255,0.22)',
+  headerRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  labelRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  walletIcon: {
+    width: 28,
+    height: 28,
+    borderRadius: Radius.xs,
+    backgroundColor: Brand.primarySoft,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  label: { ...Type.label, color: Brand.textSecondary, fontWeight: '600' },
+  availablePill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    backgroundColor: Brand.greenSoft,
     borderRadius: Radius.pill,
     paddingHorizontal: 8,
-    paddingVertical: 3,
+    paddingVertical: 4,
   },
-  livePillText: { color: Brand.white, fontSize: 9.5, fontWeight: '700' },
-  value: {
-    color: Brand.white,
-    fontSize: 28,
-    fontWeight: '700',
-    marginTop: Space.sm,
-    letterSpacing: -0.5,
+  availableDot: { width: 5, height: 5, borderRadius: 3, backgroundColor: Brand.green },
+  availableText: { ...Type.micro, color: Brand.green, fontSize: 9, letterSpacing: 0.4 },
+  amount: { marginTop: Space.md },
+  metaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Space.md,
+    marginTop: Space.lg,
+    paddingTop: Space.md,
+    borderTopWidth: 1,
+    borderTopColor: Brand.divider,
   },
-  metaRow: { flexDirection: 'row', gap: Space.lg, marginTop: Space.md },
   metaItem: { flex: 1 },
-  metaLabel: { color: 'rgba(255,255,255,0.8)', fontSize: 10.5, fontWeight: '600' },
-  metaValue: { color: Brand.white, fontSize: 13, fontWeight: '700', marginTop: 2 },
+  metaDivider: { width: 1, height: 26, backgroundColor: Brand.divider },
+  metaLabel: { ...Type.meta, color: Brand.textMuted, marginBottom: 3 },
   actions: { flexDirection: 'row', gap: Space.sm, marginTop: Space.lg },
   actionPrimary: {
     flex: 1,
+    minHeight: 44,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 6,
-    backgroundColor: Brand.white,
+    gap: 7,
+    backgroundColor: Brand.ink,
     borderRadius: Radius.md,
-    paddingVertical: 10,
+    paddingHorizontal: Space.lg,
   },
-  actionPrimaryText: { fontSize: 12.5, fontWeight: '700', color: Brand.green },
+  actionPrimaryText: { ...Type.label, color: Brand.white, fontWeight: '700' },
   actionGhost: {
+    minHeight: 44,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 6,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.55)',
+    borderColor: Brand.border,
     borderRadius: Radius.md,
     paddingHorizontal: Space.lg,
-    paddingVertical: 10,
   },
-  actionGhostText: { fontSize: 12.5, fontWeight: '700', color: Brand.white },
-  pressed: { opacity: 0.75 },
-  disabled: { opacity: 0.6 },
+  actionGhostText: { ...Type.label, color: Brand.textSecondary, fontWeight: '700' },
+  pressed: { opacity: 0.72 },
+  disabled: { opacity: 0.5 },
 });

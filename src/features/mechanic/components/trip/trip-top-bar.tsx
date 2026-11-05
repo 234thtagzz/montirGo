@@ -1,7 +1,7 @@
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons, type IconName } from '@/components/ui/icon';
-import { Brand, CardShadow, Radius, Space } from '@/constants/brand';
+import { Brand, CardShadow, Radius, Space, Type } from '@/constants/brand';
 
 interface TripTopBarProps {
   title: string;
@@ -40,7 +40,7 @@ export function TripTopBar({
           onPress={onBack}
           style={({ pressed }) => [styles.iconButton, pressed && styles.pressed]}
         >
-          <Ionicons name="chevron-back" size={22} color={Brand.text} />
+          <Ionicons name="chevron-back" size={22} color={Brand.white} />
         </Pressable>
 
         <View style={styles.copy}>
@@ -96,8 +96,10 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: Space.md,
-    backgroundColor: Brand.surface,
+    backgroundColor: Brand.ink,
     borderRadius: Radius.lg,
+    borderWidth: 1,
+    borderColor: Brand.inkBorder,
     paddingHorizontal: Space.md,
     paddingVertical: Space.md,
     ...CardShadow,
@@ -108,13 +110,13 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#F3F6FA',
+    backgroundColor: 'rgba(255,255,255,0.08)',
   },
   copy: { flex: 1 },
   titleRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  liveDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: Brand.green },
-  title: { flex: 1, fontSize: 14, fontWeight: '700', color: Brand.text },
-  subtitle: { fontSize: 12, color: Brand.textSecondary, marginTop: 2 },
+  liveDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: Brand.volt },
+  title: { ...Type.bodyStrong, flex: 1, color: Brand.white, fontWeight: '700' },
+  subtitle: { ...Type.meta, color: Brand.inkMuted, marginTop: 2 },
   routeButton: {
     width: 40,
     height: 40,

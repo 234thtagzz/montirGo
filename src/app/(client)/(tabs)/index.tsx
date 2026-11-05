@@ -1,12 +1,14 @@
-import { useCallback, useEffect, useState } from 'react';
-import { Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { useFocusEffect, useRouter } from 'expo-router';import { StatusBar } from 'expo-status-bar';
+import { useCallback, useMemo, useState } from 'react';
+import { Alert, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { useFocusEffect, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { StatusBar } from 'expo-status-bar';
+import { ScreenHeader } from '@/components/ui/screen-header';
+import { LoadingState, ErrorState } from '@/components/ui/state';
 import { Skeleton } from '@/components/ui/skeleton';
-import { ErrorState } from '@/components/ui/state';
 import { SectionHeader } from '@/components/ui/section-header';
 import { Ionicons } from '@/components/ui/icon';
-import { Brand, ScreenPadding, Space } from '@/constants/brand';
+import { Brand, Radius, ScreenPadding, Space, Tabular, Type, Gradient } from '@/constants/brand';
 import { useSessionUser } from '@/hooks/use-session-user';
 import { createRealtimeChannel } from '@/lib/realtime';
 import { supabase } from '@/lib/supabase';
@@ -21,10 +23,7 @@ import {
 } from '@/features/client/service';
 import { isActiveStatus } from '@/features/service-request/status';
 import { expireStaleAssignments } from '@/features/service-request/assignments';
-import {
-  SERVICE_CATEGORIES,
-  type ServiceCategory,
-} from '@/features/service-request/categories';
+import { SERVICE_CATEGORIES, type ServiceCategory } from '@/features/service-request/categories';
 import { HomeHeader } from '@/features/client/components/home-header';
 import { HeroCard } from '@/features/client/components/hero-card';
 import { ServiceGrid } from '@/features/client/components/service-grid';
@@ -32,10 +31,12 @@ import { PromoCarousel, type PromoKey } from '@/features/client/components/promo
 import { ActiveOrderCard } from '@/features/client/components/active-order-card';
 import { NearbyMechanics } from '@/features/client/components/nearby-mechanics';
 import { VehicleStrip } from '@/features/client/components/vehicle-strip';
+import { formatVehicleLabel } from '@/features/vehicles/constants';
 
 export default function ClientHomeScreen() {
   const { user, loading: sessionLoading } = useSessionUser();
   const router = useRouter();
+  const insets = useSafeAreaInsets();
 
   const [orders, setOrders] = useState<ClientOrder[]>([]);
   const [vehicles, setVehicles] = useState<ClientVehicle[]>([]);
@@ -46,6 +47,48 @@ export default function ClientHomeScreen() {
   const [fatalError, setFatalError] = useState(false);
   const [partialError, setPartialError] = useState(false);
   const [focused, setFocused] = useState(true);
+
+  // Fungsi navigasi
+  const openOrder = (order: ClientOrder) => {
+    router.push(
+      order.status === 'on_the_way'
+        ? { pathname: '/(client)/tracking/[id]', params: { id: order.id } }
+        : { pathname: '/(client)/orders/[id]', params: { id: order.id } },
+    );
+  };
+
+  const openCategory = (category: ServiceCategory) => {
+    if (category.route === 'vehicles') {
+      router.push('/(client)/(tabs)/my-vehicles');
+      return;
+    }
+    if (category.route === 'services') {
+      router.push('/(client)/services');
+      return;
+    }
+    router.push({
+      pathname: '/(client)/request/new',
+      params: { category: category.key },
+    });
+  };
+
+  const openPromo = (key: PromoKey) => {
+    if (key === 'track') {
+      const active = orders.find((order) => isActiveStatus(order.status));
+      if (active) {
+        openOrder(active);
+      } else router.push('/(client)/(tabs)/my-requests');
+      return;
+    }
+    if (key === 'vehicle') {
+      router.push('/(client)/vehicles/new');
+      return;
+    }
+    router.push({
+      pathname: '/(client)/request/new',
+      params: { category: 'montir' },
+    });
+  };
 
   const load = useCallback(async () => {
     await expireStaleAssignments();
@@ -78,78 +121,6 @@ export default function ClientHomeScreen() {
     }, [load]),
   );
 
-  // Realtime: status pesanan client berubah tanpa perlu tarik-refresh.
-  useEffect(() => {
-    if (!user?.id) return;
-    const channel = createRealtimeChannel(`client-home-${user.id}`)
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'service_requests',
-          filter: `client_id=eq.${user.id}`,
-        },
-        () => load(),
-      )
-      .subscribe();
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, [user?.id, load]);
-
-  const onRefresh = () => {
-    setRefreshing(true);
-    load();
-  };
-
-  const retry = () => {
-    setLoading(true);
-    load();
-  };
-
-  const openCategory = (category: ServiceCategory) => {
-    if (category.route === 'vehicles') {
-      router.push('/(client)/(tabs)/my-vehicles');
-      return;
-    }
-    if (category.route === 'services') {
-      router.push('/(client)/services');
-      return;
-    }
-    router.push({
-      pathname: '/(client)/request/new',
-      params: { category: category.key },
-    });
-  };
-
-  /** Pesanan aktif dengan montir di jalan langsung membuka layar perjalanan. */
-  const openOrder = (order: ClientOrder) => {
-    router.push(
-      order.status === 'on_the_way'
-        ? { pathname: '/(client)/tracking/[id]', params: { id: order.id } }
-        : { pathname: '/(client)/orders/[id]', params: { id: order.id } },
-    );
-  };
-
-  const openPromo = (key: PromoKey) => {
-    if (key === 'track') {
-      const active = orders.find((order) => isActiveStatus(order.status));
-      if (active) {
-        openOrder(active);
-      } else router.push('/(client)/(tabs)/my-requests');
-      return;
-    }
-    if (key === 'vehicle') {
-      router.push('/(client)/vehicles/new');
-      return;
-    }
-    router.push({
-      pathname: '/(client)/request/new',
-      params: { category: 'montir' },
-    });
-  };
-
   const activeOrder = orders.find((order) => isActiveStatus(order.status)) ?? null;
   const pendingAssignment =
     orders.find(
@@ -171,7 +142,10 @@ export default function ClientHomeScreen() {
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
-            onRefresh={onRefresh}
+            onRefresh={() => {
+              setRefreshing(true);
+              load();
+            }}
             tintColor={Brand.primary}
             colors={[Brand.primary]}
           />
@@ -188,7 +162,7 @@ export default function ClientHomeScreen() {
         <View style={styles.body}>
           {fatalError ? (
             <View style={styles.errorCard}>
-              <ErrorState onRetry={retry} />
+              <ErrorState onRetry={load} />
             </View>
           ) : (
             <>
@@ -235,24 +209,13 @@ export default function ClientHomeScreen() {
                 </Pressable>
               ) : null}
 
-              <SectionHeader
-                title="Layanan"
-                actionLabel="Lihat semua"
-                onPressAction={() => router.push('/(client)/services')}
-              />
+              <SectionHeader title="Layanan" actionLabel="Lihat semua" onPressAction={() => router.push('/(client)/services')} />
               <ServiceGrid categories={SERVICE_CATEGORIES} onPressCategory={openCategory} />
 
               {activeOrder ? (
                 <>
-                  <SectionHeader
-                    title="Pesanan aktif"
-                    actionLabel="Semua pesanan"
-                    onPressAction={() => router.push('/(client)/(tabs)/my-requests')}
-                  />
-                  <ActiveOrderCard
-                    order={activeOrder}
-                    onPress={() => openOrder(activeOrder)}
-                  />
+                  <SectionHeader title="Pesanan aktif" actionLabel="Semua pesanan" onPressAction={() => router.push('/(client)/(tabs)/my-requests')} />
+                  <ActiveOrderCard order={activeOrder} onPress={() => openOrder(activeOrder)} />
                 </>
               ) : null}
 
@@ -262,11 +225,7 @@ export default function ClientHomeScreen() {
               <SectionHeader title="Montir terdekat" />
               <NearbyMechanics mechanics={mechanics} />
 
-              <SectionHeader
-                title="Kendaraan saya"
-                actionLabel="Kelola"
-                onPressAction={() => router.push('/(client)/(tabs)/my-vehicles')}
-              />
+              <SectionHeader title="Kendaraan saya" actionLabel="Kelola" onPressAction={() => router.push('/(client)/(tabs)/my-vehicles')} />
               <VehicleStrip
                 vehicles={vehicles}
                 onPressVehicle={(vehicle) =>
@@ -306,9 +265,9 @@ function HomeSkeleton() {
 
       <View style={styles.skeletonBody}>
         <Skeleton height={118} radius={18} style={{ marginTop: -44 }} />
-        <View style={styles.skeletonGrid}>
+        <View>
           {Array.from({ length: 8 }).map((_, index) => (
-            <View key={index} style={styles.skeletonGridItem}>
+            <View key={index}>
               <Skeleton width={52} height={52} radius={14} />
               <Skeleton width={48} height={9} style={{ marginTop: 6 }} />
             </View>
@@ -343,18 +302,6 @@ const styles = StyleSheet.create({
     marginTop: Space.md,
   },
   partialText: { flex: 1, fontSize: 11, color: Brand.amber },
-  confirmBanner: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Space.md,
-    backgroundColor: Brand.amberSoft,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: Brand.amber,
-    padding: Space.md,
-    marginTop: Space.md,
-  },
-  pressed: { opacity: 0.85 },
   confirmIcon: {
     width: 40,
     height: 40,
@@ -370,7 +317,7 @@ const styles = StyleSheet.create({
   confirmActionText: { fontSize: 11.5, fontWeight: '800', color: Brand.amber },
   skeletonScreen: { flex: 1, backgroundColor: Brand.background },
   skeletonHeader: {
-    backgroundColor: Brand.primary,
+    backgroundColor: Brand.ink,
     paddingHorizontal: ScreenPadding,
     paddingBottom: 64,
   },
@@ -378,11 +325,16 @@ const styles = StyleSheet.create({
   skeletonUser: { flex: 1, gap: 6 },
   onBlue: { backgroundColor: 'rgba(255,255,255,0.28)' },
   skeletonBody: { paddingHorizontal: ScreenPadding },
-  skeletonGrid: {
+  confirmBanner: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
-    marginTop: Space.xl,
-    marginBottom: Space.lg,
+    alignItems: 'center',
+    gap: Space.md,
+    backgroundColor: Brand.amberSoft,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: Brand.amber,
+    padding: Space.md,
+    marginTop: Space.md,
   },
-  skeletonGridItem: { width: '25%', alignItems: 'center', marginBottom: Space.lg },
+  pressed: { opacity: 0.85 },
 });

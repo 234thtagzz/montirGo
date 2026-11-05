@@ -4,7 +4,7 @@ import { useFocusEffect, useRouter } from 'expo-router';
 import { ScreenHeader } from '@/components/ui/screen-header';
 import { EmptyState, ErrorState, LoadingState } from '@/components/ui/state';
 import { Ionicons } from '@/components/ui/icon';
-import { Brand, Radius, ScreenPadding, Space } from '@/constants/brand';
+import { Brand, Radius, ScreenPadding, Space, Type } from '@/constants/brand';
 import { createRealtimeChannel } from '@/lib/realtime';
 import { supabase } from '@/lib/supabase';
 import {
@@ -119,11 +119,7 @@ export default function MechanicRequestsScreen() {
   if (loading) {
     return (
       <View style={styles.screen}>
-        <ScreenHeader
-          title="Request Masuk"
-          subtitle="Permintaan client di sekitarmu"
-          showBack={false}
-        />
+        <ScreenHeader title="Request Masuk" showBack={false} />
         <LoadingState message="Mencari request masuk..." />
       </View>
     );
@@ -133,7 +129,11 @@ export default function MechanicRequestsScreen() {
     <View style={styles.screen}>
       <ScreenHeader
         title="Request Masuk"
-        subtitle="Permintaan client di sekitarmu"
+        subtitle={
+          orders.length > 0
+            ? `${orders.length} request terbuka di sekitarmu`
+            : 'Permintaan client di sekitarmu'
+        }
         showBack={false}
         right={<MechanicNotificationBell />}
       />
@@ -152,6 +152,14 @@ export default function MechanicRequestsScreen() {
           />
         }
       >
+        <View style={styles.liveStrip}>
+          <View style={styles.liveLeft}>
+            <View style={styles.liveDot} />
+            <Text style={styles.liveText}>Memantau request baru secara realtime</Text>
+          </View>
+          <Ionicons name="radio-outline" size={16} color={Brand.textMuted} />
+        </View>
+
         {activeOrderId ? (
           <Pressable
             accessibilityRole="button"
@@ -159,12 +167,14 @@ export default function MechanicRequestsScreen() {
             onPress={() => router.push(`/(mechanic)/active-order/${activeOrderId}`)}
             style={({ pressed }) => [styles.lockCard, pressed && styles.pressed]}
           >
-            <Ionicons name="lock-closed-outline" size={18} color={Brand.amber} />
+            <View style={styles.lockIcon}>
+              <Ionicons name="lock-closed" size={15} color={Brand.amber} />
+            </View>
             <View style={styles.lockCopy}>
               <Text style={styles.lockTitle}>Selesaikan order aktif dulu</Text>
               <Text style={styles.lockText}>
-                Satu montir hanya memegang satu order. Request baru bisa diambil
-                setelah order #{activeOrderId.slice(0, 8).toUpperCase()} lunas.
+                Satu montir hanya memegang satu order. Request baru bisa diambil setelah order #
+                {activeOrderId.slice(0, 8).toUpperCase()} lunas.
               </Text>
             </View>
             <Ionicons name="chevron-forward" size={16} color={Brand.amber} />
@@ -182,40 +192,48 @@ export default function MechanicRequestsScreen() {
             onPressAction={() => router.push('/(mechanic)/(tabs)')}
           />
         ) : (
-          orders.map((order) => (
-            <OrderCard
-              key={order.id}
-              issue={order.issue_description}
-              status={order.status}
-              createdAt={order.created_at}
-              vehicle={formatVehicleLabel(
-                order.vehicle_type,
-                order.vehicle_brand,
-                order.vehicle_model,
-              )}
-              clientName={order.client_name}
-              address={order.address}
-              aiRisk={order.ai_risk_level}
-              badge={NEW_REQUEST_BADGE}
-              onPress={() =>
-                router.push({
-                  pathname: '/(mechanic)/request/[id]',
-                  params: { id: order.id },
-                })
-              }
-              action={{
-                label: activeOrderId
-                  ? 'Selesaikan Order Dulu'
-                  : acceptingId === order.id
-                    ? 'Memproses...'
-                    : 'Ajukan ke Client',
-                icon: 'paper-plane-outline',
-                loading: acceptingId === order.id,
-                disabled: activeOrderId != null,
-                onPress: () => handleAccept(order.id),
-              }}
-            />
-          ))
+          <>
+            <View style={styles.listHeader}>
+              <Text style={styles.listTitle}>TERBUKA</Text>
+              <View style={styles.countPill}>
+                <Text style={styles.countText}>{orders.length}</Text>
+              </View>
+            </View>
+            {orders.map((order) => (
+              <OrderCard
+                key={order.id}
+                issue={order.issue_description}
+                status={order.status}
+                createdAt={order.created_at}
+                vehicle={formatVehicleLabel(
+                  order.vehicle_type,
+                  order.vehicle_brand,
+                  order.vehicle_model,
+                )}
+                clientName={order.client_name}
+                address={order.address}
+                aiRisk={order.ai_risk_level}
+                badge={NEW_REQUEST_BADGE}
+                onPress={() =>
+                  router.push({
+                    pathname: '/(mechanic)/request/[id]',
+                    params: { id: order.id },
+                  })
+                }
+                action={{
+                  label: activeOrderId
+                    ? 'Selesaikan Order Dulu'
+                    : acceptingId === order.id
+                      ? 'Memproses...'
+                      : 'Ajukan ke Client',
+                  icon: 'paper-plane-outline',
+                  loading: acceptingId === order.id,
+                  disabled: activeOrderId != null,
+                  onPress: () => handleAccept(order.id),
+                }}
+              />
+            ))}
+          </>
         )}
       </ScrollView>
     </View>
@@ -224,7 +242,22 @@ export default function MechanicRequestsScreen() {
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: Brand.background },
-  content: { padding: ScreenPadding, paddingBottom: Space.xxxl },
+  content: { paddingHorizontal: ScreenPadding, paddingBottom: Space.xxxl },
+  liveStrip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: Space.sm,
+    paddingHorizontal: Space.md,
+    backgroundColor: Brand.surface,
+    borderRadius: Radius.md,
+    borderWidth: 1,
+    borderColor: Brand.border,
+    marginBottom: Space.md,
+  },
+  liveLeft: { flexDirection: 'row', alignItems: 'center', gap: 7 },
+  liveDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: Brand.green },
+  liveText: { ...Type.meta, color: Brand.textSecondary },
   lockCard: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -234,8 +267,34 @@ const styles = StyleSheet.create({
     padding: Space.md,
     marginBottom: Space.md,
   },
+  lockIcon: {
+    width: 34,
+    height: 34,
+    borderRadius: Radius.sm,
+    backgroundColor: Brand.surface,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   lockCopy: { flex: 1 },
-  lockTitle: { fontSize: 13, fontWeight: '700', color: Brand.text },
-  lockText: { fontSize: 11.5, color: Brand.textSecondary, marginTop: 2, lineHeight: 16 },
+  lockTitle: { ...Type.label, color: Brand.text, fontWeight: '700' },
+  lockText: { ...Type.meta, color: '#7C5A12', marginTop: 2, lineHeight: 15 },
+  listHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginTop: Space.sm,
+    marginBottom: Space.md,
+  },
+  listTitle: { ...Type.micro, color: Brand.textMuted, letterSpacing: 1 },
+  countPill: {
+    minWidth: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: Brand.primarySoft,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 5,
+  },
+  countText: { ...Type.micro, color: Brand.primary, fontSize: 9.5 },
   pressed: { opacity: 0.8 },
 });

@@ -11,7 +11,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Avatar } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { Ionicons } from '@/components/ui/icon';
-import { Brand, CardShadow, Radius, Space } from '@/constants/brand';
+import { Brand, CardShadow, Radius, Space, Tabular, Type } from '@/constants/brand';
 import type { IconName } from '@/components/ui/icon';
 import { TripActions } from './trip-actions';
 
@@ -268,6 +268,7 @@ export function TripSheet({
         <Button
           label={primary.label}
           icon={primary.icon}
+          variant="ink"
           loading={busy}
           onPress={onPrimary}
           style={styles.cta}
@@ -331,8 +332,8 @@ const styles = StyleSheet.create({
     right: 0,
     bottom: 0,
     backgroundColor: Brand.surface,
-    borderTopLeftRadius: Radius.xl,
-    borderTopRightRadius: Radius.xl,
+    borderTopLeftRadius: Radius.xxl,
+    borderTopRightRadius: Radius.xxl,
     paddingHorizontal: Space.lg,
     ...CardShadow,
   },
@@ -347,8 +348,8 @@ const styles = StyleSheet.create({
   },
   headerRow: { flexDirection: 'row', alignItems: 'center', gap: Space.md, marginTop: 2 },
   headerCopy: { flex: 1 },
-  clientName: { fontSize: 14, fontWeight: '700', color: Brand.text },
-  clientMeta: { fontSize: 11.5, color: Brand.textSecondary, marginTop: 2 },
+  clientName: { ...Type.title, color: Brand.text },
+  clientMeta: { ...Type.meta, color: Brand.textSecondary, marginTop: 2 },
   liveChip: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -370,8 +371,8 @@ const styles = StyleSheet.create({
     borderColor: Brand.divider,
   },
   metric: { flex: 1, alignItems: 'center' },
-  metricValue: { fontSize: 17, fontWeight: '700', color: Brand.text },
-  metricLabel: { fontSize: 10, color: Brand.textMuted, marginTop: 2 },
+  metricValue: { ...Type.h2, ...Tabular, color: Brand.text },
+  metricLabel: { ...Type.meta, color: Brand.textMuted, marginTop: 2, fontSize: 10 },
   metricDivider: { width: StyleSheet.hairlineWidth, height: 28, backgroundColor: Brand.divider },
   warning: {
     flexDirection: 'row',

@@ -1,7 +1,8 @@
-import { iconColor, Ionicons } from "@/components/ui/icon";
-import { Brand } from "@/constants/brand";
-import { useTabBarStyle } from "@/hooks/use-tab-bar-style";
-import { Tabs } from "expo-router";
+import { iconColor } from '@/components/ui/icon';
+import { TabIcon } from '@/components/ui/tab-icon';
+import { Brand } from '@/constants/brand';
+import { useTabBarStyle } from '@/hooks/use-tab-bar-style';
+import { Tabs } from 'expo-router';
 
 export default function ClientTabsLayout() {
   const tabBarStyle = useTabBarStyle();
@@ -13,19 +14,21 @@ export default function ClientTabsLayout() {
         tabBarActiveTintColor: Brand.primary,
         tabBarInactiveTintColor: Brand.textMuted,
         tabBarStyle,
-        tabBarLabelStyle: { fontSize: 11, fontWeight: "600" },
+        tabBarLabelStyle: { fontSize: 10.5, fontWeight: '600', marginTop: 1 },
+        tabBarItemStyle: { paddingTop: 2 },
         tabBarHideOnKeyboard: true,
       }}
     >
       <Tabs.Screen
         name="index"
         options={{
-          title: "Beranda",
-          tabBarIcon: ({ color, size, focused }) => (
-            <Ionicons
-              name={focused ? "home" : "home-outline"}
-              size={size}
+          title: 'Beranda',
+          tabBarIcon: ({ color, focused }) => (
+            <TabIcon
+              focused={focused}
               color={iconColor(color, Brand.textMuted)}
+              name="home-outline"
+              focusedName="home"
             />
           ),
         }}
@@ -33,12 +36,13 @@ export default function ClientTabsLayout() {
       <Tabs.Screen
         name="my-requests"
         options={{
-          title: "Pesanan",
-          tabBarIcon: ({ color, size, focused }) => (
-            <Ionicons
-              name={focused ? "receipt" : "receipt-outline"}
-              size={size}
+          title: 'Pesanan',
+          tabBarIcon: ({ color, focused }) => (
+            <TabIcon
+              focused={focused}
               color={iconColor(color, Brand.textMuted)}
+              name="receipt-outline"
+              focusedName="receipt"
             />
           ),
         }}
@@ -46,12 +50,13 @@ export default function ClientTabsLayout() {
       <Tabs.Screen
         name="my-vehicles"
         options={{
-          title: "Garasi",
-          tabBarIcon: ({ color, size, focused }) => (
-            <Ionicons
-              name={focused ? "car-sport" : "car-sport-outline"}
-              size={size}
+          title: 'Garasi',
+          tabBarIcon: ({ color, focused }) => (
+            <TabIcon
+              focused={focused}
               color={iconColor(color, Brand.textMuted)}
+              name="car-sport-outline"
+              focusedName="car-sport"
             />
           ),
         }}
@@ -59,12 +64,13 @@ export default function ClientTabsLayout() {
       <Tabs.Screen
         name="profile"
         options={{
-          title: "Profil",
-          tabBarIcon: ({ color, size, focused }) => (
-            <Ionicons
-              name={focused ? "person" : "person-outline"}
-              size={size}
+          title: 'Profil',
+          tabBarIcon: ({ color, focused }) => (
+            <TabIcon
+              focused={focused}
               color={iconColor(color, Brand.textMuted)}
+              name="person-outline"
+              focusedName="person"
             />
           ),
         }}

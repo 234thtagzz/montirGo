@@ -11,13 +11,13 @@ interface SkeletonProps {
 
 /** Blok abu-abu berdenyut untuk loading state. */
 export function Skeleton({ width = '100%', height = 14, radius = Radius.sm, style }: SkeletonProps) {
-  const [opacity] = useState(() => new Animated.Value(0.45));
+  const [opacity] = useState(() => new Animated.Value(0.5));
 
   useEffect(() => {
     const loop = Animated.loop(
       Animated.sequence([
-        Animated.timing(opacity, { toValue: 0.9, duration: 700, useNativeDriver: true }),
-        Animated.timing(opacity, { toValue: 0.45, duration: 700, useNativeDriver: true }),
+        Animated.timing(opacity, { toValue: 1, duration: 720, useNativeDriver: true }),
+        Animated.timing(opacity, { toValue: 0.5, duration: 720, useNativeDriver: true }),
       ]),
     );
     loop.start();
@@ -32,5 +32,5 @@ export function Skeleton({ width = '100%', height = 14, radius = Radius.sm, styl
 }
 
 const styles = StyleSheet.create({
-  base: { backgroundColor: Brand.divider },
+  base: { backgroundColor: '#E2E7EF' },
 });

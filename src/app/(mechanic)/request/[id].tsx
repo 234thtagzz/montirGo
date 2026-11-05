@@ -9,12 +9,15 @@ import {
   View,
 } from 'react-native';
 import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ScreenHeader } from '@/components/ui/screen-header';
 import { Avatar } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
+import { ConfirmSheet } from '@/components/ui/confirm-sheet';
+import { SectionHeader } from '@/components/ui/section-header';
 import { EmptyState, ErrorState, LoadingState } from '@/components/ui/state';
 import { Ionicons } from '@/components/ui/icon';
-import { Brand, CardShadow, Radius, ScreenPadding, Space } from '@/constants/brand';
+import { Brand, Radius, ScreenPadding, Space, Type } from '@/constants/brand';
 import { createRealtimeChannel } from '@/lib/realtime';
 import { supabase } from '@/lib/supabase';
 import {
@@ -31,17 +34,19 @@ import { openWhatsApp } from '@/utils/whatsapp';
 
 /**
  * Layar otorisasi montir: detail request SEBELUM diterima.
- * Menampilkan data client + kendaraan + hasil analisis AI, lalu CTA "Terima Order".
+ * Menampilkan data client + kendaraan + hasil analisis AI, lalu CTA "Ajukan".
  */
 export default function MechanicRequestDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
+  const insets = useSafeAreaInsets();
 
   const [order, setOrder] = useState<IncomingRequestDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState(false);
   const [accepting, setAccepting] = useState(false);
+  const [confirmOpen, setConfirmOpen] = useState(false);
   const [activeOrderId, setActiveOrderId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
@@ -98,7 +103,7 @@ export default function MechanicRequestDetailScreen() {
     );
   };
 
-  const confirmAccept = () => {
+  const openConfirm = () => {
     if (!order) return;
     if (activeOrderId) {
       Alert.alert('Masih ada order aktif', ACTIVE_ORDER_MESSAGE, [
@@ -110,39 +115,33 @@ export default function MechanicRequestDetailScreen() {
       ]);
       return;
     }
-    Alert.alert(
-      'Ajukan mengambil request ini?',
-      'Client akan meninjau rating, ulasan, dan profil bengkelmu lalu mengonfirmasi dalam 5 menit. Kamu baru bisa berangkat setelah pengajuan disetujui.',
-      [
-        { text: 'Batal', style: 'cancel' },
-        {
-          text: 'Ya, ajukan',
-          onPress: async () => {
-            setAccepting(true);
-            try {
-              await acceptOrder(order.id);
-              // Pengajuan belum menjadi order aktif sampai client menyetujui.
-              router.replace({
-                pathname: '/(mechanic)/active-order/[id]',
-                params: { id: order.id },
-              });
-              Alert.alert(
-                'Pengajuan terkirim',
-                'Menunggu konfirmasi client. Kamu akan mendapat notifikasi begitu disetujui.',
-              );
-            } catch (e) {
-              Alert.alert(
-                'Gagal mengajukan',
-                e instanceof Error ? e.message : 'Request mungkin sudah diambil montir lain.',
-              );
-              await load();
-            } finally {
-              setAccepting(false);
-            }
-          },
-        },
-      ],
-    );
+    setConfirmOpen(true);
+  };
+
+  const submitAccept = async () => {
+    if (!order) return;
+    setAccepting(true);
+    try {
+      await acceptOrder(order.id);
+      setConfirmOpen(false);
+      // Pengajuan belum menjadi order aktif sampai client menyetujui.
+      router.replace({
+        pathname: '/(mechanic)/active-order/[id]',
+        params: { id: order.id },
+      });
+      Alert.alert(
+        'Pengajuan terkirim',
+        'Menunggu konfirmasi client. Kamu akan mendapat notifikasi begitu disetujui.',
+      );
+    } catch (e) {
+      Alert.alert(
+        'Gagal mengajukan',
+        e instanceof Error ? e.message : 'Request mungkin sudah diambil montir lain.',
+      );
+      await load();
+    } finally {
+      setAccepting(false);
+    }
   };
 
   if (loading) {
@@ -193,7 +192,7 @@ export default function MechanicRequestDetailScreen() {
         subtitle={`#${order.id.slice(0, 8).toUpperCase()}`}
       />
       <ScrollView
-        contentContainerStyle={styles.content}
+        contentContainerStyle={[styles.content, { paddingBottom: 120 + insets.bottom }]}
         showsVerticalScrollIndicator={false}
         refreshControl={
           <RefreshControl
@@ -207,45 +206,48 @@ export default function MechanicRequestDetailScreen() {
           />
         }
       >
-        <View style={styles.statusCard}>
-          <View style={styles.statusTop}>
-            <View style={styles.newChip}>
-              <Ionicons name="flash-outline" size={12} color={Brand.amber} />
-              <Text style={styles.newChipText}>Request baru</Text>
+        <View style={styles.hero}>
+          <View style={styles.heroTop}>
+            <View style={styles.liveChip}>
+              <View style={styles.liveDot} />
+              <Text style={styles.liveText}>REQUEST BARU</Text>
             </View>
-            <Text style={styles.statusTime}>{formatDateTime(order.created_at)}</Text>
+            <Text style={styles.heroTime}>{formatDateTime(order.created_at)}</Text>
           </View>
-          <Text style={styles.statusTitle}>Menunggu montir menerima</Text>
-          <Text style={styles.statusSub}>
-            Periksa keluhan dan analisis AI sebelum memutuskan untuk menerima.
-          </Text>
-        </View>
 
-        <View style={styles.clientCard}>
-          <Avatar name={order.client_name ?? 'Client'} size={46} />
-          <View style={styles.clientCopy}>
-            <Text style={styles.clientName} numberOfLines={1}>
-              {order.client_name ?? 'Client MontirGo'}
-            </Text>
-            <Text style={styles.clientRole}>Client yang membutuhkan bantuan</Text>
+          <Text style={styles.heroTitle}>Menunggu montir menerima</Text>
+          <Text style={styles.heroSub}>
+            Periksa keluhan dan analisis awal sebelum mengajukan diri ke client.
+          </Text>
+
+          <View style={styles.heroDivider} />
+
+          <View style={styles.heroClient}>
+            <Avatar name={order.client_name ?? 'Client'} size={42} />
+            <View style={styles.heroClientCopy}>
+              <Text style={styles.heroClientName} numberOfLines={1}>
+                {order.client_name ?? 'Client MontirGo'}
+              </Text>
+              <Text style={styles.heroClientRole}>Client yang membutuhkan bantuan</Text>
+            </View>
+            {order.contact_phone ? (
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Hubungi client lewat WhatsApp"
+                onPress={chatClient}
+                style={({ pressed }) => [styles.chatButton, pressed && styles.pressed]}
+              >
+                <Ionicons name="logo-whatsapp" size={19} color={Brand.ink} />
+              </Pressable>
+            ) : null}
           </View>
-          {order.contact_phone ? (
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel="Hubungi client lewat WhatsApp"
-              onPress={chatClient}
-              style={({ pressed }) => [styles.chatButton, pressed && styles.pressed]}
-            >
-              <Ionicons name="logo-whatsapp" size={18} color={Brand.white} />
-            </Pressable>
-          ) : null}
         </View>
 
         {hasVehicle ? (
           <>
-            <Text style={styles.section}>Kendaraan client</Text>
+            <SectionHeader eyebrow="KENDARAAN" title="Data kendaraan" />
             <VehicleProfileCard
-              title="Data kendaraan"
+              title="Kendaraan client"
               photo={order.vehicle_photo_url}
               type={order.vehicle_type}
               brand={order.vehicle_brand}
@@ -256,7 +258,7 @@ export default function MechanicRequestDetailScreen() {
           </>
         ) : null}
 
-        <Text style={styles.section}>Detail permintaan</Text>
+        <SectionHeader eyebrow="KELUHAN" title="Detail permintaan" />
         <View style={styles.detailCard}>
           <DetailRow label="Keluhan" value={order.issue_description} />
           {order.symptoms ? <DetailRow label="Gejala" value={order.symptoms} /> : null}
@@ -268,14 +270,14 @@ export default function MechanicRequestDetailScreen() {
           ) : null}
         </View>
 
-        <Text style={styles.section}>Hasil analisis AI</Text>
+        <SectionHeader eyebrow="AI" title="Analisis awal" />
         <AiAnalysisCard
           analysis={order.ai_analysis}
           subtitle="Indikasi awal untuk membantumu memutuskan"
         />
 
         <View style={styles.disclaimer}>
-          <Ionicons name="shield-checkmark-outline" size={15} color={Brand.primary} />
+          <Ionicons name="information-circle-outline" size={15} color={Brand.primary} />
           <Text style={styles.disclaimerText}>
             Analisis AI bukan diagnosis final. Lakukan pemeriksaan langsung saat tiba di lokasi.
           </Text>
@@ -292,87 +294,75 @@ export default function MechanicRequestDetailScreen() {
             <View style={styles.noticeCopy}>
               <Text style={styles.noticeTitle}>Selesaikan order aktif dulu</Text>
               <Text style={styles.noticeText}>
-                Kamu hanya bisa memegang satu order. Request ini bisa diterima
-                setelah order #{activeOrderId.slice(0, 8).toUpperCase()} lunas.
+                Kamu hanya bisa memegang satu order. Request ini bisa diterima setelah order #
+                {activeOrderId.slice(0, 8).toUpperCase()} lunas.
               </Text>
             </View>
             <Ionicons name="chevron-forward" size={15} color={Brand.amber} />
           </Pressable>
         ) : null}
+      </ScrollView>
 
+      <View style={[styles.footer, { paddingBottom: insets.bottom + Space.md }]}>
         <Button
-          label={
-            activeOrderId
-              ? 'Selesaikan Order Dulu'
-              : accepting
-                ? 'Memproses...'
-                : 'Ajukan ke Client'
-          }
+          label={activeOrderId ? 'Selesaikan Order Dulu' : 'Ajukan ke Client'}
           icon="paper-plane-outline"
+          variant="ink"
           loading={accepting}
           disabled={activeOrderId != null}
-          onPress={confirmAccept}
-          style={styles.action}
+          onPress={openConfirm}
         />
-      </ScrollView>
+      </View>
+
+      <ConfirmSheet
+        visible={confirmOpen}
+        title="Ajukan mengambil request?"
+        message="Client akan meninjau rating, ulasan, dan profil bengkelmu lalu mengonfirmasi dalam 5 menit. Kamu baru bisa berangkat setelah pengajuan disetujui."
+        confirmLabel="Ya, ajukan"
+        icon="paper-plane-outline"
+        loading={accepting}
+        onConfirm={submitAccept}
+        onCancel={() => setConfirmOpen(false)}
+      />
     </View>
   );
 }
 
-function DetailRow({
-  label,
-  value,
-  highlight = false,
-}: {
-  label: string;
-  value: string;
-  highlight?: boolean;
-}) {
+function DetailRow({ label, value }: { label: string; value: string }) {
   return (
     <View style={styles.detailRow}>
       <Text style={styles.detailLabel}>{label}</Text>
-      <Text style={[styles.detailValue, highlight && styles.detailValueHighlight]}>{value}</Text>
+      <Text style={styles.detailValue}>{value}</Text>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: Brand.background },
-  content: { padding: ScreenPadding, paddingBottom: Space.xxxl },
-  statusCard: {
-    backgroundColor: Brand.surface,
-    borderRadius: Radius.lg,
-    padding: Space.lg,
-    ...CardShadow,
-  },
-  statusTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  newChip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: Radius.pill,
-    backgroundColor: Brand.amberSoft,
-  },
-  newChipText: { fontSize: 10.5, fontWeight: '700', color: Brand.amber },
-  statusTime: { fontSize: 11, color: Brand.textMuted },
-  statusTitle: { fontSize: 17, fontWeight: '700', color: Brand.text, marginTop: Space.md },
-  statusSub: { fontSize: 12, color: Brand.textSecondary, marginTop: 2, lineHeight: 17 },
-  clientCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Space.md,
-    backgroundColor: Brand.surface,
-    borderRadius: Radius.lg,
-    padding: Space.md,
-    marginTop: Space.md,
+  content: { padding: ScreenPadding },
+  hero: {
+    backgroundColor: Brand.ink,
+    borderRadius: Radius.xxl,
     borderWidth: 1,
-    borderColor: Brand.divider,
+    borderColor: Brand.inkBorder,
+    padding: Space.lg,
   },
-  clientCopy: { flex: 1 },
-  clientName: { fontSize: 14, fontWeight: '700', color: Brand.text },
-  clientRole: { fontSize: 11.5, color: Brand.textSecondary, marginTop: 2 },
+  heroTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  liveChip: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  liveDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: Brand.volt },
+  liveText: { ...Type.micro, color: Brand.volt, fontSize: 9.5 },
+  heroTime: { ...Type.meta, color: Brand.inkMuted, fontSize: 10 },
+  heroTitle: { ...Type.h2, color: Brand.white, marginTop: Space.md },
+  heroSub: { ...Type.meta, color: Brand.inkMuted, marginTop: 3, lineHeight: 17 },
+  heroDivider: {
+    height: 1,
+    backgroundColor: Brand.inkBorder,
+    marginVertical: Space.lg,
+  },
+  heroClient: { flexDirection: 'row', alignItems: 'center', gap: Space.md },
+  heroClientCopy: { flex: 1 },
+  heroClientName: { ...Type.bodyStrong, color: Brand.white, fontWeight: '700' },
+  heroClientRole: { ...Type.meta, color: Brand.inkMuted, marginTop: 2 },
   chatButton: {
     width: 42,
     height: 42,
@@ -381,29 +371,21 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  section: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: Brand.text,
-    marginTop: Space.xxl,
-    marginBottom: Space.md,
-  },
   detailCard: {
     backgroundColor: Brand.surface,
     borderRadius: Radius.lg,
     paddingHorizontal: Space.lg,
     paddingVertical: Space.xs,
     borderWidth: 1,
-    borderColor: Brand.divider,
+    borderColor: Brand.border,
   },
   detailRow: {
     paddingVertical: Space.md,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: Brand.divider,
   },
-  detailLabel: { fontSize: 11, color: Brand.textMuted, fontWeight: '600' },
-  detailValue: { fontSize: 13, color: Brand.text, marginTop: 3, lineHeight: 18 },
-  detailValueHighlight: { fontSize: 15, fontWeight: '700', color: Brand.primary },
+  detailLabel: { ...Type.meta, color: Brand.textMuted, fontWeight: '600', fontSize: 10.5 },
+  detailValue: { ...Type.body, color: Brand.text, marginTop: 3, lineHeight: 20, fontSize: 13.5 },
   disclaimer: {
     flexDirection: 'row',
     gap: 6,
@@ -413,7 +395,7 @@ const styles = StyleSheet.create({
     padding: Space.md,
     marginTop: Space.lg,
   },
-  disclaimerText: { flex: 1, fontSize: 11, color: Brand.primary, lineHeight: 16 },
+  disclaimerText: { flex: 1, ...Type.meta, color: Brand.primaryDark, lineHeight: 16 },
   notice: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -424,8 +406,18 @@ const styles = StyleSheet.create({
     marginTop: Space.lg,
   },
   noticeCopy: { flex: 1 },
-  noticeTitle: { fontSize: 12.5, fontWeight: '700', color: Brand.text },
-  noticeText: { fontSize: 11, color: Brand.textSecondary, marginTop: 2, lineHeight: 16 },
-  action: { marginTop: Space.xl },
-  pressed: { opacity: 0.7 },
+  noticeTitle: { ...Type.label, color: Brand.text, fontWeight: '700' },
+  noticeText: { ...Type.meta, color: Brand.textSecondary, marginTop: 2, lineHeight: 16 },
+  footer: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    paddingHorizontal: ScreenPadding,
+    paddingTop: Space.md,
+    backgroundColor: Brand.background,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: Brand.border,
+  },
+  pressed: { opacity: 0.72 },
 });
