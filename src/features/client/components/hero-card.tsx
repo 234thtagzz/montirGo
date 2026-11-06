@@ -1,23 +1,28 @@
 import { StyleSheet, Text, View } from 'react-native';
 import { Button } from '@/components/ui/button';
 import { Ionicons } from '@/components/ui/icon';
-import { Brand, CardShadow, Radius, Space } from '@/constants/brand';
+import { Brand, CardShadow, Radius, Space, Type } from '@/constants/brand';
 
 interface HeroCardProps {
   onPressRequest: () => void;
   onPressOrders: () => void;
 }
 
+/**
+ * Kartu aksi utama yang menumpuk di atas header. Fokusnya satu: mulai
+ * permintaan; "Pesanan" disediakan sebagai jalur sekunder.
+ */
 export function HeroCard({ onPressRequest, onPressOrders }: HeroCardProps) {
   return (
     <View style={styles.card}>
       <View style={styles.top}>
-        <View style={styles.copy}>
-          <Text style={styles.title}>Kendaraan bermasalah?</Text>
-          <Text style={styles.subtitle}>Montir siap datang ke lokasimu.</Text>
+        <View style={styles.iconTile}>
+          <Ionicons name="construct-outline" size={22} color={Brand.volt} />
         </View>
-        <View style={styles.iconCircle}>
-          <Ionicons name="construct-outline" size={24} color={Brand.primary} />
+        <View style={styles.copy}>
+          <Text style={styles.kicker}>BANTUAN DARURAT</Text>
+          <Text style={styles.title}>Kendaraan bermasalah?</Text>
+          <Text style={styles.subtitle}>Montir terdekat datang ke lokasimu.</Text>
         </View>
       </View>
 
@@ -26,7 +31,6 @@ export function HeroCard({ onPressRequest, onPressOrders }: HeroCardProps) {
           label="Cari Montir"
           icon="flash-outline"
           onPress={onPressRequest}
-          compact
           style={styles.primary}
         />
         <Button
@@ -34,7 +38,6 @@ export function HeroCard({ onPressRequest, onPressOrders }: HeroCardProps) {
           icon="receipt-outline"
           variant="secondary"
           onPress={onPressOrders}
-          compact
           style={styles.secondary}
         />
       </View>
@@ -51,18 +54,19 @@ const styles = StyleSheet.create({
     ...CardShadow,
   },
   top: { flexDirection: 'row', alignItems: 'center', gap: Space.md },
-  copy: { flex: 1 },
-  title: { fontSize: 16, fontWeight: '700', color: Brand.text },
-  subtitle: { fontSize: 12.5, color: Brand.textSecondary, marginTop: 2 },
-  iconCircle: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: Brand.primarySoft,
+  iconTile: {
+    width: 46,
+    height: 46,
+    borderRadius: Radius.md,
+    backgroundColor: Brand.ink,
     alignItems: 'center',
     justifyContent: 'center',
   },
+  copy: { flex: 1 },
+  kicker: { ...Type.micro, color: Brand.primary, letterSpacing: 0.9 },
+  title: { ...Type.h2, color: Brand.text, marginTop: 2 },
+  subtitle: { ...Type.meta, color: Brand.textSecondary, marginTop: 2 },
   actions: { flexDirection: 'row', gap: Space.sm, marginTop: Space.lg },
-  primary: { flex: 1.4 },
-  secondary: { flex: 1 },
+  primary: { flex: 1.4, minHeight: 46 },
+  secondary: { flex: 1, minHeight: 46 },
 });

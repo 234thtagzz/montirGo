@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Animated, StyleSheet, type DimensionValue, type StyleProp, type ViewStyle } from 'react-native';
-import { Brand, Radius } from '@/constants/brand';
+import { Radius } from '@/constants/brand';
 
 interface SkeletonProps {
   width?: DimensionValue;

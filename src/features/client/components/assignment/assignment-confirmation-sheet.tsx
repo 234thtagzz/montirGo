@@ -14,7 +14,7 @@ import { Image } from 'expo-image';
 import { Avatar } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { Ionicons } from '@/components/ui/icon';
-import { Brand, Radius, Space } from '@/constants/brand';
+import { Brand, Radius, Space, Tabular, Type } from '@/constants/brand';
 import {
   listMechanicReviews,
   getMechanicAssignmentProfile,
@@ -230,12 +230,15 @@ export function AssignmentConfirmationSheet({
               showsVerticalScrollIndicator={false}
             >
               <View style={styles.identityCard}>
-                <Avatar
-                  name={profile.full_name ?? 'Montir'}
-                  uri={profile.avatar_url}
-                  size={54}
-                />
+                <View style={styles.identityAvatar}>
+                  <Avatar
+                    name={profile.full_name ?? 'Montir'}
+                    uri={profile.avatar_url}
+                    size={52}
+                  />
+                </View>
                 <View style={styles.identityCopy}>
+                  <Text style={styles.identityEyebrow}>MONTIR YANG MENGAJUKAN DIRI</Text>
                   <Text style={styles.name} numberOfLines={1}>
                     {profile.full_name?.trim() || 'Montir MontirGo'}
                   </Text>
@@ -248,12 +251,12 @@ export function AssignmentConfirmationSheet({
                     <Ionicons
                       name={profile.is_verified ? 'shield-checkmark' : 'alert-circle-outline'}
                       size={11}
-                      color={profile.is_verified ? Brand.green : Brand.amber}
+                      color={profile.is_verified ? Brand.volt : '#FCD34D'}
                     />
                     <Text
                       style={[
                         styles.verifyText,
-                        { color: profile.is_verified ? Brand.green : Brand.amber },
+                        { color: profile.is_verified ? Brand.volt : '#FCD34D' },
                       ]}
                     >
                       {profile.is_verified ? 'Terverifikasi' : 'Belum verifikasi'}
@@ -421,7 +424,7 @@ function Stat({
         <Ionicons name={icon} size={11} color={color} />
         <Text style={styles.statLabel}>{label}</Text>
       </View>
-      <Text style={styles.statValue}>{value}</Text>
+      <Text style={[styles.statValue, Tabular]}>{value}</Text>
     </View>
   );
 }
@@ -525,9 +528,9 @@ const styles = StyleSheet.create({
     marginBottom: Space.md,
   },
   headerCopy: { flex: 1 },
-  eyebrow: { fontSize: 10, fontWeight: '800', letterSpacing: 0.6, color: Brand.primary },
-  title: { fontSize: 18, fontWeight: '800', color: Brand.text, marginTop: 3 },
-  orderId: { fontSize: 11, color: Brand.textMuted, marginTop: 3, fontWeight: '600' },
+  eyebrow: { ...Type.micro, color: Brand.primary },
+  title: { ...Type.h2, fontSize: 17, color: Brand.text, marginTop: 3 },
+  orderId: { fontSize: 10.5, color: Brand.textMuted, marginTop: 3, fontWeight: '600', letterSpacing: 0.4 },
   countdown: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -555,14 +558,19 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: Space.md,
-    backgroundColor: Brand.surface,
+    backgroundColor: Brand.ink,
     borderRadius: Radius.lg,
     padding: Space.lg,
-    borderWidth: 1,
-    borderColor: Brand.divider,
+  },
+  identityAvatar: {
+    borderRadius: Radius.pill,
+    borderWidth: 1.5,
+    borderColor: 'rgba(255,255,255,0.2)',
+    padding: 2,
   },
   identityCopy: { flex: 1 },
-  name: { fontSize: 16, fontWeight: '800', color: Brand.text },
+  identityEyebrow: { ...Type.micro, fontSize: 8.5, color: Brand.inkMuted },
+  name: { ...Type.h2, color: Brand.white, marginTop: 2 },
   verifyBadge: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -571,11 +579,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     paddingVertical: 3,
     borderRadius: Radius.pill,
-    marginTop: 5,
+    marginTop: 6,
   },
-  verifyOk: { backgroundColor: Brand.greenSoft },
-  verifyPending: { backgroundColor: Brand.amberSoft },
-  verifyText: { fontSize: 10.5, fontWeight: '700' },
+  verifyOk: { backgroundColor: 'rgba(201,241,88,0.12)' },
+  verifyPending: { backgroundColor: 'rgba(252,211,77,0.12)' },
+  verifyText: { fontSize: 10, fontWeight: '700' },
   statsRow: { flexDirection: 'row', gap: Space.sm, marginTop: Space.md },
   stat: {
     flex: 1,

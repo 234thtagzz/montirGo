@@ -13,7 +13,7 @@ import { StatusBar } from 'expo-status-bar';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@/components/ui/icon';
-import { Brand, CardShadow, Gradient, Radius, ScreenPadding, Space } from '@/constants/brand';
+import { Brand, CardShadow, Gradient, Radius, ScreenPadding, Space, Type } from '@/constants/brand';
 
 interface AuthScreenProps {
   title: string;
@@ -25,7 +25,7 @@ interface AuthScreenProps {
 
 /**
  * Kerangka layar auth yang konsisten dengan section client:
- * hero gradient biru + kartu putih yang sedikit menumpuk ke atas.
+ * hero ink + kartu putih yang sedikit menumpuk ke atas.
  */
 export function AuthScreen({ title, subtitle, showBack = false, children }: AuthScreenProps) {
   const insets = useSafeAreaInsets();
@@ -54,9 +54,6 @@ export function AuthScreen({ title, subtitle, showBack = false, children }: Auth
             end={{ x: 1, y: 1 }}
             style={[styles.hero, { paddingTop: insets.top + Space.md }]}
           >
-            <View style={styles.glowLarge} />
-            <View style={styles.glowSmall} />
-
             {showBack ? (
               <Pressable
                 accessibilityRole="button"
@@ -71,7 +68,7 @@ export function AuthScreen({ title, subtitle, showBack = false, children }: Auth
 
             <View style={styles.brandRow}>
               <View style={styles.logo}>
-                <Ionicons name="construct" size={23} color={Brand.primary} />
+                <Ionicons name="construct" size={22} color={Brand.ink} />
               </View>
               <View>
                 <Text style={styles.brandName}>MontirGo</Text>
@@ -79,10 +76,15 @@ export function AuthScreen({ title, subtitle, showBack = false, children }: Auth
               </View>
             </View>
 
-            <Text style={styles.headline}>Kendaraan bermasalah?{'\n'}Montir datang ke lokasimu.</Text>
-            <Text style={styles.tagline}>
-              Masuk atau daftar untuk memesan bantuan montir dan melacak pesananmu.
+            <Text style={styles.headline}>
+              Kendaraan bermasalah?{'\n'}Montir datang ke lokasimu.
             </Text>
+            <View style={styles.taglineRow}>
+              <View style={styles.taglineBar} />
+              <Text style={styles.tagline}>
+                Masuk atau daftar untuk memesan bantuan montir dan melacak pesananmu.
+              </Text>
+            </View>
           </LinearGradient>
 
           <View style={styles.card}>
@@ -105,29 +107,13 @@ const styles = StyleSheet.create({
     paddingBottom: 78,
     overflow: 'hidden',
   },
-  glowLarge: {
-    position: 'absolute',
-    width: 220,
-    height: 220,
-    borderRadius: 110,
-    backgroundColor: 'rgba(255,255,255,0.10)',
-    top: -70,
-    right: -60,
-  },
-  glowSmall: {
-    position: 'absolute',
-    width: 110,
-    height: 110,
-    borderRadius: 55,
-    backgroundColor: 'rgba(255,255,255,0.08)',
-    bottom: 10,
-    left: -40,
-  },
   back: {
     width: 38,
     height: 38,
     borderRadius: Radius.sm,
-    backgroundColor: 'rgba(255,255,255,0.18)',
+    backgroundColor: 'rgba(255,255,255,0.12)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.14)',
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: Space.md,
@@ -136,27 +122,35 @@ const styles = StyleSheet.create({
   logo: {
     width: 44,
     height: 44,
-    borderRadius: 13,
-    backgroundColor: Brand.white,
+    borderRadius: Radius.md,
+    backgroundColor: Brand.volt,
     alignItems: 'center',
     justifyContent: 'center',
   },
   brandName: { color: Brand.white, fontSize: 17, fontWeight: '700', letterSpacing: -0.2 },
-  brandTag: { color: 'rgba(255,255,255,0.76)', fontSize: 11.5, marginTop: 1 },
+  brandTag: { color: Brand.inkMuted, fontSize: 11.5, marginTop: 1 },
   headline: {
+    ...Type.h1,
     color: Brand.white,
-    fontSize: 23,
-    fontWeight: '700',
-    lineHeight: 30,
-    letterSpacing: -0.3,
     marginTop: Space.xl,
   },
+  taglineRow: {
+    flexDirection: 'row',
+    gap: Space.sm,
+    marginTop: Space.sm,
+    maxWidth: 330,
+  },
+  taglineBar: {
+    width: 2,
+    borderRadius: 1,
+    backgroundColor: Brand.volt,
+    marginVertical: 2,
+  },
   tagline: {
-    color: 'rgba(255,255,255,0.82)',
+    flex: 1,
+    color: Brand.inkText,
     fontSize: 12.5,
     lineHeight: 19,
-    marginTop: Space.sm,
-    maxWidth: 320,
   },
   card: {
     backgroundColor: Brand.surface,
@@ -166,8 +160,8 @@ const styles = StyleSheet.create({
     marginTop: -56,
     ...CardShadow,
   },
-  title: { fontSize: 20, fontWeight: '700', color: Brand.text, letterSpacing: -0.2 },
-  subtitle: { fontSize: 12.5, color: Brand.textSecondary, marginTop: 4, lineHeight: 18 },
+  title: { ...Type.h1, fontSize: 20, color: Brand.text },
+  subtitle: { ...Type.meta, color: Brand.textSecondary, marginTop: 4, lineHeight: 18 },
   form: { marginTop: Space.lg },
   pressed: { opacity: 0.7 },
 });

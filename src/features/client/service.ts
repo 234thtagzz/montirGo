@@ -48,6 +48,20 @@ function isMissingColumnError(error: { code?: string; message?: string } | null)
   );
 }
 
+/**
+ * PostgREST juga bisa menolak relasi embed saat cache skema belum dimuat ulang
+ * setelah migrasi (PGRST200). Tanpa fallback, satu embed yang gagal membuat
+ * seluruh riwayat pesanan tampak kosong.
+ */
+function isEmbedError(error: { code?: string; message?: string } | null): boolean {
+  if (!error) return false;
+  return (
+    isMissingColumnError(error) ||
+    error.code === 'PGRST200' ||
+    /could not find a relationship|schema cache/i.test(error.message ?? '')
+  );
+}
+
 interface RawOrder {
   id: string;
   status: string;
@@ -188,8 +202,13 @@ export async function listMyRequests(limit = 50): Promise<ClientOrder[]> {
       .limit(limit);
 
   let { data, error } = await query(ORDER_SELECT);
-  if (isMissingColumnError(error)) {
+  if (isEmbedError(error)) {
     ({ data, error } = await query(ORDER_SELECT_LEGACY));
+  }
+  // Relasi bisa tetap tidak dikenali bila cache skema PostgREST basi. Ambil
+  // kolom datar supaya riwayat tetap tampil (detail kendaraan jadi kosong).
+  if (error && isEmbedError(error)) {
+    ({ data, error } = await query(ORDER_COLUMNS));
   }
   if (error) throw error;
   return ((data ?? []) as unknown as RawOrder[]).map(mapOrder);
@@ -200,8 +219,11 @@ export async function getRequest(id: string): Promise<ClientOrder | null> {
     supabase.from('service_requests').select(select).eq('id', id).maybeSingle();
 
   let { data, error } = await query(ORDER_SELECT);
-  if (isMissingColumnError(error)) {
+  if (isEmbedError(error)) {
     ({ data, error } = await query(ORDER_SELECT_LEGACY));
+  }
+  if (error && isEmbedError(error)) {
+    ({ data, error } = await query(ORDER_COLUMNS));
   }
   if (error) throw error;
   return data ? mapOrder(data as unknown as RawOrder) : null;

@@ -1,7 +1,7 @@
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Avatar } from '@/components/ui/avatar';
 import { Ionicons } from '@/components/ui/icon';
-import { Brand, CardShadow, Radius, Space } from '@/constants/brand';
+import { Brand, CardShadow, Radius, Space, Type } from '@/constants/brand';
 import { formatDateTime } from '@/utils/format';
 import type { ClientOrder } from '@/features/client/types';
 import { formatVehicleLabel } from '@/features/vehicles/constants';
@@ -12,6 +12,10 @@ interface ActiveOrderCardProps {
   onPress: () => void;
 }
 
+/**
+ * Kartu "perjalanan aktif" — pita status gelap di atas memisahkan kartu ini
+ * dari daftar biasa, dan progres hanya muncul saat order benar-benar berjalan.
+ */
 export function ActiveOrderCard({ order, onPress }: ActiveOrderCardProps) {
   const meta = getStatusMeta(order.status);
   const hasMechanic = Boolean(order.mechanic_id);
@@ -21,80 +25,93 @@ export function ActiveOrderCard({ order, onPress }: ActiveOrderCardProps) {
     order.vehicle_brand,
     order.vehicle_model,
   );
+  const accent = pendingConfirmation ? Brand.amber : Brand.volt;
 
   return (
     <Pressable
       accessibilityRole="button"
       accessibilityLabel={`Pesanan aktif: ${getProgressLabel(order.status)}`}
       onPress={onPress}
-      style={({ pressed }) => [
-        styles.card,
-        pendingConfirmation && styles.cardPending,
-        pressed && styles.pressed,
-      ]}
+      style={({ pressed }) => [styles.card, pressed && styles.pressed]}
     >
-      <View style={styles.topRow}>
-        <View style={[styles.chip, { backgroundColor: meta.background }]}>
-          <Ionicons name={meta.icon} size={12} color={meta.color} />
-          <Text style={[styles.chipText, { color: meta.color }]}>{meta.shortLabel}</Text>
+      <View style={styles.band}>
+        <View style={styles.bandRow}>
+          <View style={styles.statusRow}>
+            <View style={[styles.liveDot, { backgroundColor: accent }]} />
+            <Text style={styles.statusText}>{meta.shortLabel}</Text>
+          </View>
+          <Text style={styles.time}>{formatDateTime(order.created_at)}</Text>
         </View>
-        <Text style={styles.time}>{formatDateTime(order.created_at)}</Text>
+
+        {meta.step > 0 ? (
+          <View style={styles.progress}>
+            {Array.from({ length: TOTAL_STEPS }).map((_, index) => (
+              <View
+                key={index}
+                style={[
+                  styles.segment,
+                  index < meta.step && { backgroundColor: accent },
+                ]}
+              />
+            ))}
+          </View>
+        ) : null}
       </View>
 
-      <Text style={styles.title} numberOfLines={1}>
-        {getProgressLabel(order.status)}
-      </Text>
-      <Text style={styles.issue} numberOfLines={1}>
-        {vehicle ? `${vehicle} • ` : ''}
-        {order.issue_description}
-      </Text>
+      <View style={styles.body}>
+        <Text style={styles.title} numberOfLines={1}>
+          {getProgressLabel(order.status)}
+        </Text>
+        <Text style={styles.issue} numberOfLines={1}>
+          {vehicle ? `${vehicle} · ` : ''}
+          {order.issue_description}
+        </Text>
 
-      {meta.step > 0 ? (
-        <View style={styles.progress}>
-          {Array.from({ length: TOTAL_STEPS }).map((_, index) => (
-            <View
-              key={index}
-              style={[styles.segment, index < meta.step && styles.segmentActive]}
+        <View style={styles.footer}>
+          <View style={styles.mechanicRow}>
+            {hasMechanic ? (
+              <>
+                <Avatar
+                  name={order.mechanic_name ?? 'Montir'}
+                  uri={order.mechanic_avatar}
+                  size={30}
+                />
+                <View style={styles.mechanicText}>
+                  <Text style={styles.mechanicName} numberOfLines={1}>
+                    {order.mechanic_name ?? 'Montir MontirGo'}
+                  </Text>
+                  <Text
+                    style={[
+                      styles.mechanicRole,
+                      pendingConfirmation && styles.mechanicRolePending,
+                    ]}
+                  >
+                    {pendingConfirmation ? 'Menunggu konfirmasimu' : 'Montir menuju lokasi'}
+                  </Text>
+                </View>
+              </>
+            ) : (
+              <>
+                <View style={styles.searching}>
+                  <ActivityIndicator size="small" color={Brand.primary} />
+                </View>
+                <Text style={styles.mechanicName}>Mencari montir terdekat…</Text>
+              </>
+            )}
+          </View>
+
+          <View style={[styles.detailButton, pendingConfirmation && styles.detailButtonPending]}>
+            <Text
+              style={[styles.detailText, pendingConfirmation && styles.detailTextPending]}
+            >
+              {pendingConfirmation ? 'Konfirmasi' : 'Lacak'}
+            </Text>
+            <Ionicons
+              name="chevron-forward"
+              size={13}
+              color={Brand.white}
             />
-          ))}
-        </View>
-      ) : null}
-
-      <View style={styles.footer}>
-        <View style={styles.mechanicRow}>
-          {hasMechanic ? (
-            <>
-              <Avatar name={order.mechanic_name ?? 'Montir'} uri={order.mechanic_avatar} size={32} />
-              <View style={styles.mechanicText}>
-                <Text style={styles.mechanicName} numberOfLines={1}>
-                  {order.mechanic_name ?? 'Montir MontirGo'}
-                </Text>
-                <Text
-                  style={[styles.mechanicRole, pendingConfirmation && styles.mechanicRolePending]}
-                >
-                  {pendingConfirmation ? 'Menunggu konfirmasimu' : 'Montir'}
-                </Text>
-              </View>
-            </>
-          ) : (
-            <>
-              <View style={styles.searching}>
-                <ActivityIndicator size="small" color={Brand.primary} />
-              </View>
-              <Text style={styles.mechanicName}>Mencari montir terdekat…</Text>
-            </>
-          )}
-        </View>
-
-        <View style={styles.detailButton}>
-          <Text style={[styles.detailText, pendingConfirmation && styles.detailTextPending]}>
-            {pendingConfirmation ? 'Konfirmasi' : 'Lacak'}
-          </Text>
-          <Ionicons
-            name="chevron-forward"
-            size={14}
-            color={pendingConfirmation ? Brand.amber : Brand.primary}
-          />
+          </View>
         </View>
       </View>
     </Pressable>
@@ -105,32 +122,30 @@ const styles = StyleSheet.create({
   card: {
     backgroundColor: Brand.surface,
     borderRadius: Radius.lg,
-    padding: Space.lg,
+    overflow: 'hidden',
     ...CardShadow,
   },
-  pressed: { opacity: 0.94 },
-  cardPending: { borderWidth: 1, borderColor: Brand.amber },
-  topRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  chip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: Radius.pill,
+  pressed: { opacity: 0.95 },
+  band: {
+    backgroundColor: Brand.ink,
+    paddingHorizontal: Space.lg,
+    paddingTop: Space.md,
+    paddingBottom: Space.md,
   },
-  chipText: { fontSize: 10.5, fontWeight: '700' },
-  time: { fontSize: 11, color: Brand.textMuted },
-  title: { fontSize: 15, fontWeight: '700', color: Brand.text, marginTop: Space.md },
-  issue: { fontSize: 12, color: Brand.textSecondary, marginTop: 2 },
+  bandRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  statusRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  liveDot: { width: 6, height: 6, borderRadius: 3 },
+  statusText: {
+    ...Type.micro,
+    color: Brand.inkText,
+    letterSpacing: 0.8,
+  },
+  time: { fontSize: 10.5, color: Brand.inkMuted },
   progress: { flexDirection: 'row', gap: 4, marginTop: Space.md },
-  segment: {
-    flex: 1,
-    height: 4,
-    borderRadius: 2,
-    backgroundColor: Brand.divider,
-  },
-  segmentActive: { backgroundColor: Brand.primary },
+  segment: { flex: 1, height: 3, borderRadius: 2, backgroundColor: 'rgba(255,255,255,0.14)' },
+  body: { padding: Space.lg },
+  title: { fontSize: 15.5, fontWeight: '700', color: Brand.text, letterSpacing: -0.2 },
+  issue: { fontSize: 12, color: Brand.textSecondary, marginTop: 3 },
   footer: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -139,6 +154,7 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: Brand.divider,
     paddingTop: Space.md,
+    gap: Space.md,
   },
   mechanicRow: { flexDirection: 'row', alignItems: 'center', gap: Space.sm, flex: 1 },
   mechanicText: { flex: 1 },
@@ -146,14 +162,23 @@ const styles = StyleSheet.create({
   mechanicRole: { fontSize: 10.5, color: Brand.textMuted, marginTop: 1 },
   mechanicRolePending: { color: Brand.amber, fontWeight: '700' },
   searching: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
+    width: 30,
+    height: 30,
+    borderRadius: 15,
     backgroundColor: Brand.primarySoft,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  detailButton: { flexDirection: 'row', alignItems: 'center', gap: 2 },
-  detailText: { fontSize: 12.5, fontWeight: '700', color: Brand.primary },
-  detailTextPending: { color: Brand.amber },
+  detailButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    backgroundColor: Brand.primary,
+    paddingHorizontal: Space.md,
+    minHeight: 36,
+    borderRadius: Radius.pill,
+  },
+  detailButtonPending: { backgroundColor: Brand.amber },
+  detailText: { fontSize: 11.5, fontWeight: '700', color: Brand.white },
+  detailTextPending: { color: Brand.white },
 });

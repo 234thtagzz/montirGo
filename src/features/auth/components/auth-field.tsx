@@ -96,7 +96,7 @@ const styles = StyleSheet.create({
     borderRadius: Radius.md,
     borderWidth: 1,
     borderColor: Brand.border,
-    backgroundColor: '#F7F9FC',
+    backgroundColor: Brand.background,
   },
   fieldFocused: {
     borderColor: Brand.primary,

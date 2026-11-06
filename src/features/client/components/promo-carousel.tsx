@@ -1,4 +1,3 @@
-import { LinearGradient } from 'expo-linear-gradient';
 import {
   Pressable,
   ScrollView,
@@ -8,39 +7,43 @@ import {
   useWindowDimensions,
 } from 'react-native';
 import { Ionicons, type IconName } from '@/components/ui/icon';
-import { Brand, Gradient, Radius, ScreenPadding, Space } from '@/constants/brand';
+import { Brand, Radius, ScreenPadding, Space } from '@/constants/brand';
 
 export type PromoKey = 'request' | 'track' | 'vehicle';
 
 interface Promo {
   key: PromoKey;
+  eyebrow: string;
   title: string;
   body: string;
   icon: IconName;
-  colors: readonly [string, string];
+  accent: string;
 }
 
 const PROMOS: Promo[] = [
   {
     key: 'request',
+    eyebrow: 'MULAI CEPAT',
     title: 'Pesan montir dalam 3 langkah',
     body: 'Pilih layanan, jelaskan keluhan, montir datang.',
     icon: 'flash-outline',
-    colors: Gradient.promoBlue,
+    accent: Brand.primary,
   },
   {
     key: 'track',
-    title: 'Pantau pesanan secara langsung',
-    body: 'Status montir diperbarui otomatis di aplikasi.',
+    eyebrow: 'PELACAKAN',
+    title: 'Pantau montir secara langsung',
+    body: 'Status perjalanan diperbarui otomatis di aplikasi.',
     icon: 'navigate-outline',
-    colors: Gradient.promoGreen,
+    accent: Brand.volt,
   },
   {
     key: 'vehicle',
+    eyebrow: 'GARASI',
     title: 'Simpan kendaraanmu',
-    body: 'Buat permintaan berikutnya jadi lebih cepat.',
+    body: 'Permintaan berikutnya jadi lebih cepat dibuat.',
     icon: 'car-sport-outline',
-    colors: Gradient.promoAmber,
+    accent: '#F2B84B',
   },
 ];
 
@@ -48,9 +51,14 @@ interface PromoCarouselProps {
   onPressPromo: (key: PromoKey) => void;
 }
 
+/**
+ * Rel info horizontal. Sengaja memakai satu permukaan ink yang konsisten
+ * dengan aksen tipis per kartu, bukan tiga gradient berbeda dengan lingkaran
+ * dekoratif.
+ */
 export function PromoCarousel({ onPressPromo }: PromoCarouselProps) {
   const { width } = useWindowDimensions();
-  const cardWidth = Math.min(width - ScreenPadding * 2 - 28, 500);
+  const cardWidth = Math.min(width - ScreenPadding * 2 - 32, 460);
   const gap = Space.md;
 
   return (
@@ -70,26 +78,25 @@ export function PromoCarousel({ onPressPromo }: PromoCarouselProps) {
           onPress={() => onPressPromo(promo.key)}
           style={({ pressed }) => [{ width: cardWidth }, pressed && styles.pressed]}
         >
-          <LinearGradient
-            colors={promo.colors}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
-            style={styles.card}
-          >
-            <View style={styles.decorLarge} />
-            <View style={styles.decorSmall} />
-            <View style={styles.cardContent}>
-              <View style={styles.iconCircle}>
-                <Ionicons name={promo.icon} size={18} color={Brand.white} />
+          <View style={styles.card}>
+            <View style={[styles.accent, { backgroundColor: promo.accent }]} />
+            <View style={styles.content}>
+              <View style={styles.topRow}>
+                <View style={styles.iconTile}>
+                  <Ionicons name={promo.icon} size={17} color={promo.accent} />
+                </View>
+                <Text style={styles.eyebrow}>{promo.eyebrow}</Text>
               </View>
               <Text style={styles.title}>{promo.title}</Text>
-              <Text style={styles.body}>{promo.body}</Text>
+              <Text style={styles.body} numberOfLines={2}>
+                {promo.body}
+              </Text>
               <View style={styles.cta}>
                 <Text style={styles.ctaText}>Lihat</Text>
-                <Ionicons name="arrow-forward" size={13} color={Brand.white} />
+                <Ionicons name="arrow-forward" size={13} color={Brand.inkText} />
               </View>
             </View>
-          </LinearGradient>
+          </View>
         </Pressable>
       ))}
     </ScrollView>
@@ -99,48 +106,43 @@ export function PromoCarousel({ onPressPromo }: PromoCarouselProps) {
 const styles = StyleSheet.create({
   scroll: { marginTop: Space.xs },
   card: {
-    height: 148,
+    minHeight: 150,
     borderRadius: Radius.lg,
-    padding: Space.lg,
+    backgroundColor: Brand.ink,
     overflow: 'hidden',
-    justifyContent: 'center',
+    flexDirection: 'row',
   },
-  cardContent: { maxWidth: '78%' },
-  iconCircle: {
-    width: 30,
-    height: 30,
-    borderRadius: 15,
-    backgroundColor: 'rgba(255,255,255,0.22)',
+  accent: { width: 3 },
+  content: { flex: 1, padding: Space.lg },
+  topRow: { flexDirection: 'row', alignItems: 'center', gap: Space.sm },
+  iconTile: {
+    width: 28,
+    height: 28,
+    borderRadius: Radius.xs,
+    backgroundColor: 'rgba(255,255,255,0.08)',
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: Space.sm,
   },
-  title: { color: Brand.white, fontSize: 15, fontWeight: '700' },
+  eyebrow: {
+    fontSize: 9.5,
+    fontWeight: '700',
+    letterSpacing: 1,
+    color: Brand.inkMuted,
+  },
+  title: {
+    color: Brand.white,
+    fontSize: 15,
+    fontWeight: '700',
+    marginTop: Space.md,
+    letterSpacing: -0.2,
+  },
   body: {
-    color: 'rgba(255,255,255,0.88)',
+    color: Brand.inkMuted,
     fontSize: 11.5,
     lineHeight: 16,
     marginTop: 3,
   },
-  cta: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: Space.md },
-  ctaText: { color: Brand.white, fontSize: 11.5, fontWeight: '700' },
-  decorLarge: {
-    position: 'absolute',
-    right: -30,
-    top: -40,
-    width: 140,
-    height: 140,
-    borderRadius: 70,
-    backgroundColor: 'rgba(255,255,255,0.12)',
-  },
-  decorSmall: {
-    position: 'absolute',
-    right: 40,
-    bottom: -50,
-    width: 100,
-    height: 100,
-    borderRadius: 50,
-    backgroundColor: 'rgba(255,255,255,0.08)',
-  },
-  pressed: { opacity: 0.9 },
+  cta: { flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: Space.md },
+  ctaText: { color: Brand.inkText, fontSize: 11.5, fontWeight: '700' },
+  pressed: { opacity: 0.92 },
 });

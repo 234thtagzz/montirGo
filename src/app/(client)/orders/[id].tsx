@@ -12,11 +12,20 @@ import {
 import { useLocalSearchParams, useFocusEffect, useRouter } from 'expo-router';
 import { openBrowserAsync } from 'expo-web-browser';
 import { ScreenHeader } from '@/components/ui/screen-header';
+import { SectionHeader } from '@/components/ui/section-header';
 import { Avatar } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
+import { ConfirmSheet } from '@/components/ui/confirm-sheet';
 import { EmptyState, ErrorState, LoadingState } from '@/components/ui/state';
 import { Ionicons } from '@/components/ui/icon';
-import { Brand, CardShadow, Radius, ScreenPadding, Space } from '@/constants/brand';
+import {
+  Brand,
+  Radius,
+  ScreenPadding,
+  Space,
+  Tabular,
+  Type,
+} from '@/constants/brand';
 import { createRealtimeChannel } from '@/lib/realtime';
 import { supabase } from '@/lib/supabase';
 import {
@@ -69,6 +78,8 @@ export default function ClientOrderDetailScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState(false);
   const [cancelling, setCancelling] = useState(false);
+  const [cancelVisible, setCancelVisible] = useState(false);
+  const [cashVisible, setCashVisible] = useState(false);
   const [payment, setPayment] = useState<OrderPayment | null>(null);
   const [paying, setPaying] = useState(false);
   const [choosingCash, setChoosingCash] = useState(false);
@@ -232,29 +243,21 @@ export default function ClientOrderDetailScreen() {
     };
   }, [id, order?.status, payment?.payment_session_id, checkPayment]);
 
-  const confirmCancel = () => {
-    Alert.alert('Batalkan pesanan?', 'Montir tidak akan datang jika pesanan dibatalkan.', [
-      { text: 'Tidak', style: 'cancel' },
-      {
-        text: 'Ya, batalkan',
-        style: 'destructive',
-        onPress: async () => {
-          if (!id) return;
-          setCancelling(true);
-          try {
-            await cancelServiceRequest(id);
-            await load();
-          } catch (cancelError) {
-            Alert.alert(
-              'Gagal membatalkan',
-              cancelError instanceof Error ? cancelError.message : 'Coba lagi.',
-            );
-          } finally {
-            setCancelling(false);
-          }
-        },
-      },
-    ]);
+  const doCancel = async () => {
+    if (!id) return;
+    setCancelling(true);
+    try {
+      await cancelServiceRequest(id);
+      setCancelVisible(false);
+      await load();
+    } catch (cancelError) {
+      Alert.alert(
+        'Gagal membatalkan',
+        cancelError instanceof Error ? cancelError.message : 'Coba lagi.',
+      );
+    } finally {
+      setCancelling(false);
+    }
   };
 
   const chatMechanic = () => {
@@ -294,35 +297,21 @@ export default function ClientOrderDetailScreen() {
   };
 
   /** Client memilih bayar tunai — montir yang akan mengonfirmasi pembayaran. */
-  const chooseCash = () => {
+  const chooseCash = async () => {
     if (!id || choosingCash || paying) return;
-    const amount = order?.price_amount ?? payment?.amount ?? 0;
-    Alert.alert(
-      'Bayar tunai ke montir?',
-      `Siapkan uang tunai ${formatIDR(amount)} dan bayar langsung ke ${
-        order?.mechanic_name ?? 'montir'
-      }. Pembayaran dicatat setelah montir mengonfirmasi.`,
-      [
-        { text: 'Batal', style: 'cancel' },
-        {
-          text: 'Ya, bayar tunai',
-          onPress: async () => {
-            setChoosingCash(true);
-            try {
-              await choosePaymentMethod(id, 'cash');
-              await load();
-            } catch (e) {
-              Alert.alert(
-                'Gagal memilih metode',
-                e instanceof Error ? e.message : 'Coba lagi beberapa saat lagi.',
-              );
-            } finally {
-              setChoosingCash(false);
-            }
-          },
-        },
-      ],
-    );
+    setChoosingCash(true);
+    try {
+      await choosePaymentMethod(id, 'cash');
+      setCashVisible(false);
+      await load();
+    } catch (e) {
+      Alert.alert(
+        'Gagal memilih metode',
+        e instanceof Error ? e.message : 'Coba lagi beberapa saat lagi.',
+      );
+    } finally {
+      setChoosingCash(false);
+    }
   };
 
   const sendReview = async () => {
@@ -413,14 +402,29 @@ export default function ClientOrderDetailScreen() {
           />
         }
       >
-        <View style={styles.statusCard}>
+        <View style={styles.statusHero}>
           <View style={styles.statusTop}>
-            <View style={[styles.chip, { backgroundColor: meta.background }]}>
-              <Ionicons name={meta.icon} size={13} color={meta.color} />
-              <Text style={[styles.chipText, { color: meta.color }]}>{meta.shortLabel}</Text>
+            <View style={styles.statusChip}>
+              <View
+                style={[
+                  styles.statusDot,
+                  {
+                    backgroundColor:
+                      order.status === 'cancelled'
+                        ? Brand.red
+                        : order.status === 'paid'
+                          ? Brand.green
+                          : meta.step > 0
+                            ? Brand.volt
+                            : Brand.amber,
+                  },
+                ]}
+              />
+              <Text style={styles.statusChipText}>{meta.shortLabel}</Text>
             </View>
             <Text style={styles.statusTime}>{formatDateTime(order.created_at)}</Text>
           </View>
+
           <Text style={styles.statusTitle}>{getProgressLabel(order.status)}</Text>
           <Text style={styles.statusSub}>{meta.label}</Text>
 
@@ -434,6 +438,15 @@ export default function ClientOrderDetailScreen() {
               ))}
             </View>
           ) : null}
+
+          <View style={styles.statusFooter}>
+            <Text style={styles.statusId}>#{order.id.slice(0, 8).toUpperCase()}</Text>
+            {order.price_amount != null ? (
+              <Text style={[styles.statusAmount, Tabular]}>
+                {formatIDR(order.price_amount)}
+              </Text>
+            ) : null}
+          </View>
         </View>
 
         {order.status === 'on_the_way' ? (
@@ -455,28 +468,32 @@ export default function ClientOrderDetailScreen() {
             style={({ pressed }) => [styles.assignmentCard, pressed && styles.pressed]}
           >
             <View style={styles.assignmentIcon}>
-              <Ionicons name="person-add-outline" size={20} color={Brand.amber} />
+              <Ionicons name="person-add-outline" size={19} color={Brand.amber} />
             </View>
             <View style={styles.assignmentCopy}>
+              <Text style={styles.assignmentKicker}>PERLU KEPUTUSANMU</Text>
               <Text style={styles.assignmentTitle}>Konfirmasi montir</Text>
-              <Text style={styles.assignmentText}>
-                {order.mechanic_name ?? 'Seorang montir'} ingin menangani pesananmu. Lihat
-                rating, ulasan, dan data bengkelnya sebelum menyetujui.
+              <Text style={styles.assignmentText} numberOfLines={2}>
+                {order.mechanic_name ?? 'Seorang montir'} ingin menangani pesananmu. Lihat rating
+                dan bengkelnya sebelum menyetujui.
               </Text>
             </View>
             <View style={styles.assignmentAction}>
               <Text style={styles.assignmentActionText}>Lihat</Text>
-              <Ionicons name="chevron-forward" size={14} color={Brand.amber} />
+              <Ionicons name="chevron-forward" size={13} color={Brand.amber} />
             </View>
           </Pressable>
         ) : order.mechanic_id ? (
           <View style={styles.mechanicCard}>
-            <Avatar name={order.mechanic_name ?? 'Montir'} uri={order.mechanic_avatar} size={46} />
+            <Avatar name={order.mechanic_name ?? 'Montir'} uri={order.mechanic_avatar} size={44} />
             <View style={styles.mechanicCopy}>
+              <Text style={styles.mechanicKicker}>MONTIRMU</Text>
               <Text style={styles.mechanicName} numberOfLines={1}>
                 {order.mechanic_name ?? 'Montir MontirGo'}
               </Text>
-              <Text style={styles.mechanicRole}>Montir yang menangani pesananmu</Text>
+              <Text style={styles.mechanicRole} numberOfLines={1}>
+                Menangani pesanan ini
+              </Text>
             </View>
             {order.mechanic_phone ? (
               <Pressable
@@ -491,22 +508,26 @@ export default function ClientOrderDetailScreen() {
           </View>
         ) : (
           <View style={styles.searchingCard}>
-            <Ionicons name="search-outline" size={18} color={Brand.amber} />
-            <Text style={styles.searchingText}>
-              Pesananmu sedang dicari montir terdekat. Kamu akan menerima notifikasi saat montir
-              mengajukan diri.
-            </Text>
+            <View style={styles.searchingIcon}>
+              <Ionicons name="search-outline" size={17} color={Brand.amber} />
+            </View>
+            <View style={styles.searchingCopy}>
+              <Text style={styles.searchingTitle}>Mencari montir terdekat</Text>
+              <Text style={styles.searchingText}>
+                Kamu akan menerima notifikasi saat montir mengajukan diri.
+              </Text>
+            </View>
           </View>
         )}
 
         {order.status === 'payment' || order.status === 'paid' ? (
           <>
-            <Text style={styles.section}>Pembayaran</Text>
+            <SectionHeader eyebrow="TAGIHAN" title="Pembayaran" />
             <View style={styles.paymentCard}>
               <View style={styles.paymentTop}>
                 <View>
                   <Text style={styles.paymentLabel}>Total tagihan</Text>
-                  <Text style={styles.paymentAmount}>
+                  <Text style={[styles.paymentAmount, Tabular]}>
                     {formatIDR(order.price_amount ?? payment?.amount ?? 0)}
                   </Text>
                 </View>
@@ -549,12 +570,15 @@ export default function ClientOrderDetailScreen() {
                       <Text style={styles.cashTitle}>Bayar tunai ke montir</Text>
                     </View>
                     <Text style={styles.cashText}>
-                      Siapkan uang tunai {formatIDR(order.price_amount ?? payment?.amount ?? 0)} dan
-                      bayar langsung ke {order.mechanic_name ?? 'montir'}. Pembayaran dicatat setelah
-                      montir menekan konfirmasi.
+                      Siapkan uang tunai{' '}
+                      <Text style={[styles.cashAmount, Tabular]}>
+                        {formatIDR(order.price_amount ?? payment?.amount ?? 0)}
+                      </Text>{' '}
+                      dan bayar langsung ke {order.mechanic_name ?? 'montir'}. Pembayaran dicatat
+                      setelah montir menekan konfirmasi.
                     </Text>
                     <View style={styles.cashStatus}>
-                      <Ionicons name="time-outline" size={14} color={Brand.amber} />
+                      <Ionicons name="time-outline" size={13} color={Brand.amber} />
                       <Text style={styles.cashStatusText}>Menunggu konfirmasi montir</Text>
                     </View>
                   </View>
@@ -571,13 +595,15 @@ export default function ClientOrderDetailScreen() {
                 <>
                   <Text style={styles.paymentHint}>
                     Bayar dengan QRIS, GoPay, OVO, DANA, atau ShopeePay di halaman aman Xendit.
-                    Status pesanan diperbarui otomatis setelah pembayaran berhasil. Ingin bayar
-                    tunai? Pilih opsi di bawah.
+                    Status pesanan diperbarui otomatis setelah pembayaran berhasil.
                   </Text>
                   {payment?.expires_at ? (
-                    <Text style={styles.paymentMeta}>
-                      Link pembayaran berlaku sampai {formatDateTime(payment.expires_at)}
-                    </Text>
+                    <View style={styles.paymentMetaRow}>
+                      <Ionicons name="time-outline" size={12} color={Brand.textMuted} />
+                      <Text style={styles.paymentMeta}>
+                        Link pembayaran berlaku sampai {formatDateTime(payment.expires_at)}
+                      </Text>
+                    </View>
                   ) : null}
                   <Button
                     label="Bayar Sekarang"
@@ -592,7 +618,7 @@ export default function ClientOrderDetailScreen() {
                     variant="secondary"
                     loading={choosingCash}
                     disabled={paying}
-                    onPress={chooseCash}
+                    onPress={() => setCashVisible(true)}
                     style={styles.cashButton}
                   />
                 </>
@@ -603,7 +629,7 @@ export default function ClientOrderDetailScreen() {
 
         {order.status === 'paid' ? (
           <>
-            <Text style={styles.section}>Ulasan montir</Text>
+            <SectionHeader eyebrow="PENGALAMANMU" title="Ulasan montir" />
             {review ? (
               <View style={styles.reviewCard}>
                 <View style={styles.reviewHeader}>
@@ -681,7 +707,7 @@ export default function ClientOrderDetailScreen() {
 
         {hasVehicle ? (
           <>
-            <Text style={styles.section}>Kendaraan</Text>
+            <SectionHeader eyebrow="GARASI" title="Kendaraan" />
             <VehicleProfileCard
               variant="compact"
               photo={order.vehicle_photo_url}
@@ -694,7 +720,7 @@ export default function ClientOrderDetailScreen() {
           </>
         ) : null}
 
-        <Text style={styles.section}>Detail permintaan</Text>
+        <SectionHeader eyebrow="RINCIAN" title="Detail permintaan" />
         <View style={styles.detailCard}>
           <DetailRow label="Keluhan" value={order.issue_description} />
           {order.symptoms ? <DetailRow label="Gejala" value={order.symptoms} /> : null}
@@ -709,7 +735,7 @@ export default function ClientOrderDetailScreen() {
           ) : null}
         </View>
 
-        <Text style={styles.section}>Analisis AI</Text>
+        <SectionHeader eyebrow="DIAGNOSA" title="Analisis AI" />
         <AiAnalysisCard
           analysis={analysis}
           error={analysisError}
@@ -721,7 +747,7 @@ export default function ClientOrderDetailScreen() {
 
         {history.length > 0 ? (
           <>
-            <Text style={styles.section}>Riwayat status</Text>
+            <SectionHeader eyebrow="PERJALANAN" title="Riwayat status" />
             <View style={styles.detailCard}>
               {history.map((event, index) => {
                 const eventMeta = getStatusMeta(event.to_status);
@@ -749,11 +775,39 @@ export default function ClientOrderDetailScreen() {
             variant="danger"
             icon="close-circle-outline"
             loading={cancelling}
-            onPress={confirmCancel}
+            onPress={() => setCancelVisible(true)}
             style={styles.cancel}
           />
         ) : null}
       </ScrollView>
+
+      <ConfirmSheet
+        visible={cancelVisible}
+        destructive
+        loading={cancelling}
+        icon="close-circle-outline"
+        title="Batalkan pesanan?"
+        message="Montir tidak akan datang jika pesanan dibatalkan. Tindakan ini tidak bisa dibatalkan."
+        confirmLabel="Ya, batalkan"
+        cancelLabel="Tidak"
+        onConfirm={doCancel}
+        onCancel={() => (cancelling ? undefined : setCancelVisible(false))}
+      />
+
+      <ConfirmSheet
+        visible={cashVisible}
+        loading={choosingCash}
+        icon="cash-outline"
+        title="Bayar tunai ke montir?"
+        message={`Siapkan uang tunai ${formatIDR(
+          order.price_amount ?? payment?.amount ?? 0,
+        )} dan bayar langsung ke ${
+          order.mechanic_name ?? 'montir'
+        }. Pembayaran dicatat setelah montir mengonfirmasi.`}
+        confirmLabel="Ya, bayar tunai"
+        onConfirm={chooseCash}
+        onCancel={() => (choosingCash ? undefined : setCashVisible(false))}
+      />
 
       <AssignmentConfirmationSheet
         visible={assignmentVisible && order.status === 'mechanic_assigned'}
@@ -787,28 +841,50 @@ function DetailRow({
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: Brand.background },
   content: { padding: ScreenPadding, paddingBottom: Space.xxxl },
-  statusCard: {
-    backgroundColor: Brand.surface,
+  statusHero: {
+    backgroundColor: Brand.ink,
     borderRadius: Radius.lg,
     padding: Space.lg,
-    ...CardShadow,
+    overflow: 'hidden',
   },
   statusTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  chip: {
+  statusChip: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
-    paddingHorizontal: 8,
+    gap: 6,
+    paddingHorizontal: 9,
     paddingVertical: 4,
     borderRadius: Radius.pill,
+    backgroundColor: 'rgba(255,255,255,0.09)',
   },
-  chipText: { fontSize: 10.5, fontWeight: '700' },
-  statusTime: { fontSize: 11, color: Brand.textMuted },
-  statusTitle: { fontSize: 17, fontWeight: '700', color: Brand.text, marginTop: Space.md },
-  statusSub: { fontSize: 12, color: Brand.textSecondary, marginTop: 2 },
-  progress: { flexDirection: 'row', gap: 4, marginTop: Space.md },
-  segment: { flex: 1, height: 4, borderRadius: 2, backgroundColor: Brand.divider },
-  segmentActive: { backgroundColor: Brand.primary },
+  statusDot: { width: 6, height: 6, borderRadius: 3 },
+  statusChipText: {
+    ...Type.micro,
+    color: Brand.inkText,
+    letterSpacing: 0.7,
+  },
+  statusTime: { fontSize: 10.5, color: Brand.inkMuted },
+  statusTitle: { ...Type.h2, fontSize: 19, color: Brand.white, marginTop: Space.md },
+  statusSub: { fontSize: 12, color: Brand.inkText, marginTop: 2 },
+  progress: { flexDirection: 'row', gap: 4, marginTop: Space.lg },
+  segment: {
+    flex: 1,
+    height: 3,
+    borderRadius: 2,
+    backgroundColor: 'rgba(255,255,255,0.14)',
+  },
+  segmentActive: { backgroundColor: Brand.volt },
+  statusFooter: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: Space.lg,
+    paddingTop: Space.md,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: 'rgba(255,255,255,0.12)',
+  },
+  statusId: { fontSize: 10.5, color: Brand.inkMuted, letterSpacing: 0.8 },
+  statusAmount: { fontSize: 15, fontWeight: '800', color: Brand.white, letterSpacing: -0.2 },
   mechanicCard: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -821,31 +897,42 @@ const styles = StyleSheet.create({
     borderColor: Brand.divider,
   },
   mechanicCopy: { flex: 1 },
-  mechanicName: { fontSize: 14, fontWeight: '700', color: Brand.text },
-  mechanicRole: { fontSize: 11.5, color: Brand.textSecondary, marginTop: 2 },
+  mechanicKicker: { ...Type.micro, fontSize: 9, color: Brand.textMuted, marginBottom: 2 },
+  mechanicName: { ...Type.bodyStrong, fontWeight: '700', color: Brand.text },
+  mechanicRole: { fontSize: 11, color: Brand.textSecondary, marginTop: 1 },
   chatButton: {
-    width: 42,
-    height: 42,
-    borderRadius: 21,
+    width: 40,
+    height: 40,
+    borderRadius: Radius.sm,
     backgroundColor: Brand.whatsapp,
     alignItems: 'center',
     justifyContent: 'center',
   },
   searchingCard: {
     flexDirection: 'row',
-    gap: Space.sm,
+    gap: Space.md,
     alignItems: 'center',
     backgroundColor: Brand.amberSoft,
     borderRadius: Radius.lg,
     padding: Space.md,
     marginTop: Space.md,
   },
-  searchingText: { flex: 1, fontSize: 11.5, color: Brand.amber, lineHeight: 16 },
+  searchingIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: Radius.sm,
+    backgroundColor: Brand.surface,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  searchingCopy: { flex: 1 },
+  searchingTitle: { fontSize: 12.5, fontWeight: '700', color: Brand.amber },
+  searchingText: { fontSize: 11, color: Brand.textSecondary, marginTop: 2, lineHeight: 15 },
   assignmentCard: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: Space.md,
-    backgroundColor: Brand.amberSoft,
+    backgroundColor: Brand.surface,
     borderRadius: Radius.lg,
     padding: Space.md,
     marginTop: Space.md,
@@ -855,23 +942,17 @@ const styles = StyleSheet.create({
   assignmentIcon: {
     width: 40,
     height: 40,
-    borderRadius: 20,
-    backgroundColor: Brand.surface,
+    borderRadius: Radius.sm,
+    backgroundColor: Brand.amberSoft,
     alignItems: 'center',
     justifyContent: 'center',
   },
   assignmentCopy: { flex: 1 },
-  assignmentTitle: { fontSize: 13.5, fontWeight: '800', color: Brand.text },
-  assignmentText: { fontSize: 11.5, color: Brand.textSecondary, lineHeight: 16, marginTop: 2 },
+  assignmentKicker: { ...Type.micro, fontSize: 8.5, color: Brand.amber },
+  assignmentTitle: { fontSize: 13.5, fontWeight: '800', color: Brand.text, marginTop: 2 },
+  assignmentText: { fontSize: 11, color: Brand.textSecondary, lineHeight: 15, marginTop: 2 },
   assignmentAction: { flexDirection: 'row', alignItems: 'center', gap: 2 },
-  assignmentActionText: { fontSize: 12, fontWeight: '800', color: Brand.amber },
-  section: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: Brand.text,
-    marginTop: Space.xxl,
-    marginBottom: Space.md,
-  },
+  assignmentActionText: { fontSize: 11.5, fontWeight: '800', color: Brand.amber },
   detailCard: {
     backgroundColor: Brand.surface,
     borderRadius: Radius.lg,
@@ -912,11 +993,11 @@ const styles = StyleSheet.create({
   },
   paymentLabel: { fontSize: 11.5, color: Brand.textMuted, fontWeight: '600' },
   paymentAmount: {
-    fontSize: 24,
-    fontWeight: '700',
+    ...Type.display,
+    fontSize: 26,
+    lineHeight: 32,
     color: Brand.text,
     marginTop: 2,
-    letterSpacing: -0.4,
   },
   paymentBadge: { borderRadius: Radius.pill, paddingHorizontal: 10, paddingVertical: 5 },
   paymentBadgePaid: { backgroundColor: Brand.greenSoft },
@@ -930,7 +1011,13 @@ const styles = StyleSheet.create({
     lineHeight: 17,
     marginTop: Space.md,
   },
-  paymentMeta: { fontSize: 10.5, color: Brand.textMuted, marginTop: 6 },
+  paymentMetaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    marginTop: 6,
+  },
+  paymentMeta: { fontSize: 10.5, color: Brand.textMuted },
   paymentStatusRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -960,6 +1047,7 @@ const styles = StyleSheet.create({
     lineHeight: 17,
     marginTop: Space.sm,
   },
+  cashAmount: { fontSize: 12, fontWeight: '800', color: Brand.amber },
   cashStatus: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1012,7 +1100,7 @@ const styles = StyleSheet.create({
   },
   reviewInput: {
     marginTop: Space.md,
-    backgroundColor: '#F7F9FC',
+    backgroundColor: Brand.background,
     borderWidth: 1,
     borderColor: Brand.border,
     borderRadius: Radius.md,

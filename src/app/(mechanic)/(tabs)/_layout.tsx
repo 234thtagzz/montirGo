@@ -1,5 +1,5 @@
 import { Tabs } from 'expo-router';
-import { iconColor, Ionicons } from '@/components/ui/icon';
+import { iconColor } from '@/components/ui/icon';
 import { TabIcon } from '@/components/ui/tab-icon';
 import { Brand } from '@/constants/brand';
 import { useTabBarStyle } from '@/hooks/use-tab-bar-style';

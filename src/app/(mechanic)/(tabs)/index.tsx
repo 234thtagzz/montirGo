@@ -49,30 +49,47 @@ export default function MechanicDashboardScreen() {
   const { unread } = useMechanicAlerts();
 
   const load = useCallback(async () => {
-    try {
-      const profile = await getMechanicProfile();
-      setOnline(profile?.is_online ?? false);
-      setVerified(profile?.is_verified ?? false);
-      const startOfDay = new Date();
-      startOfDay.setHours(0, 0, 0, 0);
-      const sum = await getEarningsSummary(startOfDay.toISOString());
-      setTodayNet(sum.net);
-      setTodayJobs(sum.totalJobs);
-      let orders = await listMyOrders(true);
-      // Webhook Xendit bisa telat/belum terdaftar: cek langsung ke Xendit agar
-      // order yang sudah dibayar client berubah menjadi lunas di Beranda.
-      if (await syncMechanicPendingPayments(orders)) {
-        orders = await listMyOrders(true);
-      }
-      setActiveOrders(orders);
-      setWallet(await getWallet());
-      setError(false);
-    } catch {
-      setError(true);
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
+    const startOfDay = new Date();
+    startOfDay.setHours(0, 0, 0, 0);
+
+    // Satu sumber data yang gagal tidak boleh mengosongkan seluruh Beranda.
+    const [profileResult, earningsResult, ordersResult, walletResult] = await Promise.allSettled([
+      getMechanicProfile(),
+      getEarningsSummary(startOfDay.toISOString()),
+      (async () => {
+        await expireStaleAssignments();
+        let orders = await listMyOrders(true);
+        // Webhook Xendit bisa telat/belum terdaftar: cek langsung ke Xendit agar
+        // order yang sudah dibayar client berubah menjadi lunas di Beranda.
+        try {
+          if (await syncMechanicPendingPayments(orders)) {
+            orders = await listMyOrders(true);
+          }
+        } catch {
+          // Tetap tampilkan order yang sudah terbaca.
+        }
+        return orders;
+      })(),
+      getWallet(),
+    ]);
+
+    if (profileResult.status === 'fulfilled') {
+      setOnline(profileResult.value?.is_online ?? false);
+      setVerified(profileResult.value?.is_verified ?? false);
     }
+    if (earningsResult.status === 'fulfilled') {
+      setTodayNet(earningsResult.value.net);
+      setTodayJobs(earningsResult.value.totalJobs);
+    }
+    if (ordersResult.status === 'fulfilled') setActiveOrders(ordersResult.value);
+    if (walletResult.status === 'fulfilled') setWallet(walletResult.value);
+
+    const failed = [profileResult, earningsResult, ordersResult, walletResult].filter(
+      (result) => result.status === 'rejected',
+    ).length;
+    setError(failed === 4);
+    setLoading(false);
+    setRefreshing(false);
   }, []);
 
   // Pastikan order yang baru diterima langsung muncul saat kembali ke Beranda,
@@ -84,37 +101,6 @@ export default function MechanicDashboardScreen() {
   );
 
   useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        const profile = await getMechanicProfile();
-        if (cancelled) return;
-        setOnline(profile?.is_online ?? false);
-        setVerified(profile?.is_verified ?? false);
-        const startOfDay = new Date();
-        startOfDay.setHours(0, 0, 0, 0);
-        const sum = await getEarningsSummary(startOfDay.toISOString());
-        if (cancelled) return;
-        setTodayNet(sum.net);
-        setTodayJobs(sum.totalJobs);
-        await expireStaleAssignments();
-        let orders = await listMyOrders(true);
-        if (await syncMechanicPendingPayments(orders)) {
-          orders = await listMyOrders(true);
-        }
-        if (cancelled) return;
-        setActiveOrders(orders);
-        setWallet(await getWallet());
-        if (!cancelled) setError(false);
-      } catch {
-        if (!cancelled) setError(true);
-      } finally {
-        if (!cancelled) {
-          setLoading(false);
-          setRefreshing(false);
-        }
-      }
-    })();
     // Realtime: order baru / perubahan status langsung refresh dashboard.
     const ch = createRealtimeChannel('mechanic-dashboard')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'service_requests' }, load)
@@ -122,7 +108,6 @@ export default function MechanicDashboardScreen() {
       .on('postgres_changes', { event: '*', schema: 'public', table: 'withdrawals' }, load)
       .subscribe();
     return () => {
-      cancelled = true;
       supabase.removeChannel(ch);
     };
   }, [load]);

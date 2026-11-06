@@ -6,7 +6,7 @@ import { Ionicons, type IconName } from '@/components/ui/icon';
 import { AuthField } from '@/features/auth/components/auth-field';
 import { AuthScreen } from '@/features/auth/components/auth-screen';
 import { getAuthErrorMessage, useAuth, type UserRole } from '@/features/auth/service';
-import { Brand, Radius, Space } from '@/constants/brand';
+import { Brand, Radius, Space, Type } from '@/constants/brand';
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -113,7 +113,7 @@ export default function RegisterScreen() {
                 <Ionicons
                   name={option.icon}
                   size={18}
-                  color={active ? Brand.primary : Brand.textSecondary}
+                  color={active ? Brand.volt : Brand.textSecondary}
                 />
               </View>
               {active ? (
@@ -199,7 +199,7 @@ export default function RegisterScreen() {
 }
 
 const styles = StyleSheet.create({
-  label: { fontSize: 12.5, fontWeight: '700', color: Brand.text, marginBottom: Space.sm },
+  label: { ...Type.label, fontSize: 12.5, fontWeight: '700', color: Brand.text, marginBottom: Space.sm },
   roleRow: { flexDirection: 'row', gap: Space.sm },
   roleCard: {
     flex: 1,
@@ -207,9 +207,9 @@ const styles = StyleSheet.create({
     borderRadius: Radius.md,
     borderWidth: 1,
     borderColor: Brand.border,
-    backgroundColor: '#F7F9FC',
+    backgroundColor: Brand.background,
   },
-  roleCardActive: { borderColor: Brand.primary, backgroundColor: Brand.primarySoft },
+  roleCardActive: { borderColor: Brand.ink, backgroundColor: Brand.surface },
   roleIcon: {
     width: 34,
     height: 34,
@@ -220,15 +220,16 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  roleIconActive: { borderColor: Brand.primaryBorder },
+  roleIconActive: { backgroundColor: Brand.ink, borderColor: Brand.ink },
   roleCheck: { position: 'absolute', top: Space.sm, right: Space.sm },
   roleTitle: {
+    ...Type.label,
     fontSize: 13,
     fontWeight: '700',
     color: Brand.text,
     marginTop: Space.sm,
   },
-  roleTitleActive: { color: Brand.primary },
+  roleTitleActive: { color: Brand.text },
   roleDescription: {
     fontSize: 10.5,
     lineHeight: 14,

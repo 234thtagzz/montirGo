@@ -11,7 +11,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Avatar } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { Ionicons } from '@/components/ui/icon';
-import { Brand, CardShadow, Radius, Space } from '@/constants/brand';
+import { Brand, CardShadow, Radius, Space, Tabular, Type } from '@/constants/brand';
 
 interface ClientTripSheetProps {
   mechanicName: string | null;
@@ -175,11 +175,12 @@ export function ClientTripSheet({
             <View style={styles.headerRow}>
               <Avatar name={mechanicName ?? 'Montir'} uri={mechanicAvatar} size={42} />
               <View style={styles.headerCopy}>
+                <Text style={styles.headerEyebrow}>MONTIRMU</Text>
                 <Text numberOfLines={1} style={styles.name}>
                   {mechanicName ?? 'Montir MontirGo'}
                 </Text>
                 <Text numberOfLines={1} style={styles.meta}>
-                  Montir yang menuju lokasimu
+                  Menuju lokasimu
                 </Text>
               </View>
               <View
@@ -209,17 +210,19 @@ export function ClientTripSheet({
 
         <View style={styles.metricsRow}>
           <View style={styles.metric}>
-            <Text style={styles.metricValue}>{isLive ? etaLabel : '—'}</Text>
+            <Text style={[styles.metricValue, Tabular]}>{isLive ? etaLabel : '—'}</Text>
             <Text style={styles.metricLabel}>{isLive ? 'sisa waktu' : 'menunggu posisi'}</Text>
           </View>
           <View style={styles.metricDivider} />
           <View style={styles.metric}>
-            <Text style={styles.metricValue}>{isLive ? distanceLabel : '—'}</Text>
+            <Text style={[styles.metricValue, Tabular]}>
+              {isLive ? distanceLabel : '—'}
+            </Text>
             <Text style={styles.metricLabel}>jarak</Text>
           </View>
           <View style={styles.metricDivider} />
           <View style={styles.metric}>
-            <Text style={styles.metricValue}>{arrivalClock ?? '—'}</Text>
+            <Text style={[styles.metricValue, Tabular]}>{arrivalClock ?? '—'}</Text>
             <Text style={styles.metricLabel}>perkiraan tiba</Text>
           </View>
         </View>
@@ -309,7 +312,7 @@ export function ClientTripSheet({
             onPress={onOpenDetail}
             style={({ pressed }) => [styles.action, pressed && styles.pressed]}
           >
-            <View style={[styles.iconWrap, { backgroundColor: '#F3F6FA' }]}>
+            <View style={[styles.iconWrap, { backgroundColor: Brand.background }]}>
               <Ionicons name="document-text-outline" size={19} color={Brand.textSecondary} />
             </View>
             <Text style={styles.actionLabel}>Detail pesanan</Text>
@@ -338,21 +341,22 @@ const styles = StyleSheet.create({
   grabber: { width: 42, height: 4, borderRadius: 2, backgroundColor: Brand.border },
   headerRow: { flexDirection: 'row', alignItems: 'center', gap: Space.md, marginTop: 2 },
   headerCopy: { flex: 1 },
-  name: { fontSize: 14, fontWeight: '700', color: Brand.text },
-  meta: { fontSize: 11.5, color: Brand.textSecondary, marginTop: 2 },
+  headerEyebrow: { ...Type.micro, fontSize: 8.5, color: Brand.textMuted },
+  name: { ...Type.bodyStrong, fontWeight: '700', color: Brand.text, marginTop: 1 },
+  meta: { fontSize: 11, color: Brand.textSecondary, marginTop: 1 },
   liveChip: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
+    gap: 5,
+    paddingHorizontal: 9,
+    paddingVertical: 5,
     borderRadius: Radius.pill,
-    backgroundColor: Brand.greenSoft,
+    backgroundColor: Brand.ink,
   },
   liveChipMuted: { backgroundColor: Brand.amberSoft },
-  liveDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: Brand.green },
+  liveDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: Brand.volt },
   liveDotMuted: { backgroundColor: Brand.amber },
-  liveText: { fontSize: 10, fontWeight: '700', color: Brand.green },
+  liveText: { fontSize: 9.5, fontWeight: '700', color: Brand.inkText, letterSpacing: 0.4 },
   liveTextMuted: { color: Brand.amber },
   metricsRow: {
     flexDirection: 'row',
@@ -364,7 +368,7 @@ const styles = StyleSheet.create({
     borderColor: Brand.divider,
   },
   metric: { flex: 1, alignItems: 'center' },
-  metricValue: { fontSize: 17, fontWeight: '700', color: Brand.text },
+  metricValue: { fontSize: 17, fontWeight: '700', color: Brand.text, letterSpacing: -0.3 },
   metricLabel: { fontSize: 10, color: Brand.textMuted, marginTop: 2 },
   metricDivider: { width: StyleSheet.hairlineWidth, height: 28, backgroundColor: Brand.divider },
   notice: {

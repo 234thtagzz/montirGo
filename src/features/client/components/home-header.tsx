@@ -3,7 +3,7 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Avatar } from '@/components/ui/avatar';
 import { Ionicons } from '@/components/ui/icon';
-import { Brand, Gradient, Radius, ScreenPadding, Space } from '@/constants/brand';
+import { Brand, Gradient, Radius, ScreenPadding, Space, Type } from '@/constants/brand';
 
 interface HomeHeaderProps {
   name: string;
@@ -117,28 +117,28 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: Radius.pill,
-    backgroundColor: 'rgba(255,255,255,0.16)',
+    backgroundColor: 'rgba(255,255,255,0.12)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.14)',
     alignItems: 'center',
     justifyContent: 'center',
   },
   badge: {
     position: 'absolute',
-    top: 10,
-    right: 11,
+    top: 9,
+    right: 10,
     width: 8,
     height: 8,
     borderRadius: 4,
-    backgroundColor: '#FFC531',
+    backgroundColor: Brand.volt,
     borderWidth: 1.5,
-    borderColor: Brand.primary,
+    borderColor: Brand.ink,
   },
   prompt: {
+    ...Type.h1,
     color: Brand.white,
-    fontSize: 21,
-    fontWeight: '700',
     marginTop: Space.lg,
     marginBottom: Space.md,
-    letterSpacing: -0.2,
   },
   search: {
     height: 48,

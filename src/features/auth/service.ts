@@ -28,18 +28,49 @@ export function getAuthErrorMessage(error: unknown, fallback: string): string {
   return raw || fallback;
 }
 
-async function fetchProfile(userId: string): Promise<ProfileRow> {
+/**
+ * Profil bisa gagal dibaca karena RLS/jaringan tanpa berarti sesi tidak valid.
+ * Kembalikan null agar pemanggil dapat memakai metadata auth sebagai cadangan
+ * alih-alih menganggap pengguna sudah logout.
+ */
+async function fetchProfile(userId: string): Promise<ProfileRow | null> {
   const { data, error } = await supabase
     .from('profiles')
     .select('role, full_name, phone_number')
     .eq('id', userId)
-    .single();
-  if (error || !data) {
-    throw new Error(
-      'Profil tidak ditemukan di database. Pastikan migrasi SQL sudah dijalankan (trigger handle_new_user).',
-    );
-  }
-  return data as ProfileRow;
+    .maybeSingle();
+  if (error) return null;
+  return (data as ProfileRow | null) ?? null;
+}
+
+type SessionUser = {
+  id: string;
+  email?: string | null;
+  user_metadata?: Record<string, unknown> | null;
+};
+
+/**
+ * Susun AuthUser dari baris `profiles`; bila baris belum ada / gagal dibaca,
+ * pakai metadata yang ditulis saat sign-up supaya riwayat & pesanan tetap
+ * dapat dimuat tanpa memaksa pengguna login ulang.
+ */
+function toAuthUser(sessionUser: SessionUser, profile: ProfileRow | null): AuthUser {
+  const meta = (sessionUser.user_metadata ?? {}) as {
+    full_name?: unknown;
+    role?: unknown;
+  };
+  const metaRole = meta.role === 'mechanic' ? 'mechanic' : 'client';
+  const role: DbRole = profile?.role ?? metaRole;
+  return {
+    id: sessionUser.id,
+    fullName:
+      profile?.full_name?.trim() ||
+      (typeof meta.full_name === 'string' ? meta.full_name : '') ||
+      '',
+    email: sessionUser.email ?? '',
+    phoneNumber: profile?.phone_number ?? null,
+    role: toAppRole(role),
+  };
 }
 
 export async function signIn(data: { email: string; password: string }): Promise<{ user: AuthUser }> {
@@ -50,19 +81,16 @@ export async function signIn(data: { email: string; password: string }): Promise
   if (error) throw error;
   if (!authData.user) throw new Error('Login gagal. Coba lagi.');
   const profile = await fetchProfile(authData.user.id);
+  if (!profile && !authData.user.user_metadata?.role) {
+    throw new Error(
+      'Profil tidak ditemukan di database. Pastikan migrasi SQL sudah dijalankan (trigger handle_new_user).',
+    );
+  }
   // Bersihkan sisa token backend lama (migrasi Express -> Supabase).
   await AsyncStorage.multiRemove(['montirgo_token', 'montirgo_user', 'montirgo_user_role']).catch(
     () => {},
   );
-  return {
-    user: {
-      id: authData.user.id,
-      fullName: profile.full_name ?? '',
-      email: authData.user.email ?? data.email,
-      phoneNumber: profile.phone_number,
-      role: toAppRole(profile.role),
-    },
-  };
+  return { user: toAuthUser(authData.user, profile) };
 }
 
 export async function signUp(data: {
@@ -92,13 +120,13 @@ export async function signUp(data: {
   await AsyncStorage.multiRemove(['montirgo_token', 'montirgo_user', 'montirgo_user_role']).catch(
     () => {},
   );
+  const user = toAuthUser(authData.user, profile);
   return {
     user: {
-      id: authData.user.id,
-      fullName: profile.full_name ?? data.name,
-      email: authData.user.email ?? data.email,
-      phoneNumber: profile.phone_number ?? data.phone,
-      role: toAppRole(profile.role),
+      ...user,
+      fullName: user.fullName || data.name,
+      email: user.email || data.email,
+      phoneNumber: user.phoneNumber ?? data.phone,
     },
     needsConfirmation: false,
   };
@@ -117,18 +145,10 @@ export async function getSessionUser(): Promise<AuthUser | null> {
     data: { session },
   } = await supabase.auth.getSession();
   if (!session?.user) return null;
-  try {
-    const profile = await fetchProfile(session.user.id);
-    return {
-      id: session.user.id,
-      fullName: profile.full_name ?? '',
-      email: session.user.email ?? '',
-      phoneNumber: profile.phone_number,
-      role: toAppRole(profile.role),
-    };
-  } catch {
-    return null;
-  }
+  // Profil mungkin belum terbaca (RLS/jaringan). Sesi tetap dianggap valid dan
+  // metadata auth dipakai sebagai cadangan agar layar tidak kosong.
+  const profile = await fetchProfile(session.user.id);
+  return toAuthUser(session.user, profile);
 }
 
 export async function getAccessToken(): Promise<string | null> {

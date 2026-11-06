@@ -14,6 +14,19 @@ export * from './types';
 
 const OPEN_REQUEST_STATUSES = ['requested', 'matching'];
 
+/** Error kolom/hubungan yang muncul saat cache skema PostgREST belum sinkron. */
+function isEmbedError(error: { code?: string; message?: string } | null): boolean {
+  if (!error) return false;
+  return (
+    error.code === '42703' ||
+    error.code === 'PGRST200' ||
+    error.code === 'PGRST204' ||
+    /column .* does not exist|could not find the '.*' column|could not find a relationship|schema cache/i.test(
+      error.message ?? '',
+    )
+  );
+}
+
 const ACTIVE_STATUSES = [
   'mechanic_assigned', 'mechanic_accepted', 'on_the_way', 'arrived', 'diagnosing', 'repairing',
   'completed', 'payment',
@@ -324,18 +337,24 @@ function mapIncomingDetail(r: Record<string, unknown>): IncomingRequestDetail {
 
 export async function listMyOrders(onlyActive = false): Promise<MyOrder[]> {
   const id = await getMyId();
-  let q = supabase
-    .from('service_requests')
-    .select(
-      'id, issue_description, symptoms, address, contact_phone, status, price_amount, created_at, ' +
-        'vehicles (type, brand, model), ' +
-        'client:profiles!service_requests_client_id_fkey (full_name, phone_number)',
-    )
-    .eq('mechanic_id', id)
-    .order('created_at', { ascending: false })
-    .limit(50);
-  if (onlyActive) q = q.in('status', ACTIVE_STATUSES);
-  const { data, error } = await q;
+  const selectWithRelations =
+    'id, issue_description, symptoms, address, contact_phone, status, price_amount, created_at, ' +
+    'vehicles (type, brand, model), ' +
+    'client:profiles!service_requests_client_id_fkey (full_name, phone_number)';
+  const selectFlat =
+    'id, issue_description, symptoms, address, contact_phone, status, price_amount, created_at';
+
+  const query = (select: string) => {
+    let q = supabase.from('service_requests').select(select).eq('mechanic_id', id);
+    if (onlyActive) q = q.in('status', ACTIVE_STATUSES);
+    return q.order('created_at', { ascending: false }).limit(50);
+  };
+
+  let { data, error } = await query(selectWithRelations);
+  if (error && isEmbedError(error)) {
+    // Cache skema PostgREST basi: tetap tampilkan order tanpa detail relasi.
+    ({ data, error } = await query(selectFlat));
+  }
   if (error) throw error;
   return ((data ?? []) as unknown as Record<string, unknown>[]).map((r) => ({
     id: r.id as string,
@@ -391,14 +410,16 @@ export async function getMyOrder(id: string): Promise<MechanicOrderDetail | null
       'vehicles (type, brand, model, year, license_plate, photo_url), ' +
       'client:profiles!service_requests_client_id_fkey (full_name, phone_number)',
   );
-  if (
-    error &&
-    (error.code === '42703' ||
-      error.code === 'PGRST204' ||
-      /column .* does not exist|could not find the '.*' column/i.test(error.message ?? ''))
-  ) {
-    // Migration konfirmasi montir belum dijalankan — tetap tampilkan order.
+  if (error && isEmbedError(error)) {
+    // Migration konfirmasi montir belum dijalankan / cache skema basi — tetap
+    // tampilkan order dengan kolom dasar.
     ({ data, error } = await query(baseSelect));
+  }
+  if (error && isEmbedError(error)) {
+    ({ data, error } = await query(
+      'id, issue_description, symptoms, address, lat, lng, contact_phone, additional_notes, ' +
+        'status, price_amount, payment_method, created_at, updated_at, accepted_at, arrived_at',
+    ));
   }
   if (error) throw error;
   if (!data) return null;

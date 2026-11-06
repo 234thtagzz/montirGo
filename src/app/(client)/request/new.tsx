@@ -17,7 +17,7 @@ import { ScreenHeader } from '@/components/ui/screen-header';
 import { Button } from '@/components/ui/button';
 import { LoadingState } from '@/components/ui/state';
 import { Ionicons } from '@/components/ui/icon';
-import { Brand, Radius, ScreenPadding, Space } from '@/constants/brand';
+import { Brand, Radius, ScreenPadding, Space, Type } from '@/constants/brand';
 import { useSessionUser } from '@/hooks/use-session-user';
 import {
   createServiceRequest,
@@ -265,7 +265,22 @@ export default function NewServiceRequestScreen() {
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
-          <Text style={styles.label}>Jenis bantuan</Text>
+          <View style={styles.summary}>
+            <View style={styles.summaryIcon}>
+              <Ionicons
+                name={activeCategory?.icon ?? 'construct-outline'}
+                size={20}
+                color={Brand.volt}
+              />
+            </View>
+            <View style={styles.summaryCopy}>
+              <Text style={styles.summaryEyebrow}>LAYANAN DIPILIH</Text>
+              <Text style={styles.summaryTitle}>{activeCategory?.label ?? 'Butuh Montir'}</Text>
+            </View>
+            <Text style={styles.summaryStep}>1 / 1</Text>
+          </View>
+
+          <FieldLabel title="Jenis bantuan" hint="Pilih yang paling sesuai dengan masalahmu." />
           <View style={styles.chipsWrap}>
             {PRESET_CATEGORIES.map((category) => {
               const active = category.key === categoryKey;
@@ -279,8 +294,8 @@ export default function NewServiceRequestScreen() {
                 >
                   <Ionicons
                     name={category.icon}
-                    size={14}
-                    color={active ? Brand.white : category.color}
+                    size={13}
+                    color={active ? Brand.volt : category.color}
                   />
                   <Text style={[styles.chipText, active && styles.chipTextActive]}>
                     {category.label}
@@ -290,7 +305,10 @@ export default function NewServiceRequestScreen() {
             })}
           </View>
 
-          <Text style={styles.label}>Kendaraan</Text>
+          <FieldLabel
+            title="Kendaraan"
+            hint="Opsional — membantu montir menyiapkan alat yang tepat."
+          />
           {vehicles.length === 0 ? (
             <Pressable
               accessibilityRole="button"
@@ -363,32 +381,37 @@ export default function NewServiceRequestScreen() {
                 }
               />
               <Text style={styles.vehicleHint}>
-                Foto dan jenis kendaraan otomatis dikirim ke montir agar analisisnya
-                lebih akurat.
+                Foto dan jenis kendaraan otomatis dikirim ke montir agar analisisnya lebih akurat.
               </Text>
             </View>
           ) : null}
 
-          <Text style={styles.label}>Keluhan kendaraan</Text>
+          <FieldLabel
+            title="Keluhan kendaraan"
+            hint="Tulis sedetail mungkin agar montir datang dengan persiapan tepat."
+            required
+          />
           <TextInput
             value={issue}
             onChangeText={setIssue}
             placeholder="Contoh: mesin mati saat di lampu merah, ada suara kasar"
             placeholderTextColor={Brand.textMuted}
+            selectionColor={Brand.primary}
             multiline
             style={[styles.input, styles.textarea]}
           />
 
-          <Text style={styles.label}>Gejala tambahan (opsional)</Text>
+          <FieldLabel title="Gejala tambahan" hint="Opsional." />
           <TextInput
             value={symptoms}
             onChangeText={setSymptoms}
             placeholder="Contoh: lampu indikator aki menyala"
             placeholderTextColor={Brand.textMuted}
+            selectionColor={Brand.primary}
             style={styles.input}
           />
 
-          <Text style={styles.label}>Lokasi</Text>
+          <FieldLabel title="Lokasi" hint="Montir berangkat ke titik ini." required />
           <Pressable
             accessibilityRole="button"
             onPress={detectLocation}
@@ -399,61 +422,81 @@ export default function NewServiceRequestScreen() {
               pressed && styles.pressed,
             ]}
           >
-            <Ionicons
-              name={coords ? 'checkmark-circle' : 'location-outline'}
-              size={18}
-              color={coords ? Brand.green : Brand.primary}
-            />
-            <Text style={[styles.locationText, coords && styles.locationTextActive]}>
-              {locating
-                ? 'Mengambil lokasi…'
-                : coords
-                  ? 'Lokasi terdeteksi'
-                  : 'Gunakan lokasi saat ini'}
-            </Text>
+            <View style={[styles.locationIcon, coords && styles.locationIconActive]}>
+              <Ionicons
+                name={coords ? 'checkmark' : 'location-outline'}
+                size={16}
+                color={coords ? Brand.green : Brand.primary}
+              />
+            </View>
+            <View style={styles.locationCopy}>
+              <Text style={[styles.locationText, coords && styles.locationTextActive]}>
+                {locating
+                  ? 'Mengambil lokasi…'
+                  : coords
+                    ? 'Lokasi terdeteksi'
+                    : 'Gunakan lokasi saat ini'}
+              </Text>
+              <Text style={styles.locationHint}>
+                {coords
+                  ? `${coords.lat.toFixed(5)}, ${coords.lng.toFixed(5)}`
+                  : 'Kami memakai GPS perangkatmu'}
+              </Text>
+            </View>
+            {locating ? <ActivityIndicator size="small" color={Brand.primary} /> : null}
           </Pressable>
 
-          {locationError ? <Text style={styles.errorText}>{locationError}</Text> : null}
+          {locationError ? (
+            <View style={styles.errorRow}>
+              <Ionicons name="alert-circle-outline" size={14} color={Brand.red} />
+              <Text style={styles.errorText}>{locationError}</Text>
+            </View>
+          ) : null}
 
           <TextInput
             value={address}
             onChangeText={setAddress}
             placeholder="Alamat / patokan lokasi (opsional)"
             placeholderTextColor={Brand.textMuted}
+            selectionColor={Brand.primary}
             style={[styles.input, styles.inputSpaced]}
           />
 
-          <Text style={styles.label}>Nomor WhatsApp</Text>
+          <FieldLabel title="Nomor WhatsApp" hint="Montir menghubungi nomor ini sebelum berangkat." required />
           <TextInput
             value={contactPhone}
             onChangeText={setPhone}
             placeholder="08xxxxxxxxxx"
             placeholderTextColor={Brand.textMuted}
+            selectionColor={Brand.primary}
             keyboardType="phone-pad"
             style={styles.input}
           />
 
-          <Text style={styles.label}>Catatan tambahan (opsional)</Text>
+          <FieldLabel title="Catatan tambahan" hint="Opsional — mis. kunci ada di bawah kursi." />
           <TextInput
             value={notes}
             onChangeText={setNotes}
             placeholder="Contoh: kunci ada di bawah kursi"
             placeholderTextColor={Brand.textMuted}
+            selectionColor={Brand.primary}
             multiline
             style={[styles.input, styles.textarea]}
           />
 
-          <Text style={styles.disclaimer}>
-            Keluhanmu akan dianalisis AI untuk memberi indikasi awal kepada montir. Permintaan
-            dikirim ke montir terdekat dan montir akan menghubungimu lewat WhatsApp di nomor
-            di atas sebelum berangkat.
-          </Text>
+          <View style={styles.disclaimer}>
+            <Ionicons name="sparkles-outline" size={14} color={Brand.primary} />
+            <Text style={styles.disclaimerText}>
+              Keluhanmu dianalisis AI sebagai indikasi awal untuk montir. Permintaan dikirim ke
+              montir terdekat yang akan menghubungimu lewat WhatsApp.
+            </Text>
+          </View>
 
           {submitting ? (
             <View style={styles.analyzingRow}>
-              <Ionicons name="sparkles" size={14} color={Brand.primary} />
+              <ActivityIndicator size="small" color={Brand.primary} />
               <Text style={styles.analyzingText}>
-                Mengirim permintaan dan menganalisis keluhan dengan AI…
+                Mengirim permintaan dan menganalisis keluhan…
               </Text>
             </View>
           ) : null}
@@ -467,6 +510,26 @@ export default function NewServiceRequestScreen() {
           />
         </ScrollView>
       </KeyboardAvoidingView>
+    </View>
+  );
+}
+
+function FieldLabel({
+  title,
+  hint,
+  required = false,
+}: {
+  title: string;
+  hint?: string;
+  required?: boolean;
+}) {
+  return (
+    <View style={styles.fieldLabel}>
+      <View style={styles.fieldTitleRow}>
+        <Text style={styles.label}>{title}</Text>
+        {required ? <Text style={styles.required}>WAJIB</Text> : null}
+      </View>
+      {hint ? <Text style={styles.labelHint}>{hint}</Text> : null}
     </View>
   );
 }
@@ -498,28 +561,55 @@ const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: Brand.background },
   flex: { flex: 1 },
   content: { padding: ScreenPadding, paddingBottom: Space.xxxl },
-  label: {
-    fontSize: 12.5,
-    fontWeight: '700',
-    color: Brand.text,
-    marginTop: Space.lg,
-    marginBottom: Space.sm,
+  summary: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Space.md,
+    backgroundColor: Brand.ink,
+    borderRadius: Radius.lg,
+    padding: Space.md,
   },
+  summaryIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: Radius.sm,
+    backgroundColor: 'rgba(255,255,255,0.08)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  summaryCopy: { flex: 1 },
+  summaryEyebrow: { ...Type.micro, fontSize: 9, color: Brand.inkMuted },
+  summaryTitle: { ...Type.bodyStrong, fontWeight: '700', color: Brand.white, marginTop: 2 },
+  summaryStep: { fontSize: 10.5, color: Brand.inkMuted, fontWeight: '700' },
+  fieldLabel: { marginTop: Space.lg, marginBottom: Space.sm },
+  fieldTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  label: { ...Type.label, fontSize: 12.5, fontWeight: '700', color: Brand.text },
+  required: {
+    ...Type.micro,
+    fontSize: 8.5,
+    color: Brand.primary,
+    backgroundColor: Brand.primarySoft,
+    paddingHorizontal: 5,
+    paddingVertical: 1,
+    borderRadius: 4,
+    overflow: 'hidden',
+  },
+  labelHint: { fontSize: 10.5, color: Brand.textMuted, marginTop: 2, lineHeight: 15 },
   chipsWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: Space.sm },
   chip: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 5,
     paddingHorizontal: Space.md,
-    paddingVertical: 8,
+    paddingVertical: 9,
     borderRadius: Radius.pill,
     borderWidth: 1,
     borderColor: Brand.border,
     backgroundColor: Brand.surface,
   },
-  chipActive: { backgroundColor: Brand.primary, borderColor: Brand.primary },
+  chipActive: { backgroundColor: Brand.ink, borderColor: Brand.ink },
   chipText: { fontSize: 11.5, fontWeight: '600', color: Brand.textSecondary },
-  chipTextActive: { color: Brand.white },
+  chipTextActive: { color: Brand.white, fontWeight: '700' },
   input: {
     backgroundColor: Brand.surface,
     borderWidth: 1,
@@ -542,7 +632,7 @@ const styles = StyleSheet.create({
     borderWidth: 1.5,
     borderStyle: 'dashed',
     borderColor: Brand.primaryBorder,
-    backgroundColor: '#FAFCFF',
+    backgroundColor: Brand.surface,
   },
   emptyVehicleText: { flex: 1, fontSize: 12, color: Brand.primary },
   vehiclePreview: { marginTop: Space.sm },
@@ -568,8 +658,8 @@ const styles = StyleSheet.create({
   locationButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: Space.sm,
-    minHeight: 48,
+    gap: Space.md,
+    minHeight: 58,
     paddingHorizontal: Space.md,
     borderRadius: Radius.md,
     borderWidth: 1,
@@ -577,19 +667,46 @@ const styles = StyleSheet.create({
     backgroundColor: Brand.primarySoft,
   },
   locationButtonActive: { borderColor: Brand.greenSoft, backgroundColor: Brand.greenSoft },
-  locationText: { fontSize: 13, fontWeight: '700', color: Brand.primary },
+  locationIcon: {
+    width: 32,
+    height: 32,
+    borderRadius: Radius.xs,
+    backgroundColor: Brand.surface,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  locationIconActive: { backgroundColor: Brand.surface },
+  locationCopy: { flex: 1 },
+  locationText: { fontSize: 12.5, fontWeight: '700', color: Brand.primary },
   locationTextActive: { color: Brand.green },
-  errorText: { fontSize: 11.5, color: Brand.red, marginTop: Space.sm, lineHeight: 16 },
+  locationHint: { fontSize: 10, color: Brand.textMuted, marginTop: 1 },
+  errorRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 5,
+    marginTop: Space.sm,
+  },
+  errorText: { flex: 1, fontSize: 11, color: Brand.red, lineHeight: 15 },
   disclaimer: {
+    flexDirection: 'row',
+    gap: Space.sm,
+    backgroundColor: Brand.surface,
+    borderRadius: Radius.md,
+    borderWidth: 1,
+    borderColor: Brand.divider,
+    padding: Space.md,
+    marginTop: Space.xl,
+  },
+  disclaimerText: {
+    flex: 1,
     fontSize: 11,
     color: Brand.textSecondary,
     lineHeight: 16,
-    marginTop: Space.lg,
   },
   analyzingRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
+    gap: Space.sm,
     backgroundColor: Brand.primarySoft,
     borderRadius: Radius.md,
     paddingHorizontal: Space.md,

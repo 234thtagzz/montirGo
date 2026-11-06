@@ -16,7 +16,7 @@ import { ScreenHeader } from '@/components/ui/screen-header';
 import { Button } from '@/components/ui/button';
 import { LoadingState } from '@/components/ui/state';
 import { Ionicons } from '@/components/ui/icon';
-import { Brand, Radius, ScreenPadding, Space } from '@/constants/brand';
+import { Brand, Radius, ScreenPadding, Space, Type } from '@/constants/brand';
 import {
   createVehicle,
   getMyId,
@@ -179,6 +179,29 @@ export default function VehicleFormScreen() {
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
+          <View style={styles.preview}>
+            <View style={styles.previewIcon}>
+              <Ionicons
+                name={getVehicleTypeMeta(type).icon}
+                size={22}
+                color={Brand.volt}
+              />
+            </View>
+            <View style={styles.previewCopy}>
+              <Text style={styles.previewEyebrow}>
+                {isEdit ? 'UBAH KENDARAAN' : 'KENDARAAN BARU'}
+              </Text>
+              <Text style={styles.previewTitle} numberOfLines={1}>
+                {brand.trim() || model.trim()
+                  ? `${brand.trim()} ${model.trim()}`.trim()
+                  : 'Belum ada nama'}
+              </Text>
+              <Text style={styles.previewPlate}>
+                {plate.trim() ? plate.trim().toUpperCase() : 'Nomor polisi belum diisi'}
+              </Text>
+            </View>
+          </View>
+
           <Text style={styles.label}>Jenis kendaraan</Text>
           <View style={styles.typeRow}>
             {TYPES.map((item) => {
@@ -194,8 +217,8 @@ export default function VehicleFormScreen() {
                 >
                   <Ionicons
                     name={meta.icon}
-                    size={14}
-                    color={active ? Brand.white : meta.color}
+                    size={15}
+                    color={active ? Brand.volt : meta.color}
                   />
                   <Text style={[styles.typeText, active && styles.typeTextActive]}>
                     {item.label}
@@ -205,7 +228,7 @@ export default function VehicleFormScreen() {
             })}
           </View>
 
-          <Text style={styles.label}>Foto kendaraan (opsional)</Text>
+          <Text style={styles.label}>Foto kendaraan</Text>
           <View style={styles.photoCard}>
             {pickedPhoto ? (
               <Image
@@ -251,14 +274,15 @@ export default function VehicleFormScreen() {
             </View>
           </View>
           <Text style={styles.hint}>
-            Foto tampak depan/samping kendaraan membantu montir menyiapkan alat dan
-            memperkirakan kondisi kendaraan sebelum datang.
+            Foto tampak depan/samping membantu montir menyiapkan alat dan memperkirakan kondisi
+            kendaraan sebelum datang.
           </Text>
 
-          <Field label="Merek" value={brand} onChangeText={setBrand} placeholder="Contoh: Honda" />
-          <Field label="Model" value={model} onChangeText={setModel} placeholder="Contoh: Vario 125" />
+          <Text style={styles.sectionLabel}>IDENTITAS</Text>
+          <Field label="Merek" value={brand} onChangeText={setBrand} placeholder="Contoh: Honda" required />
+          <Field label="Model" value={model} onChangeText={setModel} placeholder="Contoh: Vario 125" required />
           <Field
-            label="Tahun (opsional)"
+            label="Tahun"
             value={year}
             onChangeText={setYear}
             placeholder="Contoh: 2020"
@@ -270,9 +294,10 @@ export default function VehicleFormScreen() {
             onChangeText={setPlate}
             placeholder="Contoh: B 1234 XYZ"
             autoCapitalize="characters"
+            required
           />
           <Field
-            label="Catatan (opsional)"
+            label="Catatan"
             value={notes}
             onChangeText={setNotes}
             placeholder="Contoh: warna hitam, ada stiker"
@@ -293,14 +318,19 @@ export default function VehicleFormScreen() {
 
 function Field({
   label,
+  required = false,
   ...inputProps
-}: { label: string } & ComponentProps<typeof TextInput>) {
+}: { label: string; required?: boolean } & ComponentProps<typeof TextInput>) {
   return (
     <View>
-      <Text style={styles.label}>{label}</Text>
+      <View style={styles.fieldRow}>
+        <Text style={styles.label}>{label}</Text>
+        {required ? <Text style={styles.required}>WAJIB</Text> : null}
+      </View>
       <TextInput
         {...inputProps}
         placeholderTextColor={Brand.textMuted}
+        selectionColor={Brand.primary}
         style={styles.input}
       />
     </View>
@@ -311,12 +341,50 @@ const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: Brand.background },
   flex: { flex: 1 },
   content: { padding: ScreenPadding, paddingBottom: Space.xxxl },
+  preview: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Space.md,
+    backgroundColor: Brand.ink,
+    borderRadius: Radius.lg,
+    padding: Space.md,
+  },
+  previewIcon: {
+    width: 46,
+    height: 46,
+    borderRadius: Radius.sm,
+    backgroundColor: 'rgba(255,255,255,0.08)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  previewCopy: { flex: 1 },
+  previewEyebrow: { ...Type.micro, fontSize: 9, color: Brand.inkMuted },
+  previewTitle: { ...Type.bodyStrong, fontWeight: '700', color: Brand.white, marginTop: 2 },
+  previewPlate: { fontSize: 10.5, color: Brand.inkMuted, marginTop: 1, letterSpacing: 0.4 },
   label: {
+    ...Type.label,
     fontSize: 12.5,
     fontWeight: '700',
     color: Brand.text,
     marginTop: Space.lg,
     marginBottom: Space.sm,
+  },
+  fieldRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  required: {
+    ...Type.micro,
+    fontSize: 8.5,
+    color: Brand.primary,
+    backgroundColor: Brand.primarySoft,
+    paddingHorizontal: 5,
+    paddingVertical: 1,
+    borderRadius: 4,
+    overflow: 'hidden',
+  },
+  sectionLabel: {
+    ...Type.micro,
+    color: Brand.textMuted,
+    marginTop: Space.xxl,
+    marginBottom: 2,
   },
   typeRow: { flexDirection: 'row', gap: Space.sm },
   typeChip: {
@@ -325,15 +393,15 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: 6,
-    paddingVertical: 10,
+    paddingVertical: 12,
     borderRadius: Radius.md,
     borderWidth: 1,
     borderColor: Brand.border,
     backgroundColor: Brand.surface,
   },
-  typeChipActive: { backgroundColor: Brand.primary, borderColor: Brand.primary },
+  typeChipActive: { backgroundColor: Brand.ink, borderColor: Brand.ink },
   typeText: { fontSize: 12.5, fontWeight: '600', color: Brand.textSecondary },
-  typeTextActive: { color: Brand.white },
+  typeTextActive: { color: Brand.white, fontWeight: '700' },
   photoCard: {
     borderRadius: Radius.md,
     borderWidth: 1,
@@ -353,7 +421,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: 6,
-    paddingVertical: 11,
+    paddingVertical: 12,
+    minHeight: 44,
   },
   photoRemove: { borderLeftWidth: StyleSheet.hairlineWidth, borderLeftColor: Brand.divider },
   photoActionText: { fontSize: 12, fontWeight: '700', color: Brand.primary },

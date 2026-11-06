@@ -3,14 +3,11 @@ import { Alert, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } 
 import { useFocusEffect, useRouter } from 'expo-router';
 import { ScreenHeader } from '@/components/ui/screen-header';
 import { Button } from '@/components/ui/button';
+import { ConfirmSheet } from '@/components/ui/confirm-sheet';
 import { EmptyState, ErrorState, LoadingState } from '@/components/ui/state';
 import { Ionicons, type IconName } from '@/components/ui/icon';
-import { Brand, Radius, ScreenPadding, Space } from '@/constants/brand';
-import {
-  deleteVehicle,
-  listMyVehicles,
-  type ClientVehicle,
-} from '@/features/client/service';
+import { Brand, Radius, ScreenPadding, Space, Tabular, Type } from '@/constants/brand';
+import { deleteVehicle, listMyVehicles, type ClientVehicle } from '@/features/client/service';
 import { VehiclePhoto } from '@/features/vehicles/components/vehicle-photo';
 
 const VEHICLE_LABEL: Record<ClientVehicle['type'], string> = {
@@ -31,6 +28,8 @@ export default function MyVehiclesScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState(false);
+  const [pendingDelete, setPendingDelete] = useState<ClientVehicle | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -51,36 +50,28 @@ export default function MyVehiclesScreen() {
     }, [load]),
   );
 
-  const confirmDelete = (vehicle: ClientVehicle) => {
-    Alert.alert(
-      'Hapus kendaraan?',
-      `${vehicle.brand} ${vehicle.model} (${vehicle.license_plate}) akan dihapus dari garasi.`,
-      [
-        { text: 'Batal', style: 'cancel' },
-        {
-          text: 'Hapus',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              await deleteVehicle(vehicle.id);
-              await load();
-            } catch (deleteError) {
-              Alert.alert(
-                'Gagal menghapus',
-                deleteError instanceof Error ? deleteError.message : 'Coba lagi.',
-              );
-            }
-          },
-        },
-      ],
-    );
+  const confirmDelete = async () => {
+    if (!pendingDelete) return;
+    setDeleting(true);
+    try {
+      await deleteVehicle(pendingDelete.id);
+      setPendingDelete(null);
+      await load();
+    } catch (deleteError) {
+      Alert.alert(
+        'Gagal menghapus',
+        deleteError instanceof Error ? deleteError.message : 'Coba lagi.',
+      );
+    } finally {
+      setDeleting(false);
+    }
   };
 
   return (
     <View style={styles.screen}>
       <ScreenHeader
-        title="Garasi Saya"
-        subtitle="Kendaraan yang tersimpan untuk pesanan cepat"
+        title="Garasi"
+        subtitle="Kendaraan yang tersimpan"
         showBack={false}
         right={
           <Pressable
@@ -124,74 +115,105 @@ export default function MyVehiclesScreen() {
               onPressAction={() => router.push('/(client)/vehicles/new')}
             />
           ) : (
-            vehicles.map((vehicle) => (
-              <View key={vehicle.id} style={styles.card}>
-                <Pressable
-                  accessibilityRole="button"
-                  accessibilityLabel={`Ubah ${vehicle.brand} ${vehicle.model}`}
-                  onPress={() =>
-                    router.push({
-                      pathname: '/(client)/vehicles/new',
-                      params: { id: vehicle.id },
-                    })
-                  }
-                  style={({ pressed }) => [styles.cardMain, pressed && styles.pressed]}
-                >
-                  {vehicle.photo_url ? (
-                    <VehiclePhoto
-                      value={vehicle.photo_url}
-                      height={56}
-                      style={styles.vehicleThumb}
-                      emptyLabel={null}
-                    />
-                  ) : (
-                    <View style={styles.iconBox}>
-                      <Ionicons
-                        name={VEHICLE_ICON[vehicle.type] ?? 'car-outline'}
-                        size={22}
-                        color={Brand.primary}
-                      />
-                    </View>
-                  )}
-                  <View style={styles.copy}>
-                    <Text style={styles.name} numberOfLines={1}>
-                      {vehicle.brand} {vehicle.model}
-                    </Text>
-                    <Text style={styles.meta}>
-                      {VEHICLE_LABEL[vehicle.type]}
-                      {vehicle.year ? ` • ${vehicle.year}` : ''}
-                    </Text>
-                    <View style={styles.plate}>
-                      <Text style={styles.plateText}>{vehicle.license_plate}</Text>
-                    </View>
-                  </View>
-                  <Ionicons name="create-outline" size={18} color={Brand.textMuted} />
-                </Pressable>
-
-                <Pressable
-                  accessibilityRole="button"
-                  accessibilityLabel={`Hapus ${vehicle.brand} ${vehicle.model}`}
-                  hitSlop={8}
-                  onPress={() => confirmDelete(vehicle)}
-                  style={({ pressed }) => [styles.deleteButton, pressed && styles.pressed]}
-                >
-                  <Ionicons name="trash-outline" size={17} color={Brand.red} />
-                </Pressable>
+            <>
+              <View style={styles.summary}>
+                <View>
+                  <Text style={styles.summaryEyebrow}>TERSIMPAN</Text>
+                  <Text style={styles.summaryValue}>
+                    <Text style={[styles.summaryNumber, Tabular]}>{vehicles.length}</Text>
+                    <Text style={styles.summaryUnit}> kendaraan</Text>
+                  </Text>
+                </View>
+                <View style={styles.summaryIcon}>
+                  <Ionicons name="car-sport-outline" size={22} color={Brand.inkText} />
+                </View>
               </View>
-            ))
-          )}
 
-          {vehicles.length > 0 ? (
-            <Button
-              label="Tambah Kendaraan"
-              icon="add"
-              variant="secondary"
-              onPress={() => router.push('/(client)/vehicles/new')}
-              style={styles.addFooter}
-            />
-          ) : null}
+              <Text style={styles.sectionLabel}>Daftar kendaraan</Text>
+
+              {vehicles.map((vehicle) => (
+                <View key={vehicle.id} style={styles.card}>
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel={`Ubah ${vehicle.brand} ${vehicle.model}`}
+                    onPress={() =>
+                      router.push({
+                        pathname: '/(client)/vehicles/new',
+                        params: { id: vehicle.id },
+                      })
+                    }
+                    style={({ pressed }) => [styles.cardMain, pressed && styles.pressed]}
+                  >
+                    {vehicle.photo_url ? (
+                      <VehiclePhoto
+                        value={vehicle.photo_url}
+                        height={58}
+                        style={styles.vehicleThumb}
+                        emptyLabel={null}
+                      />
+                    ) : (
+                      <View style={styles.iconBox}>
+                        <Ionicons
+                          name={VEHICLE_ICON[vehicle.type] ?? 'car-outline'}
+                          size={22}
+                          color={Brand.primary}
+                        />
+                      </View>
+                    )}
+                    <View style={styles.copy}>
+                      <Text style={styles.name} numberOfLines={1}>
+                        {vehicle.brand} {vehicle.model}
+                      </Text>
+                      <Text style={styles.meta}>
+                        {VEHICLE_LABEL[vehicle.type]}
+                        {vehicle.year ? ` · ${vehicle.year}` : ''}
+                      </Text>
+                      <View style={styles.plate}>
+                        <Text style={styles.plateText}>{vehicle.license_plate}</Text>
+                      </View>
+                    </View>
+                    <Ionicons name="create-outline" size={17} color={Brand.textMuted} />
+                  </Pressable>
+
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel={`Hapus ${vehicle.brand} ${vehicle.model}`}
+                    hitSlop={8}
+                    onPress={() => setPendingDelete(vehicle)}
+                    style={({ pressed }) => [styles.deleteButton, pressed && styles.pressed]}
+                  >
+                    <Ionicons name="trash-outline" size={16} color={Brand.red} />
+                  </Pressable>
+                </View>
+              ))}
+
+              <Button
+                label="Tambah Kendaraan"
+                icon="add"
+                variant="secondary"
+                onPress={() => router.push('/(client)/vehicles/new')}
+                style={styles.addFooter}
+              />
+            </>
+          )}
         </ScrollView>
       )}
+
+      <ConfirmSheet
+        visible={pendingDelete !== null}
+        destructive
+        loading={deleting}
+        icon="trash-outline"
+        title="Hapus kendaraan?"
+        message={
+          pendingDelete
+            ? `${pendingDelete.brand} ${pendingDelete.model} (${pendingDelete.license_plate}) akan dihapus dari garasi.`
+            : undefined
+        }
+        confirmLabel="Hapus kendaraan"
+        onConfirm={confirmDelete}
+        onCancel={() => (deleting ? undefined : setPendingDelete(null))}
+      />
     </View>
   );
 }
@@ -199,14 +221,36 @@ export default function MyVehiclesScreen() {
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: Brand.background },
   addButton: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
-    backgroundColor: Brand.primary,
+    width: 36,
+    height: 36,
+    borderRadius: Radius.sm,
+    backgroundColor: Brand.ink,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  content: { padding: ScreenPadding, paddingBottom: Space.xxxl },
+  content: { paddingHorizontal: ScreenPadding, paddingBottom: Space.xxxl },
+  summary: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: Brand.ink,
+    borderRadius: Radius.lg,
+    padding: Space.lg,
+    marginTop: Space.xs,
+  },
+  summaryEyebrow: { ...Type.micro, color: Brand.inkMuted },
+  summaryValue: { marginTop: 4 },
+  summaryNumber: { ...Type.display, color: Brand.white },
+  summaryUnit: { ...Type.body, color: Brand.inkText },
+  summaryIcon: {
+    width: 44,
+    height: 44,
+    borderRadius: Radius.md,
+    backgroundColor: 'rgba(255,255,255,0.08)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  sectionLabel: { ...Type.micro, color: Brand.textMuted, marginTop: Space.xl, marginBottom: Space.sm },
   card: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -215,20 +259,20 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: Brand.divider,
     padding: Space.md,
-    marginBottom: Space.md,
+    marginBottom: Space.sm,
   },
   cardMain: { flexDirection: 'row', alignItems: 'center', gap: Space.md, flex: 1 },
   iconBox: {
-    width: 46,
-    height: 46,
+    width: 58,
+    height: 58,
     borderRadius: Radius.md,
     backgroundColor: Brand.primarySoft,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  vehicleThumb: { width: 64, borderRadius: Radius.md },
+  vehicleThumb: { width: 68, borderRadius: Radius.md },
   copy: { flex: 1 },
-  name: { fontSize: 14, fontWeight: '700', color: Brand.text },
+  name: { ...Type.bodyStrong, fontSize: 14, fontWeight: '700', color: Brand.text },
   meta: { fontSize: 11.5, color: Brand.textSecondary, marginTop: 2 },
   plate: {
     alignSelf: 'flex-start',
@@ -240,9 +284,9 @@ const styles = StyleSheet.create({
   },
   plateText: { fontSize: 10, fontWeight: '700', color: Brand.textSecondary, letterSpacing: 0.4 },
   deleteButton: {
-    width: 36,
-    height: 36,
-    borderRadius: Radius.sm,
+    width: 34,
+    height: 34,
+    borderRadius: Radius.xs,
     backgroundColor: Brand.redSoft,
     alignItems: 'center',
     justifyContent: 'center',

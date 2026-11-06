@@ -1,16 +1,16 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { ScreenHeader } from '@/components/ui/screen-header';
 import { EmptyState, ErrorState, LoadingState } from '@/components/ui/state';
 import { Ionicons, type IconName } from '@/components/ui/icon';
-import { Brand, Radius, ScreenPadding, Space } from '@/constants/brand';
+import { Brand, Radius, ScreenPadding, Space, Type } from '@/constants/brand';
 import {
   listNotifications,
   markNotificationsRead,
   type ClientNotification,
 } from '@/features/client/service';
-import { formatDateTime } from '@/utils/format';
+import { formatDayLabel, formatTime } from '@/utils/format';
 
 interface NotificationVisual {
   icon: IconName;
@@ -66,6 +66,12 @@ function getVisual(type: string): NotificationVisual {
   return VISUALS[type] ?? FALLBACK_VISUAL;
 }
 
+interface DayGroup {
+  key: string;
+  label: string;
+  items: ClientNotification[];
+}
+
 export default function NotificationsScreen() {
   const router = useRouter();
   const [items, setItems] = useState<ClientNotification[]>([]);
@@ -96,6 +102,17 @@ export default function NotificationsScreen() {
     }, [load]),
   );
 
+  const groups = useMemo<DayGroup[]>(() => {
+    const map = new Map<string, DayGroup>();
+    items.forEach((item) => {
+      const label = formatDayLabel(item.created_at);
+      const existing = map.get(label);
+      if (existing) existing.items.push(item);
+      else map.set(label, { key: label, label, items: [item] });
+    });
+    return Array.from(map.values());
+  }, [items]);
+
   return (
     <View style={styles.screen}>
       <ScreenHeader title="Notifikasi" subtitle="Info terbaru seputar pesananmu" />
@@ -119,47 +136,65 @@ export default function NotificationsScreen() {
         >
           {error ? (
             <ErrorState onRetry={load} />
-          ) : items.length === 0 ? (
+          ) : groups.length === 0 ? (
             <EmptyState
               icon="notifications-outline"
               message="Belum ada notifikasi"
               hint="Pemberitahuan tentang pesanan dan montir akan muncul di sini."
             />
           ) : (
-            items.map((item) => {
-              const visual = getVisual(item.type);
-              const targetId =
-                item.related_entity_type === 'service_request' ? item.related_entity_id : null;
-              return (
-                <Pressable
-                  key={item.id}
-                  accessibilityRole="button"
-                  accessibilityLabel={item.title}
-                  disabled={!targetId}
-                  onPress={() => {
-                    if (!targetId) return;
-                    router.push({
-                      pathname: '/(client)/orders/[id]',
-                      params: { id: targetId },
-                    });
-                  }}
-                  style={({ pressed }) => [styles.card, pressed && styles.pressed]}
-                >
-                  <View style={[styles.iconBox, { backgroundColor: visual.background }]}>
-                    <Ionicons name={visual.icon} size={18} color={visual.color} />
-                  </View>
-                  <View style={styles.copy}>
-                    <Text style={styles.title}>{item.title}</Text>
-                    {item.body ? <Text style={styles.body}>{item.body}</Text> : null}
-                    <Text style={styles.time}>{formatDateTime(item.created_at)}</Text>
-                  </View>
-                  {!item.is_read ? <View style={styles.unreadDot} /> : null}
-                  {targetId ? (
-                    <Ionicons name="chevron-forward" size={15} color={Brand.textMuted} />
-                  ) : null}
-                </Pressable>
-              );
-            })
+            groups.map((group) => (
+              <View key={group.key} style={styles.group}>
+                <Text style={styles.groupLabel}>{group.label}</Text>
+                <View style={styles.groupCard}>
+                  {group.items.map((item, index) => {
+                    const visual = getVisual(item.type);
+                    const targetId =
+                      item.related_entity_type === 'service_request'
+                        ? item.related_entity_id
+                        : null;
+                    return (
+                      <Pressable
+                        key={item.id}
+                        accessibilityRole="button"
+                        accessibilityLabel={item.title}
+                        disabled={!targetId}
+                        onPress={() => {
+                          if (!targetId) return;
+                          router.push({
+                            pathname: '/(client)/orders/[id]',
+                            params: { id: targetId },
+                          });
+                        }}
+                        style={({ pressed }) => [
+                          styles.row,
+                          index === group.items.length - 1 && styles.rowLast,
+                          pressed && styles.pressed,
+                        ]}
+                      >
+                        <View style={[styles.iconBox, { backgroundColor: visual.background }]}>
+                          <Ionicons name={visual.icon} size={17} color={visual.color} />
+                        </View>
+                        <View style={styles.copy}>
+                          <View style={styles.titleRow}>
+                            <Text style={styles.title} numberOfLines={1}>
+                              {item.title}
+                            </Text>
+                            <Text style={styles.time}>{formatTime(item.created_at)}</Text>
+                          </View>
+                          {item.body ? (
+                            <Text style={styles.body} numberOfLines={2}>
+                              {item.body}
+                            </Text>
+                          ) : null}
+                        </View>
+                        {!item.is_read ? <View style={styles.unreadDot} /> : null}
+                      </Pressable>
+                    );
+                  })}
+                </View>
+              </View>
+            ))
           )}
         </ScrollView>
       )}
@@ -169,35 +204,48 @@ export default function NotificationsScreen() {
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: Brand.background },
-  content: { padding: ScreenPadding, paddingBottom: Space.xxxl },
-  card: {
-    flexDirection: 'row',
-    gap: Space.md,
+  content: { paddingHorizontal: ScreenPadding, paddingBottom: Space.xxxl },
+  group: { marginTop: Space.lg },
+  groupLabel: {
+    ...Type.micro,
+    color: Brand.textMuted,
+    marginBottom: Space.sm,
+    textTransform: 'uppercase',
+  },
+  groupCard: {
     backgroundColor: Brand.surface,
     borderRadius: Radius.lg,
-    padding: Space.md,
-    marginBottom: Space.md,
     borderWidth: 1,
     borderColor: Brand.divider,
+    overflow: 'hidden',
   },
+  row: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: Space.md,
+    padding: Space.md,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: Brand.divider,
+  },
+  rowLast: { borderBottomWidth: 0 },
+  pressed: { opacity: 0.75 },
   iconBox: {
-    width: 38,
-    height: 38,
+    width: 36,
+    height: 36,
     borderRadius: Radius.sm,
-    backgroundColor: Brand.primarySoft,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  pressed: { opacity: 0.8 },
   copy: { flex: 1 },
-  title: { fontSize: 13.5, fontWeight: '700', color: Brand.text },
-  body: { fontSize: 12, color: Brand.textSecondary, marginTop: 2, lineHeight: 17 },
-  time: { fontSize: 10.5, color: Brand.textMuted, marginTop: 6 },
+  titleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 },
+  title: { flex: 1, ...Type.label, fontSize: 13, fontWeight: '700', color: Brand.text },
+  time: { fontSize: 10, color: Brand.textMuted },
+  body: { fontSize: 11.5, color: Brand.textSecondary, marginTop: 3, lineHeight: 16 },
   unreadDot: {
-    width: 8,
-    height: 8,
+    width: 7,
+    height: 7,
     borderRadius: 4,
     backgroundColor: Brand.primary,
-    marginTop: 6,
+    marginTop: 5,
   },
 });

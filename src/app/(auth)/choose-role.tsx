@@ -1,112 +1,152 @@
-import { View, Text, Pressable, StyleSheet } from 'react-native';
 import { useState } from 'react';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { useRouter } from 'expo-router';
+import { Button } from '@/components/ui/button';
+import { Ionicons, type IconName } from '@/components/ui/icon';
+import { AuthScreen } from '@/features/auth/components/auth-screen';
+import { Brand, Radius, Space, Type } from '@/constants/brand';
+
+type Role = 'CLIENT' | 'MONTIR';
+
+const OPTIONS: {
+  key: Role;
+  title: string;
+  description: string;
+  icon: IconName;
+  points: string[];
+}[] = [
+  {
+    key: 'CLIENT',
+    title: 'Client',
+    description: 'Butuh bantuan montir',
+    icon: 'car-sport-outline',
+    points: ['Pesan montir ke lokasimu', 'Lacak perjalanan realtime'],
+  },
+  {
+    key: 'MONTIR',
+    title: 'Montir',
+    description: 'Tawarkan jasa bantuan',
+    icon: 'construct-outline',
+    points: ['Terima permintaan terdekat', 'Kelola penghasilan & saldo'],
+  },
+];
 
 export default function ChooseRoleScreen() {
-  const [role, setRole] = useState<'CLIENT' | 'MONTIR'>('CLIENT');
+  const [role, setRole] = useState<Role>('CLIENT');
   const router = useRouter();
 
-  const handleSelect = (selectedRole: 'CLIENT' | 'MONTIR') => {
-    setRole(selectedRole);
-  };
-
   return (
-    <View style={styles.container}>
-      <View style={styles.card}>
-        <Text style={styles.title}>Pilih Peran Anda</Text>
-        <Text style={styles.subtitle}>MontirGo menghubungkan client dengan montir di lokasi</Text>
-        
-        <Pressable
-          style={[styles.roleButton, role === 'CLIENT' && styles.roleButtonActive]}
-          onPress={() => handleSelect('CLIENT')}
-        >
-          <Text style={styles.roleText}>Client</Text>
-          <Text style={styles.roleSubtext}>Butuh bantuan montir</Text>
-        </Pressable>
-        
-        <Pressable
-          style={[styles.roleButton, role === 'MONTIR' && styles.roleButtonActive]}
-          onPress={() => handleSelect('MONTIR')}
-        >
-          <Text style={styles.roleText}>Montir</Text>
-          <Text style={styles.roleSubtext}>Tawarkan jasa bantuan</Text>
-        </Pressable>
-        
-        <Pressable
-          style={styles.continueButton}
-          onPress={() => router.push(`/(auth)/register?role=${role}`)}
-        >
-          <Text style={styles.continueText}>Lanjut Daftar</Text>
-        </Pressable>
+    <AuthScreen
+      showBack
+      title="Pilih peranmu"
+      subtitle="Peran menentukan tampilan dan fitur yang kamu pakai. Bisa berbeda antar akun."
+    >
+      <View style={styles.list}>
+        {OPTIONS.map((option) => {
+          const active = role === option.key;
+          return (
+            <Pressable
+              key={option.key}
+              accessibilityRole="button"
+              accessibilityState={{ selected: active }}
+              accessibilityLabel={`Pilih peran ${option.title}`}
+              onPress={() => setRole(option.key)}
+              style={({ pressed }) => [
+                styles.option,
+                active && styles.optionActive,
+                pressed && styles.pressed,
+              ]}
+            >
+              <View style={styles.optionTop}>
+                <View style={[styles.iconBox, active && styles.iconBoxActive]}>
+                  <Ionicons
+                    name={option.icon}
+                    size={20}
+                    color={active ? Brand.volt : Brand.textSecondary}
+                  />
+                </View>
+                <View style={styles.optionCopy}>
+                  <Text style={[styles.optionTitle, active && styles.optionTitleActive]}>
+                    {option.title}
+                  </Text>
+                  <Text style={styles.optionDescription}>{option.description}</Text>
+                </View>
+                <View style={[styles.radio, active && styles.radioActive]}>
+                  {active ? <View style={styles.radioDot} /> : null}
+                </View>
+              </View>
+
+              <View style={styles.points}>
+                {option.points.map((point) => (
+                  <View key={point} style={styles.point}>
+                    <Ionicons
+                      name="checkmark"
+                      size={12}
+                      color={active ? Brand.primary : Brand.textMuted}
+                    />
+                    <Text style={styles.pointText}>{point}</Text>
+                  </View>
+                ))}
+              </View>
+            </Pressable>
+          );
+        })}
       </View>
-    </View>
+
+      <Button
+        label="Lanjut Daftar"
+        icon="arrow-forward"
+        onPress={() => router.push(`/(auth)/register?role=${role}`)}
+        style={styles.submit}
+      />
+    </AuthScreen>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#fff',
-    justifyContent: 'center',
-    paddingHorizontal: 24,
-  },
-  card: {
-    backgroundColor: '#fff',
-    padding: 32,
-    borderRadius: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 2,
-  },
-  title: {
-    fontSize: 24,
-    fontWeight: 600,
-    textAlign: 'center',
-    marginBottom: 8,
-    color: '#1a1a1a',
-  },
-  subtitle: {
-    textAlign: 'center',
-    marginBottom: 32,
-    color: '#60646c',
-    fontSize: 14,
-  },
-  roleButton: {
-    backgroundColor: '#f5f5f7',
-    padding: 20,
-    borderRadius: 12,
-    marginBottom: 12,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+  list: { gap: Space.md },
+  option: {
+    borderRadius: Radius.lg,
     borderWidth: 1,
-    borderColor: 'transparent',
+    borderColor: Brand.border,
+    backgroundColor: Brand.surface,
+    padding: Space.md,
   },
-  roleButtonActive: {
-    borderColor: '#3c87f7',
-    backgroundColor: '#e8f1fe',
-  },
-  roleText: {
-    fontSize: 18,
-    fontWeight: 600,
-    color: '#1a1a1a',
-  },
-  roleSubtext: {
-    color: '#86868b',
-    fontSize: 12,
-  },
-  continueButton: {
-    backgroundColor: '#3c87f7',
-    padding: 16,
-    borderRadius: 12,
-    marginTop: 24,
+  optionActive: { borderColor: Brand.ink, backgroundColor: Brand.surface },
+  pressed: { opacity: 0.85 },
+  optionTop: { flexDirection: 'row', alignItems: 'center', gap: Space.md },
+  iconBox: {
+    width: 44,
+    height: 44,
+    borderRadius: Radius.sm,
+    backgroundColor: Brand.background,
     alignItems: 'center',
+    justifyContent: 'center',
   },
-  continueText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: 600,
+  iconBoxActive: { backgroundColor: Brand.ink },
+  optionCopy: { flex: 1 },
+  optionTitle: { ...Type.bodyStrong, fontSize: 15, fontWeight: '700', color: Brand.text },
+  optionTitleActive: { color: Brand.text },
+  optionDescription: { ...Type.meta, color: Brand.textSecondary, marginTop: 1 },
+  radio: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    borderWidth: 1.5,
+    borderColor: Brand.border,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
+  radioActive: { borderColor: Brand.primary },
+  radioDot: { width: 10, height: 10, borderRadius: 5, backgroundColor: Brand.primary },
+  points: {
+    marginTop: Space.md,
+    paddingTop: Space.sm,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: Brand.divider,
+    gap: 5,
+  },
+  point: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  pointText: { fontSize: 11, color: Brand.textSecondary },
+  submit: { marginTop: Space.xl },
 });
