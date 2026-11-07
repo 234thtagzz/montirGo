@@ -3,7 +3,7 @@ import { Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'r
 import { useFocusEffect, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
-import { ErrorState } from '@/components/ui/state';
+import { EmptyState, ErrorState } from '@/components/ui/state';
 import { Skeleton } from '@/components/ui/skeleton';
 import { SectionHeader } from '@/components/ui/section-header';
 import { Ionicons } from '@/components/ui/icon';
@@ -25,6 +25,7 @@ import { expireStaleAssignments } from '@/features/service-request/assignments';
 import { SERVICE_CATEGORIES, type ServiceCategory } from '@/features/service-request/categories';
 import { HomeHeader } from '@/features/client/components/home-header';
 import { HeroCard } from '@/features/client/components/hero-card';
+import { HomeSummary } from '@/features/client/components/home-summary';
 import { ServiceGrid } from '@/features/client/components/service-grid';
 import { PromoCarousel, type PromoKey } from '@/features/client/components/promo-carousel';
 import { ActiveOrderCard } from '@/features/client/components/active-order-card';
@@ -135,7 +136,8 @@ export default function ClientHomeScreen() {
     };
   }, [user?.id, load]);
 
-  const activeOrder = orders.find((order) => isActiveStatus(order.status)) ?? null;
+  const activeOrders = orders.filter((order) => isActiveStatus(order.status));
+  const activeOrder = activeOrders[0] ?? null;
   const pendingAssignment =
     orders.find(
       (order) => order.status === 'mechanic_assigned' && Boolean(order.mechanic_id),
@@ -192,6 +194,13 @@ export default function ClientHomeScreen() {
                 onPressOrders={() => router.push('/(client)/(tabs)/my-requests')}
               />
 
+              <HomeSummary
+                activeOrders={activeOrders.length}
+                vehicles={vehicles.length}
+                onlineMechanics={mechanics.length}
+                onPressOrders={() => router.push('/(client)/(tabs)/my-requests')}
+              />
+
               {partialError ? (
                 <View style={styles.partial}>
                   <Ionicons name="information-circle-outline" size={15} color={Brand.amber} />
@@ -226,27 +235,32 @@ export default function ClientHomeScreen() {
               ) : null}
 
               <SectionHeader
+                eyebrow="PEKERJAAN"
+                title="Pesanan aktif"
+                actionLabel={activeOrder ? 'Semua pesanan' : undefined}
+                onPressAction={
+                  activeOrder ? () => router.push('/(client)/(tabs)/my-requests') : undefined
+                }
+              />
+              {activeOrder ? (
+                <ActiveOrderCard order={activeOrder} onPress={() => openOrder(activeOrder)} />
+              ) : (
+                <EmptyState
+                  icon="construct-outline"
+                  message="Belum ada pesanan aktif"
+                  hint="Pilih layanan di bawah untuk meminta bantuan montir."
+                  actionLabel="Lihat layanan"
+                  onPressAction={() => router.push('/(client)/services')}
+                />
+              )}
+
+              <SectionHeader
                 eyebrow="KATALOG"
                 title="Layanan"
                 actionLabel="Lihat semua"
                 onPressAction={() => router.push('/(client)/services')}
               />
               <ServiceGrid categories={SERVICE_CATEGORIES} onPressCategory={openCategory} />
-
-              {activeOrder ? (
-                <>
-                  <SectionHeader
-                    eyebrow="BERLANGSUNG"
-                    title="Pesanan aktif"
-                    actionLabel="Semua pesanan"
-                    onPressAction={() => router.push('/(client)/(tabs)/my-requests')}
-                  />
-                  <ActiveOrderCard order={activeOrder} onPress={() => openOrder(activeOrder)} />
-                </>
-              ) : null}
-
-              <SectionHeader eyebrow="INFO" title="Promo & panduan" />
-              <PromoCarousel onPressPromo={openPromo} />
 
               <SectionHeader eyebrow="DI SEKITAR" title="Montir terdekat" />
               <NearbyMechanics mechanics={mechanics} />
@@ -268,6 +282,9 @@ export default function ClientHomeScreen() {
                 onPressAdd={() => router.push('/(client)/vehicles/new')}
                 onPressManage={() => router.push('/(client)/(tabs)/my-vehicles')}
               />
+
+              <SectionHeader eyebrow="INFO" title="Promo & panduan" />
+              <PromoCarousel onPressPromo={openPromo} />
             </>
           )}
         </View>
@@ -299,6 +316,10 @@ function HomeSkeleton() {
 
       <View style={styles.skeletonBody}>
         <Skeleton height={132} radius={18} style={{ marginTop: -40 }} />
+        <Skeleton height={128} radius={18} style={{ marginTop: Space.md }} />
+        <Skeleton width={120} height={14} style={{ marginTop: Space.xxl }} />
+        <Skeleton height={104} radius={18} style={{ marginTop: Space.md }} />
+        <Skeleton width={120} height={14} style={{ marginTop: Space.xxl }} />
 
         <View style={styles.skeletonGrid}>
           {Array.from({ length: 8 }).map((_, index) => (
@@ -308,9 +329,6 @@ function HomeSkeleton() {
             </View>
           ))}
         </View>
-
-        <Skeleton width={120} height={14} />
-        <Skeleton height={84} radius={18} style={{ marginTop: Space.md }} />
       </View>
     </View>
   );

@@ -137,7 +137,7 @@ const styles = StyleSheet.create({
     borderRadius: Radius.lg,
     padding: Space.md,
     borderWidth: 1,
-    borderColor: Brand.divider,
+    borderColor: Brand.border,
   },
   media: { marginBottom: Space.md },
   workshopPhoto: {
@@ -204,7 +204,7 @@ const styles = StyleSheet.create({
     backgroundColor: Brand.surface,
     borderRadius: Radius.lg,
     borderWidth: 1,
-    borderColor: Brand.divider,
+    borderColor: Brand.border,
     padding: Space.lg,
   },
   emptyCopy: { flex: 1 },
