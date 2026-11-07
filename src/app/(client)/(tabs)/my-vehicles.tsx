@@ -81,7 +81,7 @@ export default function MyVehiclesScreen() {
             onPress={() => router.push('/(client)/vehicles/new')}
             style={({ pressed }) => [styles.addButton, pressed && styles.pressed]}
           >
-            <Ionicons name="add" size={20} color={Brand.white} />
+            <Ionicons name="add" size={20} color={Brand.volt} />
           </Pressable>
         }
       />

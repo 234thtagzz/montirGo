@@ -36,7 +36,7 @@ export function EmptyState({ message, hint, icon, actionLabel, onPressAction }: 
           style={({ pressed }) => [styles.action, pressed && styles.pressed]}
         >
           <Text style={styles.actionText}>{actionLabel}</Text>
-          <Ionicons name="arrow-forward" size={14} color={Brand.white} />
+          <Ionicons name="arrow-forward" size={14} color={Brand.volt} />
         </Pressable>
       ) : null}
     </View>

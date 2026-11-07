@@ -9,7 +9,7 @@ import {
 import { Brand, Radius, Space, Type } from '@/constants/brand';
 import { Ionicons, type IconName } from '@/components/ui/icon';
 
-type ButtonVariant = 'primary' | 'secondary' | 'ghost' | 'ink' | 'danger';
+type ButtonVariant = 'primary' | 'secondary' | 'ghost' | 'volt' | 'ink' | 'danger';
 
 interface ButtonProps {
   label: string;
@@ -22,38 +22,55 @@ interface ButtonProps {
   style?: StyleProp<ViewStyle>;
 }
 
+/**
+ * Palet tombol mengikuti kartu Saldo MontirGo Pay:
+ * gelap (ink) untuk aksi utama, terang (surface + border) untuk aksi
+ * sekunder, dan volt hanya sebagai aksen di atas permukaan gelap.
+ */
 const VARIANTS: Record<
   ButtonVariant,
-  { background: string; border: string; text: string; spinner: string }
+  { background: string; border: string; text: string; icon: string; spinner: string }
 > = {
   primary: {
-    background: Brand.primary,
-    border: Brand.primary,
+    background: Brand.ink,
+    border: Brand.ink,
     text: Brand.white,
-    spinner: Brand.white,
+    icon: Brand.volt,
+    spinner: Brand.volt,
   },
   secondary: {
-    background: Brand.primarySoft,
-    border: Brand.primarySoft,
-    text: Brand.primaryDark,
-    spinner: Brand.primary,
+    background: Brand.surface,
+    border: Brand.border,
+    text: Brand.text,
+    icon: Brand.textSecondary,
+    spinner: Brand.textSecondary,
   },
   ghost: {
     background: 'transparent',
     border: Brand.border,
     text: Brand.text,
+    icon: Brand.textSecondary,
     spinner: Brand.text,
+  },
+  volt: {
+    background: Brand.volt,
+    border: Brand.volt,
+    text: Brand.ink,
+    icon: Brand.ink,
+    spinner: Brand.ink,
   },
   ink: {
     background: Brand.ink,
     border: Brand.ink,
     text: Brand.white,
-    spinner: Brand.white,
+    icon: Brand.volt,
+    spinner: Brand.volt,
   },
   danger: {
     background: Brand.redSoft,
     border: Brand.redSoft,
     text: Brand.red,
+    icon: Brand.red,
     spinner: Brand.red,
   },
 };
@@ -93,7 +110,7 @@ export function Button({
       ) : (
         <>
           {icon ? (
-            <Ionicons name={icon} size={compact ? 16 : 18} color={palette.text} />
+            <Ionicons name={icon} size={compact ? 16 : 18} color={palette.icon} />
           ) : null}
           <Text
             numberOfLines={1}

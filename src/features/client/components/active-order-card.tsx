@@ -97,16 +97,11 @@ export function ActiveOrderCard({ order, onPress }: ActiveOrderCardProps) {
             )}
           </View>
 
-          <View
-            style={[
-              styles.action,
-              pendingConfirmation ? styles.actionPending : styles.actionPrimary,
-            ]}
-          >
+          <View style={styles.action}>
             <Text style={styles.actionText}>
               {pendingConfirmation ? 'Konfirmasi' : 'Lacak'}
             </Text>
-            <Ionicons name="arrow-forward" size={13} color={Brand.white} />
+            <Ionicons name="arrow-forward" size={13} color={Brand.volt} />
           </View>
         </View>
       </View>
@@ -166,12 +161,11 @@ const styles = StyleSheet.create({
   action: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 3,
+    gap: 5,
     paddingHorizontal: Space.md,
     minHeight: 34,
     borderRadius: Radius.pill,
+    backgroundColor: Brand.ink,
   },
-  actionPrimary: { backgroundColor: Brand.primary },
-  actionPending: { backgroundColor: Brand.amber },
   actionText: { fontSize: 11.5, fontWeight: '700', color: Brand.white },
 });

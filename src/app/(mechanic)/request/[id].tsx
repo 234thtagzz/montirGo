@@ -237,7 +237,7 @@ export default function MechanicRequestDetailScreen() {
                 onPress={chatClient}
                 style={({ pressed }) => [styles.chatButton, pressed && styles.pressed]}
               >
-                <Ionicons name="logo-whatsapp" size={19} color={Brand.ink} />
+                <Ionicons name="logo-whatsapp" size={19} color={Brand.volt} />
               </Pressable>
             ) : null}
           </View>
@@ -367,7 +367,7 @@ const styles = StyleSheet.create({
     width: 42,
     height: 42,
     borderRadius: 21,
-    backgroundColor: Brand.whatsapp,
+    backgroundColor: Brand.ink,
     alignItems: 'center',
     justifyContent: 'center',
   },

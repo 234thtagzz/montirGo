@@ -229,7 +229,7 @@ export default function ClientHomeScreen() {
                   </View>
                   <View style={styles.confirmAction}>
                     <Text style={styles.confirmActionText}>Konfirmasi</Text>
-                    <Ionicons name="chevron-forward" size={14} color={Brand.amber} />
+                    <Ionicons name="chevron-forward" size={14} color={Brand.volt} />
                   </View>
                 </Pressable>
               ) : null}
@@ -389,13 +389,13 @@ const styles = StyleSheet.create({
   confirmAction: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 3,
-    backgroundColor: Brand.surface,
-    paddingHorizontal: 8,
-    paddingVertical: 5,
-    borderRadius: Radius.xs,
+    gap: 4,
+    backgroundColor: Brand.ink,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+    borderRadius: Radius.sm,
   },
-  confirmActionText: { ...Type.label, color: Brand.amber, fontWeight: '800' },
+  confirmActionText: { ...Type.label, color: Brand.white, fontWeight: '800' },
   pressed: { opacity: 0.85 },
   skeletonScreen: { flex: 1, backgroundColor: Brand.background },
   skeletonHeader: {

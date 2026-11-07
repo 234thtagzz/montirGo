@@ -502,7 +502,7 @@ export default function ClientOrderDetailScreen() {
                 onPress={chatMechanic}
                 style={({ pressed }) => [styles.chatButton, pressed && styles.pressed]}
               >
-                <Ionicons name="logo-whatsapp" size={18} color={Brand.white} />
+                <Ionicons name="logo-whatsapp" size={18} color={Brand.volt} />
               </Pressable>
             ) : null}
           </View>
@@ -904,7 +904,7 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: Radius.sm,
-    backgroundColor: Brand.whatsapp,
+    backgroundColor: Brand.ink,
     alignItems: 'center',
     justifyContent: 'center',
   },
