@@ -1,7 +1,7 @@
-import { StyleSheet, Text, View } from 'react-native';
-import { Button } from '@/components/ui/button';
-import { Ionicons } from '@/components/ui/icon';
-import { Brand, CardShadow, Radius, Space, Type } from '@/constants/brand';
+import { Button } from "@/components/ui/button";
+import { Ionicons } from "@/components/ui/icon";
+import { Brand, CardShadow, Radius, Space, Type } from "@/constants/brand";
+import { StyleSheet, Text, View } from "react-native";
 
 interface HeroCardProps {
   onPressRequest: () => void;
@@ -22,7 +22,9 @@ export function HeroCard({ onPressRequest, onPressOrders }: HeroCardProps) {
         <View style={styles.copy}>
           <Text style={styles.kicker}>BANTUAN DARURAT</Text>
           <Text style={styles.title}>Kendaraan bermasalah?</Text>
-          <Text style={styles.subtitle}>Montir terdekat datang ke lokasimu.</Text>
+          <Text style={styles.subtitle}>
+            Montir terdekat datang ke lokasimu.
+          </Text>
         </View>
       </View>
 
@@ -55,20 +57,20 @@ const styles = StyleSheet.create({
     borderColor: Brand.border,
     ...CardShadow,
   },
-  top: { flexDirection: 'row', alignItems: 'center', gap: Space.md },
+  top: { flexDirection: "row", alignItems: "center", gap: Space.md },
   iconTile: {
     width: 44,
     height: 44,
     borderRadius: Radius.md,
     backgroundColor: Brand.ink,
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: "center",
+    justifyContent: "center",
   },
   copy: { flex: 1 },
   kicker: { ...Type.micro, color: Brand.primary, letterSpacing: 0.9 },
   title: { ...Type.title, color: Brand.text, marginTop: 2 },
   subtitle: { ...Type.meta, color: Brand.textSecondary, marginTop: 2 },
-  actions: { flexDirection: 'row', gap: Space.sm, marginTop: Space.lg },
-  primary: { flex: 1.4, minHeight: 46 },
-  secondary: { flex: 1, minHeight: 46 },
+  actions: { flexDirection: "row", marginTop: Space.lg, gap: 7, fontSize: 9 },
+  primary: { flex: 1.6 },
+  secondary: { flex: 1 },
 });

@@ -136,9 +136,9 @@ const styles = StyleSheet.create({
   },
   taglineRow: {
     flexDirection: 'row',
-    gap: Space.sm,
+    gap: Space.md,
     marginTop: Space.sm,
-    maxWidth: 330,
+    maxWidth: 300,
   },
   taglineBar: {
     width: 2,
