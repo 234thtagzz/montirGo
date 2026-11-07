@@ -7,7 +7,7 @@ import { ErrorState } from '@/components/ui/state';
 import { Skeleton } from '@/components/ui/skeleton';
 import { SectionHeader } from '@/components/ui/section-header';
 import { Ionicons } from '@/components/ui/icon';
-import { Brand, Radius, ScreenPadding, Space } from '@/constants/brand';
+import { Brand, Radius, ScreenPadding, Space, Type } from '@/constants/brand';
 import { useSessionUser } from '@/hooks/use-session-user';
 import { createRealtimeChannel } from '@/lib/realtime';
 import { supabase } from '@/lib/supabase';
@@ -283,19 +283,22 @@ function HomeSkeleton() {
       <StatusBar style="light" />
       <View style={[styles.skeletonHeader, { paddingTop: insets.top + Space.md }]}>
         <View style={styles.skeletonRow}>
-          <Skeleton width={38} height={38} radius={19} style={styles.onInk} />
+          <Skeleton width={42} height={42} radius={21} style={styles.onInk} />
           <View style={styles.skeletonUser}>
-            <Skeleton width={90} height={10} style={styles.onInk} />
-            <Skeleton width={130} height={14} style={styles.onInk} />
+            <Skeleton width={90} height={9} style={styles.onInk} />
+            <Skeleton width={150} height={15} style={styles.onInk} />
           </View>
-          <Skeleton width={40} height={40} radius={20} style={styles.onInk} />
+          <Skeleton width={42} height={42} radius={14} style={styles.onInk} />
         </View>
-        <Skeleton width={210} height={22} style={[styles.onInk, { marginTop: Space.lg }]} />
-        <Skeleton height={48} radius={14} style={{ marginTop: Space.md }} />
+        <View style={styles.skeletonMeta}>
+          <Skeleton width={96} height={22} radius={11} style={styles.onInk} />
+          <Skeleton width={80} height={12} style={styles.onInk} />
+        </View>
+        <Skeleton height={46} radius={14} style={{ marginTop: Space.lg }} />
       </View>
 
       <View style={styles.skeletonBody}>
-        <Skeleton height={132} radius={18} style={{ marginTop: -44 }} />
+        <Skeleton height={132} radius={18} style={{ marginTop: -40 }} />
 
         <View style={styles.skeletonGrid}>
           {Array.from({ length: 8 }).map((_, index) => (
@@ -329,7 +332,7 @@ const styles = StyleSheet.create({
   errorCard: {
     backgroundColor: Brand.surface,
     borderRadius: Radius.lg,
-    marginTop: -44,
+    marginTop: -40,
     paddingVertical: Space.lg,
   },
   partial: {
@@ -347,35 +350,46 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: Space.md,
-    backgroundColor: Brand.surface,
+    backgroundColor: Brand.amberSoft,
     borderRadius: Radius.lg,
     borderWidth: 1,
-    borderColor: Brand.amber,
+    borderColor: '#F2D48A',
     padding: Space.md,
     marginTop: Space.md,
   },
   confirmIcon: {
-    width: 40,
-    height: 40,
+    width: 38,
+    height: 38,
     borderRadius: Radius.sm,
-    backgroundColor: Brand.amberSoft,
+    backgroundColor: Brand.surface,
     alignItems: 'center',
     justifyContent: 'center',
   },
   confirmCopy: { flex: 1 },
-  confirmTitle: { fontSize: 13, fontWeight: '800', color: Brand.text },
-  confirmText: { fontSize: 11, color: Brand.textSecondary, lineHeight: 15, marginTop: 2 },
-  confirmAction: { flexDirection: 'row', alignItems: 'center', gap: 2 },
-  confirmActionText: { fontSize: 11.5, fontWeight: '800', color: Brand.amber },
+  confirmTitle: { ...Type.bodyStrong, color: Brand.text, fontWeight: '700' },
+  confirmText: { ...Type.meta, color: '#7C5A12', lineHeight: 15, marginTop: 2 },
+  confirmAction: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    backgroundColor: Brand.surface,
+    paddingHorizontal: 8,
+    paddingVertical: 5,
+    borderRadius: Radius.xs,
+  },
+  confirmActionText: { ...Type.label, color: Brand.amber, fontWeight: '800' },
   pressed: { opacity: 0.85 },
   skeletonScreen: { flex: 1, backgroundColor: Brand.background },
   skeletonHeader: {
     backgroundColor: Brand.ink,
     paddingHorizontal: ScreenPadding,
-    paddingBottom: 64,
+    paddingBottom: 58,
+    borderBottomLeftRadius: Radius.xxl,
+    borderBottomRightRadius: Radius.xxl,
   },
   skeletonRow: { flexDirection: 'row', alignItems: 'center', gap: Space.sm },
-  skeletonUser: { flex: 1, gap: 6 },
+  skeletonUser: { flex: 1, gap: 7 },
+  skeletonMeta: { flexDirection: 'row', alignItems: 'center', gap: Space.sm, marginTop: Space.xl },
   onInk: { backgroundColor: 'rgba(255,255,255,0.16)' },
   skeletonBody: { paddingHorizontal: ScreenPadding },
   skeletonGrid: {

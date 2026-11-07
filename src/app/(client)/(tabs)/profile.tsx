@@ -3,12 +3,11 @@ import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { LinearGradient } from 'expo-linear-gradient';
 import { Avatar } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { ConfirmSheet } from '@/components/ui/confirm-sheet';
 import { Ionicons, type IconName } from '@/components/ui/icon';
-import { Brand, Gradient, Radius, ScreenPadding, Space, Type } from '@/constants/brand';
+import { Brand, Radius, ScreenPadding, Space, Type } from '@/constants/brand';
 import { useSessionUser } from '@/hooks/use-session-user';
 import { useAuth } from '@/features/auth/service';
 
@@ -78,23 +77,23 @@ export default function ClientProfileScreen() {
   return (
     <View style={styles.screen}>
       <StatusBar style="light" />
-      <View style={[styles.statusBackdrop, { height: insets.top }]} />
 
       <ScrollView
         contentContainerStyle={styles.content}
         showsVerticalScrollIndicator={false}
       >
-        <LinearGradient
-          colors={Gradient.header}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
-          style={[styles.hero, { paddingTop: insets.top + Space.md }]}
-        >
-          <Text style={styles.heroEyebrow}>AKUN CLIENT</Text>
+        <View style={[styles.hero, { paddingTop: insets.top + Space.md }]}>
+          <View style={styles.heroTop}>
+            <Text style={styles.heroEyebrow}>PROFIL CLIENT</Text>
+            <View style={styles.roleBadge}>
+              <Ionicons name="person-outline" size={11} color={Brand.volt} />
+              <Text style={styles.roleBadgeText}>Akun client</Text>
+            </View>
+          </View>
 
           <View style={styles.identity}>
             <View style={styles.avatarRing}>
-              <Avatar name={initials} size={62} />
+              <Avatar name={initials} size={72} />
             </View>
             <View style={styles.identityCopy}>
               <Text style={styles.name} numberOfLines={1}>
@@ -103,16 +102,42 @@ export default function ClientProfileScreen() {
               <Text style={styles.email} numberOfLines={1}>
                 {user?.email ?? '-'}
               </Text>
-              <View style={styles.roleBadge}>
-                <Ionicons name="person-outline" size={11} color={Brand.volt} />
-                <Text style={styles.roleText}>Akun client</Text>
+              <View style={styles.roleInline}>
+                <Ionicons name="person" size={11} color={Brand.volt} />
+                <Text style={styles.roleInlineText}>Akun Client</Text>
               </View>
             </View>
           </View>
-        </LinearGradient>
+        </View>
 
         <View style={styles.body}>
-          <Text style={styles.sectionLabel}>INFORMASI PRIBADI</Text>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Buat permintaan montir"
+            onPress={() =>
+              router.push({
+                pathname: '/(client)/request/new',
+                params: { category: 'montir' },
+              })
+            }
+            style={({ pressed }) => [styles.quickCard, pressed && styles.pressed]}
+          >
+            <View style={styles.quickIcon}>
+              <Ionicons name="flash-outline" size={19} color={Brand.ink} />
+            </View>
+            <View style={styles.quickCopy}>
+              <Text style={styles.quickTitle}>Butuh bantuan montir?</Text>
+              <Text style={styles.quickText}>
+                Buat permintaan, montir terdekat datang ke lokasimu.
+              </Text>
+            </View>
+            <View style={styles.quickAction}>
+              <Text style={styles.quickActionText}>Pesan</Text>
+              <Ionicons name="arrow-forward" size={13} color={Brand.primary} />
+            </View>
+          </Pressable>
+
+          <SectionHeading icon="person-outline" title="Informasi pribadi" />
           <View style={styles.infoCard}>
             <InfoRow label="Nama lengkap" value={user?.fullName || 'Belum diisi'} />
             <InfoRow label="Email" value={user?.email || 'Belum diisi'} />
@@ -124,7 +149,7 @@ export default function ClientProfileScreen() {
             />
           </View>
 
-          <Text style={styles.sectionLabel}>MENU</Text>
+          <SectionHeading icon="grid-outline" title="Menu" />
           <View style={styles.menuCard}>
             {MENU.map((item, index) => (
               <Pressable
@@ -150,7 +175,7 @@ export default function ClientProfileScreen() {
             ))}
           </View>
 
-          <Text style={styles.sectionLabel}>BANTUAN</Text>
+          <SectionHeading icon="help-circle-outline" title="Bantuan" />
           <View style={styles.menuCard}>
             <Pressable
               accessibilityRole="button"
@@ -205,6 +230,17 @@ export default function ClientProfileScreen() {
   );
 }
 
+function SectionHeading({ icon, title }: { icon: IconName; title: string }) {
+  return (
+    <View style={styles.sectionHeader}>
+      <View style={styles.sectionIcon}>
+        <Ionicons name={icon} size={15} color={Brand.primary} />
+      </View>
+      <Text style={styles.sectionTitle}>{title}</Text>
+    </View>
+  );
+}
+
 function InfoRow({
   label,
   value,
@@ -226,23 +262,32 @@ function InfoRow({
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: Brand.background },
-  statusBackdrop: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    backgroundColor: Gradient.header[0],
-    zIndex: 2,
-  },
   content: { paddingBottom: Space.xxxl },
   hero: {
+    backgroundColor: Brand.ink,
     paddingHorizontal: ScreenPadding,
-    paddingBottom: Space.xxl,
+    paddingBottom: Space.xxxl,
     borderBottomLeftRadius: Radius.xxl,
     borderBottomRightRadius: Radius.xxl,
   },
-  heroEyebrow: { ...Type.micro, color: Brand.inkMuted, letterSpacing: 1 },
-  identity: { flexDirection: 'row', alignItems: 'center', gap: Space.lg, marginTop: Space.lg },
+  heroTop: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: Space.sm,
+  },
+  heroEyebrow: { ...Type.micro, color: Brand.inkMuted },
+  roleBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 9,
+    paddingVertical: 4,
+    borderRadius: Radius.pill,
+    backgroundColor: Brand.surface,
+  },
+  roleBadgeText: { ...Type.micro, fontSize: 9.5, color: Brand.text, letterSpacing: 0.2 },
+  identity: { flexDirection: 'row', alignItems: 'center', gap: Space.lg, marginTop: Space.xl },
   avatarRing: {
     padding: 2,
     borderRadius: Radius.pill,
@@ -251,26 +296,55 @@ const styles = StyleSheet.create({
   },
   identityCopy: { flex: 1 },
   name: { ...Type.h1, color: Brand.white },
-  email: { ...Type.meta, color: Brand.inkText, marginTop: 2 },
-  roleBadge: {
+  email: { ...Type.meta, color: Brand.inkMuted, marginTop: 2 },
+  roleInline: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 5,
-    alignSelf: 'flex-start',
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: Radius.pill,
-    backgroundColor: 'rgba(255,255,255,0.09)',
     marginTop: Space.sm,
   },
-  roleText: { fontSize: 10, fontWeight: '700', color: Brand.inkText },
+  roleInlineText: { ...Type.micro, color: Brand.volt, fontSize: 9.5 },
   body: { paddingHorizontal: ScreenPadding },
-  sectionLabel: {
-    ...Type.micro,
-    color: Brand.textMuted,
-    marginTop: Space.xl,
-    marginBottom: Space.sm,
+  quickCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Space.md,
+    backgroundColor: Brand.surface,
+    borderRadius: Radius.lg,
+    padding: Space.lg,
+    marginTop: -24,
+    borderWidth: 1,
+    borderColor: Brand.border,
   },
+  quickIcon: {
+    width: 42,
+    height: 42,
+    borderRadius: Radius.md,
+    backgroundColor: Brand.volt,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  quickCopy: { flex: 1 },
+  quickTitle: { ...Type.title, color: Brand.text },
+  quickText: { ...Type.meta, color: Brand.textSecondary, marginTop: 2, lineHeight: 16 },
+  quickAction: { flexDirection: 'row', alignItems: 'center', gap: 3 },
+  quickActionText: { ...Type.label, color: Brand.primary, fontWeight: '700' },
+  sectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Space.sm,
+    marginTop: Space.xxl,
+    marginBottom: Space.md,
+  },
+  sectionIcon: {
+    width: 28,
+    height: 28,
+    borderRadius: Radius.sm,
+    backgroundColor: Brand.primarySoft,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  sectionTitle: { ...Type.title, fontSize: 14.5, color: Brand.text },
   infoCard: {
     backgroundColor: Brand.surface,
     borderRadius: Radius.lg,
@@ -284,7 +358,7 @@ const styles = StyleSheet.create({
     borderBottomColor: Brand.divider,
   },
   infoRowLast: { borderBottomWidth: 0 },
-  infoLabel: { fontSize: 11, color: Brand.textMuted, fontWeight: '600' },
+  infoLabel: { ...Type.meta, color: Brand.textMuted, fontWeight: '600' },
   infoValue: { ...Type.bodyStrong, fontSize: 13.5, color: Brand.text, marginTop: 3 },
   infoValueMuted: { color: Brand.textMuted, fontWeight: '400' },
   menuCard: {
@@ -314,7 +388,7 @@ const styles = StyleSheet.create({
   },
   menuCopy: { flex: 1 },
   menuLabel: { ...Type.bodyStrong, color: Brand.text },
-  menuDescription: { fontSize: 11.5, color: Brand.textSecondary, marginTop: 2 },
+  menuDescription: { ...Type.meta, color: Brand.textSecondary, marginTop: 2 },
   logout: { marginTop: Space.xxl },
   footer: {
     ...Type.meta,

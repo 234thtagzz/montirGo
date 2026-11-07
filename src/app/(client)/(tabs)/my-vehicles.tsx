@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button';
 import { ConfirmSheet } from '@/components/ui/confirm-sheet';
 import { EmptyState, ErrorState, LoadingState } from '@/components/ui/state';
 import { Ionicons, type IconName } from '@/components/ui/icon';
-import { Brand, Radius, ScreenPadding, Space, Tabular, Type } from '@/constants/brand';
+import { Brand, Radius, ScreenPadding, Space, Type } from '@/constants/brand';
 import { deleteVehicle, listMyVehicles, type ClientVehicle } from '@/features/client/service';
 import { VehiclePhoto } from '@/features/vehicles/components/vehicle-photo';
 
@@ -117,19 +117,21 @@ export default function MyVehiclesScreen() {
           ) : (
             <>
               <View style={styles.summary}>
-                <View>
-                  <Text style={styles.summaryEyebrow}>TERSIMPAN</Text>
-                  <Text style={styles.summaryValue}>
-                    <Text style={[styles.summaryNumber, Tabular]}>{vehicles.length}</Text>
-                    <Text style={styles.summaryUnit}> kendaraan</Text>
-                  </Text>
-                </View>
                 <View style={styles.summaryIcon}>
-                  <Ionicons name="car-sport-outline" size={22} color={Brand.inkText} />
+                  <Ionicons name="car-sport-outline" size={17} color={Brand.primary} />
+                </View>
+                <View style={styles.summaryCopy}>
+                  <Text style={styles.summaryTitle}>{vehicles.length} kendaraan tersimpan</Text>
+                  <Text style={styles.summaryText}>
+                    Pilih kendaraan saat membuat permintaan agar montir lebih siap.
+                  </Text>
                 </View>
               </View>
 
-              <Text style={styles.sectionLabel}>Daftar kendaraan</Text>
+              <View style={styles.sectionRow}>
+                <Text style={styles.sectionLabel}>Daftar kendaraan</Text>
+                <View style={styles.sectionLine} />
+              </View>
 
               {vehicles.map((vehicle) => (
                 <View key={vehicle.id} style={styles.card}>
@@ -221,45 +223,53 @@ export default function MyVehiclesScreen() {
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: Brand.background },
   addButton: {
-    width: 36,
-    height: 36,
-    borderRadius: Radius.sm,
+    width: 40,
+    height: 40,
+    borderRadius: Radius.md,
     backgroundColor: Brand.ink,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  content: { paddingHorizontal: ScreenPadding, paddingBottom: Space.xxxl },
+  content: { padding: ScreenPadding, paddingBottom: Space.xxxl },
   summary: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    backgroundColor: Brand.ink,
+    gap: Space.md,
+    backgroundColor: Brand.surface,
     borderRadius: Radius.lg,
-    padding: Space.lg,
-    marginTop: Space.xs,
+    borderWidth: 1,
+    borderColor: Brand.border,
+    padding: Space.md,
   },
-  summaryEyebrow: { ...Type.micro, color: Brand.inkMuted },
-  summaryValue: { marginTop: 4 },
-  summaryNumber: { ...Type.display, color: Brand.white },
-  summaryUnit: { ...Type.body, color: Brand.inkText },
   summaryIcon: {
-    width: 44,
-    height: 44,
-    borderRadius: Radius.md,
-    backgroundColor: 'rgba(255,255,255,0.08)',
+    width: 36,
+    height: 36,
+    borderRadius: Radius.sm,
+    backgroundColor: Brand.primarySoft,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  sectionLabel: { ...Type.micro, color: Brand.textMuted, marginTop: Space.xl, marginBottom: Space.sm },
+  summaryCopy: { flex: 1 },
+  summaryTitle: { ...Type.bodyStrong, color: Brand.text, fontWeight: '700' },
+  summaryText: { ...Type.meta, color: Brand.textSecondary, marginTop: 1 },
+  sectionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Space.md,
+    marginTop: Space.xl,
+    marginBottom: Space.md,
+  },
+  sectionLabel: { ...Type.micro, color: Brand.textMuted },
+  sectionLine: { flex: 1, height: StyleSheet.hairlineWidth, backgroundColor: Brand.border },
   card: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: Brand.surface,
     borderRadius: Radius.lg,
     borderWidth: 1,
-    borderColor: Brand.divider,
+    borderColor: Brand.border,
     padding: Space.md,
-    marginBottom: Space.sm,
+    marginBottom: Space.md,
   },
   cardMain: { flexDirection: 'row', alignItems: 'center', gap: Space.md, flex: 1 },
   iconBox: {

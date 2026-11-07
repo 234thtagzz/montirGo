@@ -10,7 +10,7 @@ import {
   markNotificationsRead,
   type ClientNotification,
 } from '@/features/client/service';
-import { formatDayLabel, formatTime } from '@/utils/format';
+import { formatDateTime } from '@/utils/format';
 
 interface NotificationVisual {
   icon: IconName;
@@ -66,6 +66,21 @@ function getVisual(type: string): NotificationVisual {
   return VISUALS[type] ?? FALLBACK_VISUAL;
 }
 
+function dayKey(iso: string): string {
+  const d = new Date(iso);
+  return `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
+}
+
+function dayLabel(iso: string): string {
+  const d = new Date(iso);
+  const today = new Date();
+  const yesterday = new Date();
+  yesterday.setDate(today.getDate() - 1);
+  if (dayKey(iso) === dayKey(today.toISOString())) return 'Hari ini';
+  if (dayKey(iso) === dayKey(yesterday.toISOString())) return 'Kemarin';
+  return d.toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' });
+}
+
 interface DayGroup {
   key: string;
   label: string;
@@ -104,12 +119,12 @@ export default function NotificationsScreen() {
 
   const groups = useMemo<DayGroup[]>(() => {
     const map = new Map<string, DayGroup>();
-    items.forEach((item) => {
-      const label = formatDayLabel(item.created_at);
-      const existing = map.get(label);
+    for (const item of items) {
+      const key = dayKey(item.created_at);
+      const existing = map.get(key);
       if (existing) existing.items.push(item);
-      else map.set(label, { key: label, label, items: [item] });
-    });
+      else map.set(key, { key, label: dayLabel(item.created_at), items: [item] });
+    }
     return Array.from(map.values());
   }, [items]);
 
@@ -136,7 +151,7 @@ export default function NotificationsScreen() {
         >
           {error ? (
             <ErrorState onRetry={load} />
-          ) : groups.length === 0 ? (
+          ) : items.length === 0 ? (
             <EmptyState
               icon="notifications-outline"
               message="Belum ada notifikasi"
@@ -146,19 +161,20 @@ export default function NotificationsScreen() {
             groups.map((group) => (
               <View key={group.key} style={styles.group}>
                 <Text style={styles.groupLabel}>{group.label}</Text>
-                <View style={styles.groupCard}>
+                <View style={styles.inbox}>
                   {group.items.map((item, index) => {
                     const visual = getVisual(item.type);
                     const targetId =
                       item.related_entity_type === 'service_request'
                         ? item.related_entity_id
                         : null;
+                    const actionable = Boolean(targetId);
                     return (
                       <Pressable
                         key={item.id}
-                        accessibilityRole="button"
+                        accessibilityRole={actionable ? 'button' : undefined}
                         accessibilityLabel={item.title}
-                        disabled={!targetId}
+                        disabled={!actionable}
                         onPress={() => {
                           if (!targetId) return;
                           router.push({
@@ -168,27 +184,28 @@ export default function NotificationsScreen() {
                         }}
                         style={({ pressed }) => [
                           styles.row,
-                          index === group.items.length - 1 && styles.rowLast,
-                          pressed && styles.pressed,
+                          index > 0 && styles.rowBorder,
+                          !item.is_read && styles.rowUnread,
+                          pressed && actionable && styles.pressed,
                         ]}
                       >
                         <View style={[styles.iconBox, { backgroundColor: visual.background }]}>
                           <Ionicons name={visual.icon} size={17} color={visual.color} />
                         </View>
                         <View style={styles.copy}>
-                          <View style={styles.titleRow}>
-                            <Text style={styles.title} numberOfLines={1}>
-                              {item.title}
-                            </Text>
-                            <Text style={styles.time}>{formatTime(item.created_at)}</Text>
-                          </View>
+                          <Text style={styles.title}>{item.title}</Text>
                           {item.body ? (
-                            <Text style={styles.body} numberOfLines={2}>
+                            <Text style={styles.body} numberOfLines={3}>
                               {item.body}
                             </Text>
                           ) : null}
+                          <Text style={styles.time}>{formatDateTime(item.created_at)}</Text>
                         </View>
-                        {!item.is_read ? <View style={styles.unreadDot} /> : null}
+                        {!item.is_read ? (
+                          <View style={styles.unreadDot} />
+                        ) : actionable ? (
+                          <Ionicons name="chevron-forward" size={15} color={Brand.textMuted} />
+                        ) : null}
                       </Pressable>
                     );
                   })}
@@ -204,19 +221,14 @@ export default function NotificationsScreen() {
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: Brand.background },
-  content: { paddingHorizontal: ScreenPadding, paddingBottom: Space.xxxl },
-  group: { marginTop: Space.lg },
-  groupLabel: {
-    ...Type.micro,
-    color: Brand.textMuted,
-    marginBottom: Space.sm,
-    textTransform: 'uppercase',
-  },
-  groupCard: {
+  content: { padding: ScreenPadding, paddingBottom: Space.xxxl },
+  group: { marginBottom: Space.xl },
+  groupLabel: { ...Type.micro, color: Brand.textMuted, marginBottom: Space.sm },
+  inbox: {
     backgroundColor: Brand.surface,
     borderRadius: Radius.lg,
     borderWidth: 1,
-    borderColor: Brand.divider,
+    borderColor: Brand.border,
     overflow: 'hidden',
   },
   row: {
@@ -224,10 +236,9 @@ const styles = StyleSheet.create({
     alignItems: 'flex-start',
     gap: Space.md,
     padding: Space.md,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: Brand.divider,
   },
-  rowLast: { borderBottomWidth: 0 },
+  rowBorder: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: Brand.divider },
+  rowUnread: { backgroundColor: Brand.primarySoft },
   pressed: { opacity: 0.75 },
   iconBox: {
     width: 36,
@@ -237,15 +248,14 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   copy: { flex: 1 },
-  titleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 },
-  title: { flex: 1, ...Type.label, fontSize: 13, fontWeight: '700', color: Brand.text },
-  time: { fontSize: 10, color: Brand.textMuted },
-  body: { fontSize: 11.5, color: Brand.textSecondary, marginTop: 3, lineHeight: 16 },
+  title: { ...Type.bodyStrong, color: Brand.text, fontWeight: '700' },
+  body: { ...Type.meta, color: Brand.textSecondary, marginTop: 2, lineHeight: 17 },
+  time: { ...Type.meta, color: Brand.textMuted, marginTop: 6, fontSize: 10 },
   unreadDot: {
-    width: 7,
-    height: 7,
+    width: 8,
+    height: 8,
     borderRadius: 4,
     backgroundColor: Brand.primary,
-    marginTop: 5,
+    marginTop: 6,
   },
 });

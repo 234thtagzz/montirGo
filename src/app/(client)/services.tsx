@@ -102,6 +102,7 @@ function SectionLabel({ icon, label }: { icon: IconName; label: string }) {
     <View style={styles.sectionRow}>
       <Ionicons name={icon} size={12} color={Brand.textMuted} />
       <Text style={styles.sectionLabel}>{label}</Text>
+      <View style={styles.sectionLine} />
     </View>
   );
 }
@@ -114,9 +115,9 @@ const styles = StyleSheet.create({
     gap: Space.sm,
     alignItems: 'center',
     backgroundColor: Brand.surface,
-    borderRadius: Radius.md,
+    borderRadius: Radius.lg,
     borderWidth: 1,
-    borderColor: Brand.divider,
+    borderColor: Brand.border,
     padding: Space.md,
     marginTop: Space.xs,
   },
@@ -134,14 +135,15 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 6,
     marginTop: Space.xl,
-    marginBottom: Space.sm,
+    marginBottom: Space.md,
   },
   sectionLabel: { ...Type.micro, color: Brand.textMuted, letterSpacing: 0.9 },
+  sectionLine: { flex: 1, height: StyleSheet.hairlineWidth, backgroundColor: Brand.border },
   group: {
     backgroundColor: Brand.surface,
     borderRadius: Radius.lg,
     borderWidth: 1,
-    borderColor: Brand.divider,
+    borderColor: Brand.border,
     overflow: 'hidden',
   },
   row: {

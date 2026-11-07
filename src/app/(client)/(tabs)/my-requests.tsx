@@ -3,6 +3,7 @@ import { Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'r
 import { useFocusEffect, useRouter } from 'expo-router';
 import { ScreenHeader } from '@/components/ui/screen-header';
 import { Segmented, type SegmentedOption } from '@/components/ui/segmented';
+import { Money } from '@/components/ui/money';
 import { EmptyState, ErrorState, LoadingState } from '@/components/ui/state';
 import { Ionicons } from '@/components/ui/icon';
 import { Brand, Radius, ScreenPadding, Space, Tabular, Type } from '@/constants/brand';
@@ -12,7 +13,7 @@ import { supabase } from '@/lib/supabase';
 import { listMyRequests, type ClientOrder } from '@/features/client/service';
 import { formatVehicleLabel } from '@/features/vehicles/constants';
 import { getStatusMeta, isActiveStatus } from '@/features/service-request/status';
-import { formatDayLabel, formatIDR, formatTime } from '@/utils/format';
+import { formatDayLabel, formatTime } from '@/utils/format';
 
 type FilterKey = 'all' | 'active' | 'done' | 'cancelled';
 
@@ -227,7 +228,7 @@ function OrderRow({ order, onPress }: { order: ClientOrder; onPress: () => void 
 
       <View style={styles.cardBody}>
         <View style={styles.cardTop}>
-          <View style={styles.statusRow}>
+          <View style={[styles.chip, { backgroundColor: meta.background }]}>
             <Ionicons name={meta.icon} size={12} color={meta.color} />
             <Text style={[styles.statusText, { color: meta.color }]}>{meta.shortLabel}</Text>
           </View>
@@ -239,7 +240,7 @@ function OrderRow({ order, onPress }: { order: ClientOrder; onPress: () => void 
         </Text>
 
         <View style={styles.metaRow}>
-          <Ionicons name="car-outline" size={12} color={Brand.textMuted} />
+          <Ionicons name="car-outline" size={13} color={Brand.textMuted} />
           <Text style={styles.metaText} numberOfLines={1}>
             {vehicle || 'Kendaraan tidak dicantumkan'}
           </Text>
@@ -247,11 +248,14 @@ function OrderRow({ order, onPress }: { order: ClientOrder; onPress: () => void 
 
         <View style={styles.cardBottom}>
           {order.price_amount != null ? (
-            <Text style={[styles.price, Tabular]}>{formatIDR(order.price_amount)}</Text>
+            <View>
+              <Text style={styles.priceLabel}>BIAYA</Text>
+              <Money value={order.price_amount} size="sm" color={Brand.text} />
+            </View>
           ) : (
             <Text style={styles.priceMuted}>Belum ada tagihan</Text>
           )}
-          <Ionicons name="chevron-forward" size={15} color={Brand.textMuted} />
+          <Ionicons name="arrow-forward" size={15} color={Brand.textMuted} />
         </View>
 
         {pendingConfirmation ? (
@@ -275,17 +279,18 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: Brand.surface,
-    borderRadius: Radius.md,
+    borderRadius: Radius.lg,
     borderWidth: 1,
-    borderColor: Brand.divider,
+    borderColor: Brand.border,
     paddingVertical: Space.md,
     marginTop: Space.xs,
+    marginBottom: Space.md,
   },
   summaryItem: { flex: 1, alignItems: 'center' },
   summaryValue: { ...Type.h2, color: Brand.text },
   summaryLabel: { ...Type.meta, color: Brand.textMuted, marginTop: 1 },
   summaryDivider: { width: 1, height: 26, backgroundColor: Brand.divider },
-  segmented: { marginTop: Space.md },
+  segmented: { marginBottom: Space.xs },
   group: { marginTop: Space.lg },
   groupLabel: {
     ...Type.micro,
@@ -298,28 +303,38 @@ const styles = StyleSheet.create({
     backgroundColor: Brand.surface,
     borderRadius: Radius.lg,
     borderWidth: 1,
-    borderColor: Brand.divider,
-    marginBottom: Space.sm,
+    borderColor: Brand.border,
+    marginBottom: Space.md,
     overflow: 'hidden',
   },
   rail: { width: 3 },
-  cardBody: { flex: 1, padding: Space.md },
-  pressed: { opacity: 0.75 },
+  cardBody: { flex: 1, padding: Space.lg },
+  pressed: { opacity: 0.78 },
   cardTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  statusRow: { flexDirection: 'row', alignItems: 'center', gap: 5 },
-  statusText: { fontSize: 10.5, fontWeight: '700' },
-  time: { fontSize: 10.5, color: Brand.textMuted },
-  issue: { ...Type.bodyStrong, color: Brand.text, marginTop: Space.sm },
-  metaRow: { flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 4 },
-  metaText: { flex: 1, fontSize: 11.5, color: Brand.textSecondary },
+  chip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: Radius.pill,
+  },
+  statusText: { ...Type.micro, fontSize: 9.5, letterSpacing: 0.2 },
+  time: { ...Type.meta, color: Brand.textMuted },
+  issue: { ...Type.bodyStrong, color: Brand.text, marginTop: Space.md, lineHeight: 20 },
+  metaRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: Space.sm },
+  metaText: { flex: 1, ...Type.meta, color: Brand.textSecondary },
   cardBottom: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginTop: Space.sm,
+    marginTop: Space.md,
+    paddingTop: Space.md,
+    borderTopWidth: 1,
+    borderTopColor: Brand.divider,
   },
-  price: { fontSize: 13, fontWeight: '700', color: Brand.primary },
-  priceMuted: { fontSize: 11, color: Brand.textMuted },
+  priceLabel: { ...Type.micro, color: Brand.textMuted, marginBottom: 1 },
+  priceMuted: { ...Type.meta, color: Brand.textMuted },
   pendingRow: {
     flexDirection: 'row',
     alignItems: 'center',
