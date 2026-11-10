@@ -34,7 +34,13 @@ interface AppLoadingScreenProps {
   onLayout?: (event: LayoutChangeEvent) => void;
 }
 
-
+/**
+ * Layar tunggu aplikasi.
+ *
+ * Palet mengikuti Beranda: permukaan ink "Night Garage" dengan glow biru
+ * elektrik, aksen volt hanya sebagai sinyal live, dan teks inkText/inkMuted.
+ * Tidak ada permukaan terang besar agar transisi ke Beranda terasa menyatu.
+ */
 export function AppLoadingScreen({
   status = 'Menyiapkan layanan…',
   exiting = false,
@@ -51,6 +57,7 @@ export function AppLoadingScreen({
   const spin = useSharedValue(0);
   const float = useSharedValue(0);
   const shimmer = useSharedValue(reduceMotion ? 0.5 : 0);
+  const blink = useSharedValue(reduceMotion ? 1 : 0);
   const exit = useSharedValue(0);
 
   useEffect(() => {
@@ -63,7 +70,7 @@ export function AppLoadingScreen({
     }
 
     pulse.value = withRepeat(withTiming(1, { duration: 2400, easing: Easing.out(Easing.quad) }), -1);
-    spin.value = withRepeat(withTiming(1, { duration: 7000, easing: Easing.linear }), -1);
+    spin.value = withRepeat(withTiming(1, { duration: 9000, easing: Easing.linear }), -1);
     float.value = withRepeat(
       withSequence(
         withTiming(1, { duration: 1800, easing: Easing.inOut(Easing.sin) }),
@@ -75,7 +82,14 @@ export function AppLoadingScreen({
       withTiming(1, { duration: 1500, easing: Easing.inOut(Easing.quad) }),
       -1,
     );
-  }, [copy, float, instant, intro, pop, pulse, reduceMotion, shimmer, spin]);
+    blink.value = withRepeat(
+      withSequence(
+        withTiming(1, { duration: 900, easing: Easing.inOut(Easing.quad) }),
+        withTiming(0.25, { duration: 900, easing: Easing.inOut(Easing.quad) }),
+      ),
+      -1,
+    );
+  }, [blink, copy, float, instant, intro, pop, pulse, reduceMotion, shimmer, spin]);
 
   useEffect(() => {
     if (exiting) {
@@ -89,7 +103,7 @@ export function AppLoadingScreen({
   }));
 
   const haloStyle = useAnimatedStyle(() => ({
-    opacity: 0.5 * (1 - pulse.value),
+    opacity: 0.45 * (1 - pulse.value),
     transform: [{ scale: 0.82 + pulse.value * 0.58 }],
   }));
 
@@ -111,7 +125,7 @@ export function AppLoadingScreen({
   }));
 
   const taglineStyle = useAnimatedStyle(() => ({
-    opacity: copy.value * 0.86,
+    opacity: copy.value * 0.9,
     transform: [{ translateY: interpolate(copy.value, [0, 1], [12, 0]) }],
   }));
 
@@ -127,6 +141,10 @@ export function AppLoadingScreen({
     transform: [{ translateX: interpolate(shimmer.value, [0, 1], [-THUMB_WIDTH, TRACK_WIDTH]) }],
   }));
 
+  const statusDotStyle = useAnimatedStyle(() => ({
+    opacity: 0.35 + blink.value * 0.65,
+  }));
+
   return (
     <Animated.View
       accessibilityLabel="Memuat MontirGo"
@@ -134,27 +152,63 @@ export function AppLoadingScreen({
       style={[styles.screen, screenStyle, exiting ? styles.screenExiting : null]}
     >
       <StatusBar style="light" />
+
+      {/* Dasar gelap yang sama dengan header Beranda. */}
       <LinearGradient
-        colors={Gradient.splash}
+        colors={Gradient.header}
         start={{ x: 0.1, y: 0 }}
         end={{ x: 0.9, y: 1 }}
         style={StyleSheet.absoluteFill}
       />
+
       <View pointerEvents="none" style={StyleSheet.absoluteFill}>
-        <View style={styles.orbTop} />
-        <View style={styles.orbBottom} />
-        <View style={styles.orbMiddle} />
-        <Ionicons name="sparkles" size={18} color="rgba(255,255,255,0.3)" style={styles.sparkTop} />
-        <Ionicons
-          name="sparkles"
-          size={12}
-          color="rgba(255,255,255,0.24)"
-          style={styles.sparkBottom}
+        {/* Cahaya biru dari kiri atas. */}
+        <LinearGradient
+          colors={['rgba(11,107,255,0.30)', 'rgba(11,18,32,0)']}
+          locations={[0, 0.62]}
+          start={{ x: 0.15, y: 0 }}
+          end={{ x: 0.9, y: 0.8 }}
+          style={StyleSheet.absoluteFill}
         />
+        {/* Pantulan volt tipis dari kanan bawah. */}
+        <LinearGradient
+          colors={['rgba(201,241,88,0.13)', 'rgba(201,241,88,0)']}
+          locations={[0, 0.6]}
+          start={{ x: 0.9, y: 1 }}
+          end={{ x: 0.2, y: 0.3 }}
+          style={StyleSheet.absoluteFill}
+        />
+        {/* Vignette agar fokus ke tengah dan footer menyatu. */}
+        <LinearGradient
+          colors={['rgba(11,18,32,0)', 'rgba(11,18,32,0.88)']}
+          locations={[0.45, 1]}
+          style={StyleSheet.absoluteFill}
+        />
+
+        <LinearGradient
+          colors={['rgba(11,107,255,0.26)', 'rgba(11,107,255,0)']}
+          start={{ x: 0.3, y: 0.2 }}
+          end={{ x: 0.9, y: 0.9 }}
+          style={styles.glowTop}
+        />
+        <LinearGradient
+          colors={['rgba(201,241,88,0.16)', 'rgba(201,241,88,0)']}
+          start={{ x: 0.2, y: 0.8 }}
+          end={{ x: 0.9, y: 0.1 }}
+          style={styles.glowBottom}
+        />
+
+        <View style={styles.sparkTop}>
+          <Ionicons name="add" size={16} color="rgba(220,228,245,0.22)" />
+        </View>
+        <View style={styles.sparkBottom}>
+          <Ionicons name="add" size={12} color="rgba(220,228,245,0.18)" />
+        </View>
       </View>
 
       <View style={styles.content}>
         <View style={styles.stage}>
+          <View style={styles.orbit} />
           <View style={styles.baseRing} />
           <Animated.View style={[styles.halo, haloStyle]} />
           <Animated.View style={[styles.arc, arcStyle]} />
@@ -171,10 +225,10 @@ export function AppLoadingScreen({
           </Animated.View>
 
           <Animated.View style={[styles.chip, styles.chipTop, chipTopStyle]}>
-            <Ionicons name="construct-outline" size={16} color={Brand.white} />
+            <Ionicons name="construct-outline" size={16} color={Brand.volt} />
           </Animated.View>
           <Animated.View style={[styles.chip, styles.chipBottom, chipBottomStyle]}>
-            <Ionicons name="flash-outline" size={15} color={Brand.white} />
+            <Ionicons name="flash-outline" size={15} color={Brand.inkText} />
           </Animated.View>
         </View>
 
@@ -185,7 +239,7 @@ export function AppLoadingScreen({
         </Animated.View>
 
         <Animated.Text style={[styles.tagline, taglineStyle]}>
-          Montir terdekat, siap bantu
+          MONTIR TERDEKAT, SIAP BANTU
         </Animated.Text>
       </View>
 
@@ -197,16 +251,19 @@ export function AppLoadingScreen({
         >
           <Animated.View style={[styles.thumb, progressStyle]}>
             <LinearGradient
-              colors={['rgba(255,255,255,0.15)', '#FFFFFF', 'rgba(255,255,255,0.15)']}
+              colors={['rgba(201,241,88,0)', Brand.volt, 'rgba(201,241,88,0)']}
               start={{ x: 0, y: 0.5 }}
               end={{ x: 1, y: 0.5 }}
               style={StyleSheet.absoluteFill}
             />
           </Animated.View>
         </View>
-        <Text accessibilityLiveRegion="polite" style={styles.status}>
-          {status}
-        </Text>
+        <View style={styles.statusRow}>
+          <Animated.View style={[styles.statusDot, statusDotStyle]} />
+          <Text accessibilityLiveRegion="polite" style={styles.status}>
+            {status}
+          </Text>
+        </View>
       </View>
     </Animated.View>
   );
@@ -219,39 +276,28 @@ const styles = StyleSheet.create({
     right: 0,
     bottom: 0,
     left: 0,
-    backgroundColor: Brand.primary,
+    backgroundColor: Brand.ink,
     overflow: 'hidden',
   },
   screenExiting: { pointerEvents: 'none' },
-  orbTop: {
+  glowTop: {
     position: 'absolute',
-    width: 320,
-    height: 320,
-    borderRadius: 160,
-    top: -130,
-    right: -110,
-    backgroundColor: 'rgba(255,255,255,0.09)',
+    width: 460,
+    height: 460,
+    borderRadius: 230,
+    top: -210,
+    right: -160,
   },
-  orbMiddle: {
+  glowBottom: {
     position: 'absolute',
-    width: 190,
-    height: 190,
-    borderRadius: 95,
-    top: '42%',
-    left: -110,
-    backgroundColor: 'rgba(255,255,255,0.06)',
+    width: 420,
+    height: 420,
+    borderRadius: 210,
+    bottom: -190,
+    left: -150,
   },
-  orbBottom: {
-    position: 'absolute',
-    width: 260,
-    height: 260,
-    borderRadius: 130,
-    bottom: -120,
-    right: -70,
-    backgroundColor: 'rgba(255,255,255,0.07)',
-  },
-  sparkTop: { position: 'absolute', top: '24%', left: '16%' },
-  sparkBottom: { position: 'absolute', bottom: '27%', right: '18%' },
+  sparkTop: { position: 'absolute', top: '22%', left: '15%' },
+  sparkBottom: { position: 'absolute', bottom: '28%', right: '16%' },
   content: {
     flex: 1,
     alignItems: 'center',
@@ -264,13 +310,21 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  orbit: {
+    position: 'absolute',
+    width: STAGE_SIZE,
+    height: STAGE_SIZE,
+    borderRadius: STAGE_SIZE / 2,
+    borderWidth: 1,
+    borderColor: 'rgba(220,228,245,0.07)',
+  },
   baseRing: {
     position: 'absolute',
     width: 136,
     height: 136,
     borderRadius: 68,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.22)',
+    borderColor: 'rgba(220,228,245,0.12)',
   },
   halo: {
     position: 'absolute',
@@ -278,7 +332,7 @@ const styles = StyleSheet.create({
     height: STAGE_SIZE,
     borderRadius: STAGE_SIZE / 2,
     borderWidth: 1.5,
-    borderColor: 'rgba(255,255,255,0.55)',
+    borderColor: 'rgba(201,241,88,0.55)',
   },
   arc: {
     position: 'absolute',
@@ -287,23 +341,25 @@ const styles = StyleSheet.create({
     borderRadius: 80,
     borderWidth: 2,
     borderColor: 'transparent',
-    borderTopColor: 'rgba(255,255,255,0.95)',
-    borderRightColor: 'rgba(255,255,255,0.3)',
+    borderTopColor: Brand.volt,
+    borderRightColor: 'rgba(201,241,88,0.16)',
   },
   logoTile: {
     width: LOGO_SIZE,
     height: LOGO_SIZE,
-    borderRadius: 22,
-    backgroundColor: Brand.primary,
-    shadowColor: '#04264F',
-    shadowOffset: { width: 0, height: 12 },
-    shadowOpacity: 0.4,
-    shadowRadius: 22,
-    elevation: 14,
+    borderRadius: 24,
+    backgroundColor: '#F7FAFF',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.18)',
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 14 },
+    shadowOpacity: 0.5,
+    shadowRadius: 26,
+    elevation: 16,
   },
   logoClip: {
     flex: 1,
-    borderRadius: 22,
+    borderRadius: 24,
     overflow: 'hidden',
   },
   logoImage: { width: '100%', height: '100%' },
@@ -314,9 +370,9 @@ const styles = StyleSheet.create({
     borderRadius: 17,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: 'rgba(255,255,255,0.18)',
+    backgroundColor: 'rgba(220,228,245,0.08)',
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.28)',
+    borderColor: 'rgba(220,228,245,0.16)',
   },
   chipTop: { top: 12, right: -4 },
   chipBottom: { bottom: 16, left: -6 },
@@ -324,15 +380,16 @@ const styles = StyleSheet.create({
     marginTop: Space.xxl,
     fontSize: 31,
     fontWeight: '800',
-    letterSpacing: -0.4,
+    letterSpacing: -0.6,
     color: Brand.white,
   },
-  wordmarkAccent: { color: '#D5E9FF', fontWeight: '600' },
+  wordmarkAccent: { color: Brand.volt, fontWeight: '700' },
   tagline: {
     marginTop: Space.sm,
-    fontSize: 13,
-    letterSpacing: 0.2,
-    color: 'rgba(255,255,255,0.82)',
+    fontSize: 10,
+    fontWeight: '700',
+    letterSpacing: 1.8,
+    color: Brand.inkMuted,
   },
   footer: {
     position: 'absolute',
@@ -343,21 +400,32 @@ const styles = StyleSheet.create({
   },
   track: {
     width: TRACK_WIDTH,
-    height: 4,
+    height: 3,
     borderRadius: 2,
     overflow: 'hidden',
-    backgroundColor: 'rgba(255,255,255,0.22)',
+    backgroundColor: 'rgba(220,228,245,0.12)',
   },
   thumb: {
     width: THUMB_WIDTH,
-    height: 4,
+    height: 3,
     borderRadius: 2,
     overflow: 'hidden',
   },
-  status: {
+  statusRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 7,
     marginTop: Space.md,
+  },
+  statusDot: {
+    width: 5,
+    height: 5,
+    borderRadius: 3,
+    backgroundColor: Brand.volt,
+  },
+  status: {
     fontSize: 11.5,
     letterSpacing: 0.3,
-    color: 'rgba(255,255,255,0.74)',
+    color: Brand.inkMuted,
   },
 });
