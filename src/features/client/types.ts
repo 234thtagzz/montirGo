@@ -49,6 +49,17 @@ export interface ClientOrder {
   mechanic_avatar: string | null;
 }
 
+/** Satu baris pada tagihan terperinci (keterangan + harga). */
+export interface OrderInvoiceItem {
+  id: string;
+  request_id: string;
+  mechanic_id?: string;
+  keterangan: string;
+  harga: number;
+  created_at: string;
+  updated_at?: string;
+}
+
 /** Ringkasan identitas montir untuk Beranda client. */
 export interface NearbyMechanic {
   profile_id: string;

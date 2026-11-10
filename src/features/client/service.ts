@@ -11,6 +11,7 @@ import type {
   MechanicAssignmentProfile,
   MechanicLocationSnapshot,
   NearbyMechanic,
+  OrderInvoiceItem,
   OrderStatusEvent,
   VehicleInput,
 } from './types';
@@ -306,6 +307,22 @@ export async function listStatusHistory(requestId: string): Promise<OrderStatusE
     .order('created_at', { ascending: true });
   if (error) throw error;
   return (data ?? []) as OrderStatusEvent[];
+}
+
+/**
+ * Rincian baris tagihan (keterangan + harga) yang dikirim montir.
+ * RLS memperbolehkan client membaca baris milik ordernya sendiri.
+ */
+export async function listOrderInvoiceItems(
+  requestId: string,
+): Promise<OrderInvoiceItem[]> {
+  const { data, error } = await supabase
+    .from('order_invoice_items')
+    .select('id, request_id, mechanic_id, keterangan, harga, created_at, updated_at')
+    .eq('request_id', requestId)
+    .order('created_at', { ascending: true });
+  if (error) throw error;
+  return (data ?? []) as OrderInvoiceItem[];
 }
 
 // ---------- Montir online ----------

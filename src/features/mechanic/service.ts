@@ -7,7 +7,7 @@ import {
 import type {
   ActivityItem, EarningsSummary, IncomingOrder, IncomingRequestDetail, MechanicCertification,
   MechanicCertificationInput, MechanicLocationPoint, MechanicOrderDetail, MechanicProfile,
-  MechanicProfilePatch, MechanicReview, MyOrder, OrderStatus, OrderStatusEvent,
+  MechanicProfilePatch, MechanicReview, MyOrder, OrderInvoiceItem, OrderStatus, OrderStatusEvent,
 } from './types';
 
 export * from './types';
@@ -671,40 +671,90 @@ const ACTIVITY_DESCRIPTION: Partial<Record<OrderStatus, (shortId: string) => str
   cancelled: (shortId) => `Order #${shortId} dibatalkan.`,
 };
 
-const PRICE_ERROR_MESSAGES: Record<string, string> = {
-  INVALID_STATUS: 'Tagihan bisa diisi setelah kamu tiba di lokasi client.',
-  INVALID_PRICE: 'Nominal tagihan tidak valid atau di luar batas yang diizinkan.',
-  ALREADY_PAID: 'Order ini sudah dibayar.',
-  NOT_YOUR_ORDER: 'Order ini bukan milikmu.',
-  REQUEST_NOT_FOUND: 'Order tidak ditemukan.',
+// ---------- Tagihan terperinci ----------
+
+const INVOICE_ITEM_SELECT =
+  'id, request_id, mechanic_id, keterangan, harga, created_at, updated_at';
+
+/** Semua baris tagihan milik satu order, urut sesuai urutan dibuat. */
+export async function listOrderInvoiceItems(
+  requestId: string,
+): Promise<OrderInvoiceItem[]> {
+  const { data, error } = await supabase
+    .from('order_invoice_items')
+    .select(INVOICE_ITEM_SELECT)
+    .eq('request_id', requestId)
+    .order('created_at', { ascending: true });
+  if (error) throw error;
+  return (data ?? []) as OrderInvoiceItem[];
+}
+
+/** Montir menambah satu baris keterangan + harga sebelum mengirim tagihan. */
+export async function addOrderInvoiceItem(
+  requestId: string,
+  input: { keterangan: string; harga: number },
+): Promise<OrderInvoiceItem> {
+  const mechanicId = await getMyId();
+  const keterangan = input.keterangan.trim();
+  if (!keterangan) throw new Error('Keterangan wajib diisi.');
+  if (!Number.isFinite(input.harga) || input.harga <= 0) {
+    throw new Error('Harga harus lebih dari 0.');
+  }
+
+  const { data, error } = await supabase
+    .from('order_invoice_items')
+    .insert({
+      request_id: requestId,
+      mechanic_id: mechanicId,
+      keterangan,
+      harga: Math.round(input.harga),
+    })
+    .select(INVOICE_ITEM_SELECT)
+    .single();
+  if (error) throw error;
+  return data as OrderInvoiceItem;
+}
+
+/** Hapus satu baris selama tagihan belum dikirim. */
+export async function deleteOrderInvoiceItem(itemId: string): Promise<void> {
+  const { error } = await supabase
+    .from('order_invoice_items')
+    .delete()
+    .eq('id', itemId);
+  if (error) throw error;
+}
+
+const INVOICE_ERROR_MESSAGES: Record<string, string> = {
   UNAUTHORIZED: 'Sesi berakhir. Silakan login kembali.',
+  REQUEST_NOT_FOUND: 'Order tidak ditemukan.',
+  NOT_YOUR_ORDER: 'Order ini bukan milikmu.',
+  INVALID_STATUS: 'Tagihan bisa dikirim setelah kamu tiba di lokasi client.',
+  ALREADY_PAID: 'Order ini sudah dibayar.',
+  NO_ITEMS: 'Tambahkan minimal satu baris keterangan dan harga.',
+  INVALID_PRICE: 'Total tagihan di luar batas yang diizinkan.',
 };
 
 /**
- * Montir menetapkan tagihan final. RPC memindahkan status order ke `payment`
- * sehingga client bisa membayar lewat Xendit.
+ * Montir mengirim tagihan terperinci. Server menjumlahkan seluruh baris,
+ * memvalidasi batas harga, lalu memindahkan order ke status `payment`.
  */
-export async function setOrderPrice(requestId: string, price: number): Promise<void> {
-  const { error } = await supabase.rpc('set_order_price', {
+export async function sendOrderInvoice(requestId: string): Promise<void> {
+  const { error } = await supabase.rpc('finalize_order_invoice', {
     p_request_id: requestId,
-    p_price: Math.round(price),
   });
   if (error) {
     const code = (error.message ?? '').trim();
-    throw new Error(PRICE_ERROR_MESSAGES[code] ?? code ?? 'Gagal menyimpan tagihan.');
+    throw new Error(INVOICE_ERROR_MESSAGES[code] ?? code ?? 'Gagal mengirim tagihan.');
   }
-  await logActivity(
-    'invoice_sent',
-    `Tagihan order ${requestId.slice(0, 8).toUpperCase()} sebesar ` +
-      `Rp${price.toLocaleString('id-ID')} dikirim ke client.`,
-  );
 }
 
 export async function listMyActivity(limit = 30): Promise<ActivityItem[]> {
   const id = await getMyId();
   const { data, error } = await supabase
     .from('activity_logs')
-    .select('id, activity_type, description, created_at')
+    .select(
+      'id, activity_type, description, created_at, related_entity_type, related_entity_id',
+    )
     .eq('user_id', id)
     .order('created_at', { ascending: false })
     .limit(limit);

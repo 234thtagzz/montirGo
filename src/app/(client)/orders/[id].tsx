@@ -32,11 +32,13 @@ import {
   cancelServiceRequest,
   getRequest,
   getReviewForRequest,
+  listOrderInvoiceItems,
   listStatusHistory,
   submitReview,
   type AssignmentDecision,
   type ClientOrder,
   type ClientReview,
+  type OrderInvoiceItem,
   type OrderStatusEvent,
 } from '@/features/client/service';
 import {
@@ -81,6 +83,7 @@ export default function ClientOrderDetailScreen() {
   const [cancelVisible, setCancelVisible] = useState(false);
   const [cashVisible, setCashVisible] = useState(false);
   const [payment, setPayment] = useState<OrderPayment | null>(null);
+  const [invoiceItems, setInvoiceItems] = useState<OrderInvoiceItem[]>([]);
   const [paying, setPaying] = useState(false);
   const [choosingCash, setChoosingCash] = useState(false);
   const [review, setReview] = useState<ClientReview | null>(null);
@@ -103,13 +106,15 @@ export default function ClientOrderDetailScreen() {
   const load = useCallback(async () => {
     if (!id) return;
     try {
-      const [detail, events, existingReview] = await Promise.all([
+      const [detail, events, existingReview, items] = await Promise.all([
         getRequest(id),
         listStatusHistory(id),
         getReviewForRequest(id).catch(() => null),
+        listOrderInvoiceItems(id).catch(() => [] as OrderInvoiceItem[]),
       ]);
       setOrder(detail);
       setHistory(events);
+      setInvoiceItems(items);
       setReview(existingReview);
       if (existingReview) {
         setReviewRating(existingReview.rating);
@@ -155,6 +160,11 @@ export default function ClientOrderDetailScreen() {
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'payments', filter: `request_id=eq.${id}` },
+        () => load(),
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'order_invoice_items', filter: `request_id=eq.${id}` },
         () => load(),
       )
       .on(
@@ -523,6 +533,27 @@ export default function ClientOrderDetailScreen() {
         {order.status === 'payment' || order.status === 'paid' ? (
           <>
             <SectionHeader eyebrow="TAGIHAN" title="Pembayaran" />
+            {invoiceItems.length > 0 ? (
+              <View style={styles.invoiceCard}>
+                <Text style={styles.invoiceTitle}>Rincian tagihan</Text>
+                {invoiceItems.map((item) => (
+                  <View key={item.id} style={styles.invoiceRow}>
+                    <Text style={styles.invoiceRowLabel}>{item.keterangan}</Text>
+                    <Text style={[styles.invoiceRowAmount, Tabular]}>
+                      {formatIDR(item.harga)}
+                    </Text>
+                  </View>
+                ))}
+                <View style={styles.invoiceTotalRow}>
+                  <Text style={styles.invoiceTotalLabel}>Total</Text>
+                  <Text style={[styles.invoiceTotalValue, Tabular]}>
+                    {formatIDR(
+                      invoiceItems.reduce((sum, item) => sum + item.harga, 0),
+                    )}
+                  </Text>
+                </View>
+              </View>
+            ) : null}
             <View style={styles.paymentCard}>
               <View style={styles.paymentTop}>
                 <View>
@@ -978,6 +1009,47 @@ const styles = StyleSheet.create({
   timelineNote: { fontSize: 11.5, color: Brand.textSecondary, marginTop: 2 },
   timelineTime: { fontSize: 10.5, color: Brand.textMuted, marginTop: 3 },
   cancel: { marginTop: Space.xxl },
+  invoiceCard: {
+    backgroundColor: Brand.surface,
+    borderRadius: Radius.lg,
+    borderWidth: 1,
+    borderColor: Brand.divider,
+    padding: Space.lg,
+    marginBottom: Space.md,
+  },
+  invoiceTitle: {
+    ...Type.bodyStrong,
+    color: Brand.text,
+    fontWeight: '700',
+    marginBottom: Space.sm,
+  },
+  invoiceRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: Space.md,
+    paddingVertical: Space.sm,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: Brand.divider,
+  },
+  invoiceRowLabel: { flex: 1, fontSize: 12.5, color: Brand.text, lineHeight: 17 },
+  invoiceRowAmount: { fontSize: 12.5, fontWeight: '700', color: Brand.text },
+  invoiceTotalRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: Space.md,
+    marginTop: Space.sm,
+    paddingTop: Space.sm,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: Brand.border,
+  },
+  invoiceTotalLabel: {
+    fontSize: 12.5,
+    fontWeight: '700',
+    color: Brand.textSecondary,
+  },
+  invoiceTotalValue: { fontSize: 15, fontWeight: '800', color: Brand.text },
   paymentCard: {
     backgroundColor: Brand.surface,
     borderRadius: Radius.lg,

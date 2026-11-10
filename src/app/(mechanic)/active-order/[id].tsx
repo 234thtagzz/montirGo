@@ -20,11 +20,15 @@ import {
   getNextAction,
 } from "@/features/mechanic/constants";
 import {
+  addOrderInvoiceItem,
+  deleteOrderInvoiceItem,
   getMyOrder,
+  listOrderInvoiceItems,
   listOrderStatusHistory,
-  setOrderPrice,
+  sendOrderInvoice,
   updateOrderStatus,
   type MechanicOrderDetail,
+  type OrderInvoiceItem,
   type OrderStatusEvent,
 } from "@/features/mechanic/service";
 import {
@@ -79,10 +83,14 @@ export default function MechanicOrderDetailScreen() {
   const [error, setError] = useState(false);
   const [updating, setUpdating] = useState(false);
   const [settings, setSettings] = useState<FinanceSettings | null>(null);
-  const [priceDraft, setPriceDraft] = useState<string | null>(null);
-  const [sendingPrice, setSendingPrice] = useState(false);
+  const [invoiceItems, setInvoiceItems] = useState<OrderInvoiceItem[]>([]);
+  const [draftKeterangan, setDraftKeterangan] = useState("");
+  const [draftHarga, setDraftHarga] = useState("");
+  const [addingItem, setAddingItem] = useState(false);
+  const [removingItemId, setRemovingItemId] = useState<string | null>(null);
+  const [sendingInvoice, setSendingInvoice] = useState(false);
   const [confirmingCash, setConfirmingCash] = useState(false);
-  const [priceConfirmOpen, setPriceConfirmOpen] = useState(false);
+  const [invoiceConfirmOpen, setInvoiceConfirmOpen] = useState(false);
   const [cashConfirmOpen, setCashConfirmOpen] = useState(false);
 
   const loadAnalysis = useCallback(async () => {
@@ -100,12 +108,14 @@ export default function MechanicOrderDetailScreen() {
   const load = useCallback(async () => {
     if (!id) return;
     try {
-      const [detail, events] = await Promise.all([
+      const [detail, events, items] = await Promise.all([
         getMyOrder(id),
         listOrderStatusHistory(id),
+        listOrderInvoiceItems(id).catch(() => [] as OrderInvoiceItem[]),
       ]);
       setOrder(detail);
       setHistory(events);
+      setInvoiceItems(items);
       setError(false);
       await loadAnalysis();
     } catch {
@@ -212,46 +222,93 @@ export default function MechanicOrderDetailScreen() {
     [focus],
   );
 
-  const existingPrice = order?.price_amount ?? null;
-  // Selama mekanik mengetik, pakai draft lokal. Bila belum mengetik, input
-  // mengikuti harga terakhir dari server tanpa perlu efek sinkronisasi.
-  const priceText = priceDraft ?? (existingPrice != null ? String(existingPrice) : "");
-
-  const priceValue = Number(priceText.replace(/[^0-9]/g, "")) || 0;
+  // Total tagihan selalu dihitung sistem dari seluruh baris rincian.
+  const invoiceTotal = invoiceItems.reduce((sum, item) => sum + item.harga, 0);
   const minPrice = settings?.minOrderPrice ?? 10000;
   const maxPrice = settings?.maxOrderPrice ?? 10000000;
   const feePercent = settings?.feePercent ?? 10;
-  const platformFee = Math.round((priceValue * feePercent) / 100);
-  const netPrice = priceValue - platformFee;
-  const priceError =
-    priceValue === 0
+  const platformFee = Math.round((invoiceTotal * feePercent) / 100);
+  const netPrice = invoiceTotal - platformFee;
+  const totalError =
+    invoiceTotal === 0
       ? null
-      : priceValue < minPrice
+      : invoiceTotal < minPrice
         ? `Minimal ${formatIDR(minPrice)}.`
-        : priceValue > maxPrice
+        : invoiceTotal > maxPrice
           ? `Maksimal ${formatIDR(maxPrice)}.`
           : null;
-  const canSendPrice =
-    !sendingPrice &&
-    priceValue >= minPrice &&
-    priceValue <= maxPrice &&
-    !priceError;
-  const canEditPrice =
+  const canSendInvoice =
+    !sendingInvoice &&
+    invoiceItems.length > 0 &&
+    invoiceTotal >= minPrice &&
+    invoiceTotal <= maxPrice &&
+    !totalError;
+  const canEditInvoice =
     order != null &&
     ["arrived", "diagnosing", "repairing", "completed"].includes(order.status);
 
-  const openPriceConfirm = () => {
-    if (!order || !canSendPrice) return;
-    setPriceConfirmOpen(true);
+  const openInvoiceConfirm = () => {
+    if (!order || !canSendInvoice) return;
+    setInvoiceConfirmOpen(true);
   };
 
-  const sendPrice = async () => {
-    if (!order || !canSendPrice) return;
-    setSendingPrice(true);
+  const addItem = async () => {
+    if (!order || addingItem) return;
+    const harga = Number(draftHarga.replace(/[^0-9]/g, "")) || 0;
+    if (!draftKeterangan.trim()) {
+      Alert.alert(
+        "Keterangan kosong",
+        "Tulis keterangan tindakan atau suku cadang terlebih dahulu.",
+      );
+      return;
+    }
+    if (harga <= 0) {
+      Alert.alert("Harga belum valid", "Isi harga baris lebih dari 0.");
+      return;
+    }
+    setAddingItem(true);
     try {
-      await setOrderPrice(order.id, priceValue);
-      setPriceConfirmOpen(false);
-      setPriceDraft(null);
+      const item = await addOrderInvoiceItem(order.id, {
+        keterangan: draftKeterangan,
+        harga,
+      });
+      setInvoiceItems((prev) => [...prev, item]);
+      setDraftKeterangan("");
+      setDraftHarga("");
+    } catch (e) {
+      Alert.alert(
+        "Gagal menambah baris",
+        e instanceof Error ? e.message : "Coba lagi.",
+      );
+    } finally {
+      setAddingItem(false);
+    }
+  };
+
+  const removeItem = async (item: OrderInvoiceItem) => {
+    if (removingItemId) return;
+    setRemovingItemId(item.id);
+    try {
+      await deleteOrderInvoiceItem(item.id);
+      setInvoiceItems((prev) => prev.filter((row) => row.id !== item.id));
+    } catch (e) {
+      Alert.alert(
+        "Gagal menghapus baris",
+        e instanceof Error ? e.message : "Coba lagi.",
+      );
+    } finally {
+      setRemovingItemId(null);
+    }
+  };
+
+  const sendInvoice = async () => {
+    if (!order || !canSendInvoice) return;
+    setSendingInvoice(true);
+    try {
+      await sendOrderInvoice(order.id);
+      setInvoiceConfirmOpen(false);
+      setDraftKeterangan("");
+      setDraftHarga("");
       await load();
     } catch (e) {
       Alert.alert(
@@ -259,7 +316,7 @@ export default function MechanicOrderDetailScreen() {
         e instanceof Error ? e.message : "Coba lagi.",
       );
     } finally {
-      setSendingPrice(false);
+      setSendingInvoice(false);
     }
   };
 
@@ -531,26 +588,72 @@ export default function MechanicOrderDetailScreen() {
         </View>
 
         <View onLayout={handleBillingLayout} />
-        <SectionHeader eyebrow="PEMBAYARAN" title="Tagihan & pembayaran" />
-        {canEditPrice ? (
+        <SectionHeader eyebrow="PEMBAYARAN" title="Tagihan terperinci" />
+        {canEditInvoice ? (
           <View style={styles.billingCard}>
-            <Text style={styles.billingLabel}>Nominal tagihan ke client</Text>
-            <View style={styles.priceInputRow}>
-              <Text style={styles.priceCurrency}>Rp</Text>
+            <Text style={styles.billingLabel}>
+              Rincian tindakan & suku cadang
+            </Text>
+            {invoiceItems.length === 0 ? (
+              <Text style={styles.billingHint}>
+                Belum ada baris. Tambahkan keterangan dan harga — total dihitung
+                otomatis oleh sistem.
+              </Text>
+            ) : (
+              <InvoiceItemList
+                items={invoiceItems}
+                editable
+                removingItemId={removingItemId}
+                onRemove={removeItem}
+              />
+            )}
+
+            <View style={styles.addItemBox}>
               <TextInput
-                value={priceValue ? priceValue.toLocaleString("id-ID") : ""}
-                onChangeText={(text) =>
-                  setPriceDraft(text.replace(/[^0-9]/g, ""))
-                }
-                placeholder="0"
+                value={draftKeterangan}
+                onChangeText={setDraftKeterangan}
+                placeholder="Keterangan (mis. Ganti oli mesin)"
                 placeholderTextColor={Brand.textMuted}
-                keyboardType="number-pad"
                 selectionColor={Brand.primary}
-                style={[styles.priceInput, Tabular]}
+                style={styles.addItemInput}
+              />
+              <View style={styles.addItemPriceRow}>
+                <Text style={styles.addItemCurrency}>Rp</Text>
+                <TextInput
+                  value={
+                    draftHarga ? Number(draftHarga).toLocaleString("id-ID") : ""
+                  }
+                  onChangeText={(text) =>
+                    setDraftHarga(text.replace(/[^0-9]/g, ""))
+                  }
+                  placeholder="0"
+                  placeholderTextColor={Brand.textMuted}
+                  keyboardType="number-pad"
+                  selectionColor={Brand.primary}
+                  style={[styles.addItemPriceInput, Tabular]}
+                />
+              </View>
+              <Button
+                label="Tambah Baris"
+                icon="add-outline"
+                variant="secondary"
+                loading={addingItem}
+                disabled={addingItem}
+                onPress={addItem}
               />
             </View>
-            {priceError ? (
-              <Text style={styles.priceError}>{priceError}</Text>
+
+            <View style={styles.totalBand}>
+              <View style={styles.netCopy}>
+                <Text style={styles.totalLabel}>Total dihitung sistem</Text>
+                <Text style={styles.totalHint}>
+                  {invoiceItems.length} baris rincian
+                </Text>
+              </View>
+              <Money value={invoiceTotal} size="md" color={Brand.text} />
+            </View>
+            {totalError ? (
+              <Text style={styles.priceError}>{totalError}</Text>
             ) : (
               <Text style={styles.priceHelper}>
                 Rentang {formatIDR(minPrice)} – {formatIDR(maxPrice)}
@@ -572,21 +675,43 @@ export default function MechanicOrderDetailScreen() {
               <Money value={netPrice} size="md" color={Brand.green} />
             </View>
             <Button
-              label="Kirim Tagihan ke Client"
+              label="Kirim Tagihan Terperinci"
               icon="receipt-outline"
               variant="ink"
-              loading={sendingPrice}
-              disabled={!canSendPrice}
-              onPress={openPriceConfirm}
+              loading={sendingInvoice}
+              disabled={!canSendInvoice}
+              onPress={openInvoiceConfirm}
               style={styles.sendPrice}
             />
             <Text style={styles.billingHint}>
-              Client bisa membayar online lewat QRIS / e-wallet Xendit atau tunai
-              langsung. Pembayaran tunai dicatat setelah kamu mengonfirmasi uang
-              diterima, dan tidak masuk saldo dompet.
+              Client melihat setiap baris keterangan dan harga sebelum membayar.
+              Setelah terkirim, rincian tidak bisa diubah lagi. Pembayaran bisa
+              lewat QRIS / e-wallet Xendit atau tunai langsung ke kamu.
             </Text>
           </View>
-        ) : order.status === "payment" ? (
+        ) : invoiceItems.length > 0 ? (
+          <View style={styles.billingCard}>
+            <Text style={styles.billingLabel}>
+              Rincian yang dikirim ke client
+            </Text>
+            <InvoiceItemList items={invoiceItems} editable={false} />
+            <View style={styles.totalBand}>
+              <View style={styles.netCopy}>
+                <Text style={styles.totalLabel}>Total tagihan</Text>
+                <Text style={styles.totalHint}>
+                  {invoiceItems.length} baris rincian
+                </Text>
+              </View>
+              <Money
+                value={order.price_amount ?? invoiceTotal}
+                size="md"
+                color={Brand.text}
+              />
+            </View>
+          </View>
+        ) : null}
+
+        {canEditInvoice ? null : order.status === "payment" ? (
           <>
             <View style={styles.pendingCard}>
               <Ionicons
@@ -653,7 +778,7 @@ export default function MechanicOrderDetailScreen() {
               )}
             </Text>
           </View>
-        ) : (
+        ) : invoiceItems.length === 0 ? (
           <View style={styles.infoCard}>
             <Ionicons
               name="information-circle-outline"
@@ -665,7 +790,7 @@ export default function MechanicOrderDetailScreen() {
               langsung menerima notifikasi pembayaran.
             </Text>
           </View>
-        )}
+        ) : null}
 
         <SectionHeader eyebrow="AI" title="Analisis awal" />
         <AiAnalysisCard
@@ -726,7 +851,7 @@ export default function MechanicOrderDetailScreen() {
             onPress={advance}
             style={styles.action}
           />
-        ) : canEditPrice || tripStatus || pendingConfirmation ? null : (
+        ) : canEditInvoice || tripStatus || pendingConfirmation ? null : (
           <View style={styles.doneCard}>
             <Ionicons
               name="checkmark-done-outline"
@@ -743,19 +868,30 @@ export default function MechanicOrderDetailScreen() {
       </ScrollView>
 
       <ConfirmSheet
-        visible={priceConfirmOpen}
-        title="Kirim tagihan?"
-        message={`Client akan menerima tagihan ${formatIDR(priceValue)} dan bisa langsung membayar.`}
+        visible={invoiceConfirmOpen}
+        title="Kirim tagihan terperinci?"
+        message={`Client akan menerima ${invoiceItems.length} baris rincian dengan total ${formatIDR(invoiceTotal)} dan bisa langsung membayar.`}
         confirmLabel="Kirim tagihan"
         icon="receipt-outline"
-        loading={sendingPrice}
-        onConfirm={sendPrice}
-        onCancel={() => setPriceConfirmOpen(false)}
+        loading={sendingInvoice}
+        onConfirm={sendInvoice}
+        onCancel={() => setInvoiceConfirmOpen(false)}
       >
         <View style={styles.sheetBox}>
+          {invoiceItems.map((item) => (
+            <View key={item.id} style={styles.sheetRow}>
+              <Text style={styles.sheetLabel} numberOfLines={1}>
+                {item.keterangan}
+              </Text>
+              <Text style={[styles.sheetValue, Tabular]}>
+                {formatIDR(item.harga)}
+              </Text>
+            </View>
+          ))}
+          <View style={styles.sheetDivider} />
           <View style={styles.sheetRow}>
-            <Text style={styles.sheetLabel}>Tagihan</Text>
-            <Money value={priceValue} size="sm" color={Brand.text} />
+            <Text style={styles.sheetLabel}>Total</Text>
+            <Money value={invoiceTotal} size="sm" color={Brand.text} />
           </View>
           <View style={styles.sheetRow}>
             <Text style={styles.sheetLabel}>Fee platform ({feePercent}%)</Text>
@@ -815,6 +951,53 @@ function DetailRow({
       >
         {value}
       </Text>
+    </View>
+  );
+}
+
+/** Daftar baris tagihan (keterangan + harga) milik montir. */
+function InvoiceItemList({
+  items,
+  editable,
+  removingItemId,
+  onRemove,
+}: {
+  items: OrderInvoiceItem[];
+  editable: boolean;
+  removingItemId?: string | null;
+  onRemove?: (item: OrderInvoiceItem) => void;
+}) {
+  return (
+    <View style={styles.invoiceList}>
+      {items.map((item) => (
+        <View key={item.id} style={styles.invoiceRow}>
+          <Text style={styles.invoiceRowLabel} numberOfLines={2}>
+            {item.keterangan}
+          </Text>
+          <Text style={[styles.invoiceRowAmount, Tabular]}>
+            {formatIDR(item.harga)}
+          </Text>
+          {editable && onRemove ? (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={`Hapus ${item.keterangan}`}
+              hitSlop={6}
+              disabled={removingItemId === item.id}
+              onPress={() => onRemove(item)}
+              style={({ pressed }) => [
+                styles.removeItem,
+                pressed && styles.pressed,
+              ]}
+            >
+              <Ionicons
+                name="close-circle-outline"
+                size={18}
+                color={Brand.red}
+              />
+            </Pressable>
+          ) : null}
+        </View>
+      ))}
     </View>
   );
 }
@@ -933,28 +1116,76 @@ const styles = StyleSheet.create({
     color: Brand.text,
     marginBottom: Space.sm,
   },
-  priceInputRow: {
+  invoiceList: { marginBottom: Space.xs },
+  invoiceRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: Space.sm,
+    paddingVertical: Space.sm,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: Brand.divider,
+  },
+  invoiceRowLabel: {
+    flex: 1,
+    ...Type.bodyStrong,
+    color: Brand.text,
+    fontWeight: "600",
+  },
+  invoiceRowAmount: { ...Type.label, color: Brand.text, fontWeight: "700" },
+  removeItem: { padding: 2 },
+  addItemBox: {
+    marginTop: Space.sm,
+    padding: Space.md,
+    borderRadius: Radius.md,
+    backgroundColor: Brand.background,
+    gap: Space.sm,
+  },
+  addItemInput: {
+    minHeight: 44,
+    borderWidth: 1,
+    borderColor: Brand.border,
+    borderRadius: Radius.sm,
+    backgroundColor: Brand.surface,
+    paddingHorizontal: Space.md,
+    fontSize: 13,
+    color: Brand.text,
+  },
+  addItemPriceRow: {
     flexDirection: "row",
     alignItems: "center",
     gap: Space.xs,
     borderWidth: 1,
     borderColor: Brand.border,
-    borderRadius: Radius.md,
-    backgroundColor: "#F7F9FC",
+    borderRadius: Radius.sm,
+    backgroundColor: Brand.surface,
     paddingHorizontal: Space.md,
   },
-  priceCurrency: {
-    ...Type.title,
-    color: Brand.textSecondary,
-  },
-  priceInput: {
+  addItemCurrency: { ...Type.title, color: Brand.textSecondary },
+  addItemPriceInput: {
     flex: 1,
-    minHeight: 52,
-    fontSize: 24,
-    fontWeight: "800",
-    letterSpacing: -0.6,
+    minHeight: 44,
+    fontSize: 16,
+    fontWeight: "700",
     color: Brand.text,
     paddingVertical: 0,
+  },
+  totalBand: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: Space.md,
+    marginTop: Space.md,
+    padding: Space.md,
+    borderRadius: Radius.md,
+    backgroundColor: Brand.primarySoft,
+  },
+  totalLabel: { ...Type.label, color: Brand.primary, fontWeight: "700" },
+  totalHint: {
+    ...Type.meta,
+    color: Brand.primary,
+    fontSize: 9.5,
+    opacity: 0.75,
+    marginTop: 1,
   },
   priceError: { ...Type.meta, color: Brand.red, marginTop: 6 },
   priceHelper: { ...Type.meta, color: Brand.textMuted, marginTop: 6, fontSize: 10.5 },

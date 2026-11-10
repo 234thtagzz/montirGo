@@ -165,11 +165,25 @@ export interface OrderStatusEvent {
   created_at: string;
 }
 
+/** Satu baris pada tagihan terperinci (keterangan + harga). */
+export interface OrderInvoiceItem {
+  id: string;
+  request_id: string;
+  mechanic_id?: string;
+  keterangan: string;
+  harga: number;
+  created_at: string;
+  updated_at?: string;
+}
+
 export interface ActivityItem {
   id: string;
   activity_type: string;
   description: string | null;
   created_at: string;
+  /** Entitas terkait (mis. `service_request` untuk tagihan terperinci). */
+  related_entity_type: string | null;
+  related_entity_id: string | null;
 }
 
 export interface EarningsSummary {
