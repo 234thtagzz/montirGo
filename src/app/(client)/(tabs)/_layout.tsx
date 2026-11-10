@@ -62,6 +62,20 @@ export default function ClientTabsLayout() {
         }}
       />
       <Tabs.Screen
+        name="ai-assistant"
+        options={{
+          title: 'Tanya AI',
+          tabBarIcon: ({ color, focused }) => (
+            <TabIcon
+              focused={focused}
+              color={iconColor(color, Brand.textMuted)}
+              name="sparkles-outline"
+              focusedName="sparkles"
+            />
+          ),
+        }}
+      />
+      <Tabs.Screen
         name="profile"
         options={{
           title: 'Profil',

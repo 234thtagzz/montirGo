@@ -5,16 +5,65 @@
 
 import { createClient, type SupabaseClient } from 'npm:@supabase/supabase-js@2';
 
-const SYSTEM_PROMPT =
-  `Kamu asisten montir kendaraan (motor & mobil) di Indonesia untuk aplikasi MontirGo.
-Tugasmu membantu MONTIR memahami indikasi kerusakan sebelum/saat menangani order.
+type AssistantMode = 'diagnose' | 'sparepart';
+type AssistantPersona = 'client' | 'mechanic';
+
+const SYSTEM_BASE = `Kamu "MontirGo AI", asisten otomotif untuk motor dan mobil di Indonesia.
+Gunakan Bahasa Indonesia yang jelas, ramah, dan ringkas agar nyaman dibaca di layar HP.
+Tulis teks polos: tanpa tabel markdown, tanpa **bold**, tanpa heading markdown. Gunakan baris pendek dengan tanda "•" atau nomor.
+Jangan mengaku sebagai montir manusia, jangan menjamin hasil diagnosis, dan jangan menjamin harga.`;
+
+/**
+ * Prompt dipilih dari mode percakapan. `sparepart` fokus pada rentang harga
+ * part + jasa, `diagnose` fokus pada indikasi kerusakan.
+ */
+function buildSystemPrompt(mode: AssistantMode, persona: AssistantPersona): string {
+  const audience =
+    persona === 'mechanic'
+      ? 'MONTIR MontirGo yang sedang menangani order di lokasi client'
+      : 'CLIENT MontirGo, pemilik kendaraan yang ingin memahami kondisi dan biaya';
+
+  if (mode === 'sparepart') {
+    return `${SYSTEM_BASE}
+
+Penggunamu adalah ${audience}.
+
+Tugas utama: membantu menaksir HARGA SPAREPART kendaraan dan estimasi biaya pasang.
+
+Aturan WAJIB:
+- Jika merek, model, tahun, atau tipe mesin belum jelas, ajukan satu pertanyaan singkat. Bila pengguna tidak menjawab, beri rentang umum dan sebut asumsinya.
+- Sebut nama part dengan jelas dan beri RENTANG harga dalam Rupiah, bukan satu angka pasti.
+- Bedakan harga part aftermarket dan original/OEM bila relevan.
+- Pisahkan "Harga part" dan "Estimasi jasa pasang" agar tidak tertukar.
+- Sebut 2-3 faktor yang memengaruhi harga: kualitas part, wilayah, dan tipe mesin/varian.
+- ${
+      persona === 'mechanic'
+        ? 'Untuk montir, sebutkan kisaran harga modal part dan saran harga jual wajar, serta part yang sebaiknya diganti berpasangan.'
+        : 'Untuk client, akhiri dengan estimasi total (part + jasa) dan tips meminta rincian harga ke montir.'
+    }
+- Maksimal 5 item part per jawaban. Jangan mengarang nomor part spesifik; bila tidak yakin, sarankan cek katalog resmi.
+- Akhiri dengan tepat satu kalimat: "Catatan: harga ini estimasi pasar dan bisa berbeda di bengkel atau toko sparepart."`;
+  }
+
+  return `${SYSTEM_BASE}
+
+Penggunamu adalah ${audience}.
+
+Tugas utama: membantu memahami INDIKASI KERUSAKAN kendaraan sebelum pemeriksaan langsung.
 
 Aturan WAJIB:
 - Gunakan bahasa kemungkinan: "kemungkinan", "indikasi", "perlu pemeriksaan".
 - JANGAN menyatakan diagnosis pasti tanpa pemeriksaan langsung.
-- Beri: kemungkinan penyebab (maks 4), pemeriksaan awal langkah-demi-langkah, perkiraan alat yang dibutuhkan, tingkat risiko (rendah/sedang/tinggi), dan pertanyaan lanjutan ke client bila info kurang.
-- Jawab ringkas, Bahasa Indonesia, format cocok dibaca di HP.
-- Akhiri dengan satu kalimat: "Catatan: ini analisis awal, tetap lakukan pemeriksaan langsung."`;
+- Beri maksimal 4 kemungkinan penyebab, langkah pemeriksaan awal, perkiraan alat yang dibutuhkan, dan tingkat risiko (rendah/sedang/tinggi).
+- Bila relevan, sebutkan kisaran biaya perbaikan dan part yang mungkin diganti.
+- ${
+      persona === 'mechanic'
+        ? 'Untuk montir, sertakan pertanyaan lanjutan yang perlu ditanyakan ke client dan tanda bahaya yang harus dicek lebih dulu.'
+        : 'Untuk client, jelaskan langkah aman sebelum montir datang dan kapan sebaiknya kendaraan berhenti dipakai.'
+    }
+- Jawab ringkas dan fokus.
+- Akhiri dengan tepat satu kalimat: "Catatan: ini analisis awal, tetap lakukan pemeriksaan langsung."`;
+}
 
 const cors = {
   'Access-Control-Allow-Origin': '*',
@@ -34,6 +83,10 @@ interface AssistantBody {
   messages?: unknown;
   requestId?: unknown;
   vehicle?: unknown;
+  /** `sparepart` untuk tanya harga part, default `diagnose`. */
+  mode?: unknown;
+  /** `mechanic` mendapat konteks teknis, default `client`. */
+  persona?: unknown;
 }
 
 Deno.serve(async (req: Request) => {
@@ -68,21 +121,37 @@ Deno.serve(async (req: Request) => {
 
     const requestId = typeof body?.requestId === 'string' ? body.requestId.trim() : '';
     const vehicle = typeof body?.vehicle === 'string' ? body.vehicle.trim().slice(0, 120) : '';
+    const mode: AssistantMode = body?.mode === 'sparepart' ? 'sparepart' : 'diagnose';
+    const persona: AssistantPersona = body?.persona === 'mechanic' ? 'mechanic' : 'client';
 
     const apiKey = Deno.env.get('AI_PROVIDER_API_KEY')?.trim();
     if (!apiKey) return json({ error: 'AI_PROVIDER_API_KEY belum di-set di server' }, 500);
     const { baseUrl, model } = resolveProvider(apiKey);
 
     const chatMessages: ChatMessage[] = [
-      { role: 'system', content: SYSTEM_PROMPT },
-      ...(vehicle ? [{ role: 'system' as const, content: `Konteks kendaraan: ${vehicle}` }] : []),
+      { role: 'system', content: buildSystemPrompt(mode, persona) },
+      ...(vehicle
+        ? [
+            {
+              role: 'system' as const,
+              content:
+                `Konteks kendaraan yang dipilih pengguna: ${vehicle}. ` +
+                'Utamakan konteks ini bila relevan; bila pengguna menyebut kendaraan lain, ikuti pertanyaan pengguna.',
+            },
+          ]
+        : []),
       ...history,
     ];
 
     const aiRes = await fetch(`${baseUrl}/chat/completions`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
-      body: JSON.stringify({ model, messages: chatMessages, temperature: 0.4, max_tokens: 1000 }),
+      body: JSON.stringify({
+        model,
+        messages: chatMessages,
+        temperature: mode === 'sparepart' ? 0.3 : 0.4,
+        max_tokens: 1200,
+      }),
       signal: AbortSignal.timeout(30_000),
     });
     if (!aiRes.ok) {
@@ -97,9 +166,10 @@ Deno.serve(async (req: Request) => {
     const reply = aiJson.choices?.[0]?.message?.content?.trim() ?? '';
     if (!reply) return json({ error: 'Respons AI kosong' }, 502);
 
-    // Simpan sebagai ai_diagnoses bila terkait order (validasi partisipan dulu).
+    // Simpan sebagai ai_diagnoses hanya untuk mode diagnosa yang terkait order
+    // (validasi partisipan dulu). Tanya harga tidak dicatat sebagai diagnosis.
     // INSERT hanya boleh via service_role (RLS), jadi pakai client terpisah.
-    if (UUID_RE.test(requestId)) {
+    if (mode === 'diagnose' && UUID_RE.test(requestId)) {
       await saveTranscript({ supabaseUrl, sb, userId: user.id, requestId, reply, model });
     }
 

@@ -82,7 +82,9 @@ Alternatif tanpa CLI (kalau `supabase login` tidak bisa):
 Setelah deploy, uji ulang:
 
 - Analisis: buat request baru dari akun client; kartu "Analisis AI" harus terisi.
-- Chat: buka tab **AI Asisten** sebagai montir, kirim pertanyaan.
+- Chat: buka tab **AI Asisten** (montir) atau **Tanya AI** (client). Uji mode
+  **Diagnosa** dan **Harga Sparepart** — jawaban harga harus berupa rentang,
+  bukan angka pasti.
 
 ## 5. Pembayaran Xendit (status lunas otomatis)
 
