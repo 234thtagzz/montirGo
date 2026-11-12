@@ -7,12 +7,9 @@
     "icon": "./assets/images/icon.png",
     "scheme": "montirgo",
     "userInterfaceStyle": "automatic",
-    "ios": {
-      "icon": "./assets/expo.icon"
-    },
     "android": {
       "adaptiveIcon": {
-        "backgroundColor": "#E6F4FE",
+        "backgroundColor": "#0B6BFF",
         "foregroundImage": "./assets/images/android-icon-foreground.png",
         "backgroundImage": "./assets/images/android-icon-background.png",
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
@@ -28,7 +25,7 @@
       [
         "expo-splash-screen",
         {
-          "backgroundColor": "#0B74E5",
+          "backgroundColor": "#0B6BFF",
           "image": "./assets/images/splash-icon.png",
           "imageWidth": 112,
           "resizeMode": "contain"
