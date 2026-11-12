@@ -235,7 +235,7 @@ async function callProvider(input: {
   apiKey: string;
   model: string;
   userPrompt: string;
-}): Promise<string> {
+}) : Promise<string> {
   const messages: ChatMessage[] = [
     { role: 'system', content: SYSTEM_PROMPT },
     { role: 'user', content: input.userPrompt },
