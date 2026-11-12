@@ -43,24 +43,6 @@ export interface MechanicProfilePatch {
   certifications?: string[];
 }
 
-export interface MechanicCertification {
-  id: string;
-  mechanic_id: string;
-  title: string;
-  issuer: string | null;
-  issued_year: number | null;
-  certificate_url: string | null;
-  is_verified: boolean;
-  created_at: string;
-}
-
-export interface MechanicCertificationInput {
-  title: string;
-  issuer?: string | null;
-  issued_year?: number | null;
-  certificate_url?: string | null;
-}
-
 export interface MechanicReview {
   id: string;
   mechanic_id: string;

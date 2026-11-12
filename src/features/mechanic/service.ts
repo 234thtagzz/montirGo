@@ -5,9 +5,9 @@ import {
   type RawAiAnalysis,
 } from '@/features/service-request/ai';
 import type {
-  ActivityItem, EarningsSummary, IncomingOrder, IncomingRequestDetail, MechanicCertification,
-  MechanicCertificationInput, MechanicLocationPoint, MechanicOrderDetail, MechanicProfile,
-  MechanicProfilePatch, MechanicReview, MyOrder, OrderInvoiceItem, OrderStatus, OrderStatusEvent,
+  ActivityItem, EarningsSummary, IncomingOrder, IncomingRequestDetail, MechanicLocationPoint,
+  MechanicOrderDetail, MechanicProfile, MechanicProfilePatch, MechanicReview, MyOrder,
+  OrderInvoiceItem, OrderStatus, OrderStatusEvent,
 } from './types';
 
 export * from './types';
@@ -104,45 +104,6 @@ export async function updateMyProfileIdentity(patch: {
   if (error) throw error;
 }
 
-// ---------- Sertifikasi ----------
-
-export async function listMechanicCertifications(): Promise<MechanicCertification[]> {
-  const id = await getMyId();
-  const { data, error } = await supabase
-    .from('mechanic_certifications')
-    .select('*')
-    .eq('mechanic_id', id)
-    .order('issued_year', { ascending: false });
-  if (error) throw error;
-  return (data ?? []) as MechanicCertification[];
-}
-
-export async function replaceMechanicCertifications(
-  inputs: MechanicCertificationInput[],
-): Promise<void> {
-  const id = await getMyId();
-  const rows = inputs
-    .map((input) => ({
-      mechanic_id: id,
-      title: input.title.trim(),
-      issuer: input.issuer?.trim() || null,
-      issued_year: input.issued_year ?? null,
-      certificate_url: input.certificate_url?.trim() || null,
-      is_verified: false,
-    }))
-    .filter((row) => row.title.length > 0);
-
-  const { error: deleteError } = await supabase
-    .from('mechanic_certifications')
-    .delete()
-    .eq('mechanic_id', id);
-  if (deleteError) throw deleteError;
-
-  if (rows.length === 0) return;
-  const { error } = await supabase.from('mechanic_certifications').insert(rows);
-  if (error) throw error;
-}
-
 // ---------- Ulasan & rating ----------
 
 /** Ulasan publik milik montir. Bisa dipanggil tanpa parameter untuk diri sendiri. */
@@ -159,22 +120,6 @@ export async function listMechanicReviews(
     .limit(limit);
   if (error) throw error;
   return (data ?? []) as MechanicReview[];
-}
-
-const REVIEW_ERROR_MESSAGES: Record<string, string> = {
-  UNAUTHORIZED: 'Sesi berakhir. Silakan login kembali.',
-  REVIEW_NOT_FOUND: 'Ulasan tidak ditemukan atau bukan milikmu.',
-};
-
-export async function replyToReview(reviewId: string, reply: string): Promise<void> {
-  const { error } = await supabase.rpc('reply_to_review', {
-    p_review_id: reviewId,
-    p_reply: reply,
-  });
-  if (error) {
-    const code = (error.message ?? '').trim();
-    throw new Error(REVIEW_ERROR_MESSAGES[code] ?? code ?? 'Gagal menyimpan balasan.');
-  }
 }
 
 // Order terbuka yang bisa diambil (khusus role mechanic, sesuai RLS).

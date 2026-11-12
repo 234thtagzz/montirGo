@@ -247,14 +247,6 @@ export default function MyVehiclesScreen() {
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: Brand.background },
-  addButton: {
-    width: 40,
-    height: 40,
-    borderRadius: Radius.md,
-    backgroundColor: Brand.ink,
-    alignItems: "center",
-    justifyContent: "center",
-  },
   content: { padding: ScreenPadding, paddingBottom: Space.xxxl },
   summary: {
     flexDirection: "row",
@@ -345,9 +337,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     marginLeft: Space.sm,
-  },
-  addFooter: {
-    marginTop: Space.md,
   },
   pressed: { opacity: 0.7 },
   primary: { flex: 1.6 },

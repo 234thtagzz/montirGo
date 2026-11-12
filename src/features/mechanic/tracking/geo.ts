@@ -23,18 +23,6 @@ export function haversineMeters(from: LatLng, to: LatLng): number {
   return 2 * EARTH_RADIUS_METERS * Math.asin(Math.min(1, Math.sqrt(a)));
 }
 
-/** Arah pergerakan (0-360°) dari satu titik ke titik lain. */
-export function bearingDegrees(from: LatLng, to: LatLng): number {
-  const lat1 = toRadians(from.latitude);
-  const lat2 = toRadians(to.latitude);
-  const dLng = toRadians(to.longitude - from.longitude);
-  const y = Math.sin(dLng) * Math.cos(lat2);
-  const x =
-    Math.cos(lat1) * Math.sin(lat2) -
-    Math.sin(lat1) * Math.cos(lat2) * Math.cos(dLng);
-  return (Math.atan2(y, x) * 180) / Math.PI;
-}
-
 export function estimateEtaSeconds(meters: number, speedKmh = CITY_SPEED_KMH): number {
   if (!Number.isFinite(meters) || meters <= 0) return 0;
   return Math.max(30, Math.round((meters / 1000 / speedKmh) * 3600));
@@ -69,8 +57,4 @@ export function formatArrivalClock(secondsFromNow: number | null | undefined): s
     hour: '2-digit',
     minute: '2-digit',
   })}`;
-}
-
-export function isWithinRadius(from: LatLng, to: LatLng, radiusMeters: number): boolean {
-  return haversineMeters(from, to) <= radiusMeters;
 }

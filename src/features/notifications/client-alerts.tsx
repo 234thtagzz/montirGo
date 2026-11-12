@@ -1,34 +1,9 @@
 import * as Notifications from 'expo-notifications';
 import { useRouter } from 'expo-router';
-import {
-  createContext,
-  useCallback,
-  useContext,
-  useEffect,
-  useMemo,
-  useState,
-  type ReactNode,
-} from 'react';
+import { useEffect, type ReactNode } from 'react';
 import { createRealtimeChannel } from '@/lib/realtime';
 import { supabase } from '@/lib/supabase';
 import { prepareNotifications, presentLocalAlert } from './local';
-import { getUnreadNotificationCount } from './service';
-
-interface ClientAlertsValue {
-  /** Jumlah notifikasi yang belum dibaca. */
-  unread: number;
-  /** Muat ulang jumlah notifikasi belum dibaca. */
-  refresh: () => Promise<void>;
-}
-
-const ClientAlertsContext = createContext<ClientAlertsValue>({
-  unread: 0,
-  refresh: async () => {},
-});
-
-export function useClientAlerts(): ClientAlertsValue {
-  return useContext(ClientAlertsContext);
-}
 
 interface RawNotificationRow {
   title?: string | null;
@@ -48,15 +23,6 @@ interface RawNotificationRow {
  */
 export function ClientAlertsProvider({ children }: { children: ReactNode }) {
   const router = useRouter();
-  const [unread, setUnread] = useState(0);
-
-  const refresh = useCallback(async () => {
-    try {
-      setUnread(await getUnreadNotificationCount());
-    } catch {
-      // Hitungan bersifat pelengkap; biarkan nilai terakhir bila gagal.
-    }
-  }, []);
 
   // Izin notifikasi + aksi saat notifikasi HP diketuk.
   useEffect(() => {
@@ -84,7 +50,7 @@ export function ClientAlertsProvider({ children }: { children: ReactNode }) {
     return () => subscription.remove();
   }, [router]);
 
-  // Jumlah belum dibaca + realtime notifikasi baru.
+  // Tampilkan banner lokal saat notifikasi baru masuk.
   useEffect(() => {
     let active = true;
     let channel: ReturnType<typeof supabase.channel> | null = null;
@@ -94,8 +60,6 @@ export function ClientAlertsProvider({ children }: { children: ReactNode }) {
         data: { user },
       } = await supabase.auth.getUser();
       if (!active || !user) return;
-
-      void refresh();
 
       channel = createRealtimeChannel(`client-notifications-${user.id}`)
         .on(
@@ -109,7 +73,6 @@ export function ClientAlertsProvider({ children }: { children: ReactNode }) {
           (payload) => {
             if (!active) return;
             const row = payload.new as RawNotificationRow;
-            setUnread((count) => count + 1);
             void presentLocalAlert({
               title: row.title ?? 'Notifikasi baru',
               body: row.body ?? null,
@@ -122,18 +85,6 @@ export function ClientAlertsProvider({ children }: { children: ReactNode }) {
             });
           },
         )
-        .on(
-          'postgres_changes',
-          {
-            event: 'UPDATE',
-            schema: 'public',
-            table: 'notifications',
-            filter: `user_id=eq.${user.id}`,
-          },
-          () => {
-            if (active) void refresh();
-          },
-        )
         .subscribe();
     })();
 
@@ -141,9 +92,7 @@ export function ClientAlertsProvider({ children }: { children: ReactNode }) {
       active = false;
       if (channel) supabase.removeChannel(channel);
     };
-  }, [refresh]);
+  }, []);
 
-  const value = useMemo(() => ({ unread, refresh }), [unread, refresh]);
-
-  return <ClientAlertsContext.Provider value={value}>{children}</ClientAlertsContext.Provider>;
+  return <>{children}</>;
 }

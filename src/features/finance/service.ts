@@ -120,11 +120,6 @@ export async function listPayoutAccounts(): Promise<PayoutAccount[]> {
   return (data ?? []) as PayoutAccount[];
 }
 
-export async function getPrimaryPayoutAccount(): Promise<PayoutAccount | null> {
-  const accounts = await listPayoutAccounts();
-  return accounts.find((a) => a.is_primary) ?? accounts[0] ?? null;
-}
-
 export async function createPayoutAccount(input: PayoutAccountInput): Promise<PayoutAccount> {
   const id = await getMyId();
   const { data, error } = await supabase
@@ -141,26 +136,6 @@ export async function createPayoutAccount(input: PayoutAccountInput): Promise<Pa
     .single();
   if (error) throw new Error(error.message);
   return data as PayoutAccount;
-}
-
-export async function updatePayoutAccount(
-  accountId: string,
-  patch: Partial<PayoutAccountInput>,
-): Promise<void> {
-  const id = await getMyId();
-  const normalized: Record<string, unknown> = {};
-  if (patch.type) normalized.type = patch.type;
-  if (patch.bank_code) normalized.bank_code = patch.bank_code.toUpperCase();
-  if (patch.account_number) normalized.account_number = patch.account_number.replace(/\s+/g, '');
-  if (patch.account_holder_name) normalized.account_holder_name = patch.account_holder_name.trim();
-  if (typeof patch.is_primary === 'boolean') normalized.is_primary = patch.is_primary;
-
-  const { error } = await supabase
-    .from('mechanic_payout_accounts')
-    .update(normalized)
-    .eq('id', accountId)
-    .eq('mechanic_id', id);
-  if (error) throw new Error(error.message);
 }
 
 export async function setPrimaryPayoutAccount(accountId: string): Promise<void> {

@@ -106,13 +106,4 @@ export const CardShadow = {
   elevation: 4,
 } as const;
 
-/** Bayangan untuk elemen mengambang di atas peta / tab bar. */
-export const FloatingShadow = {
-  shadowColor: '#0B1B33',
-  shadowOffset: { width: 0, height: 10 },
-  shadowOpacity: 0.14,
-  shadowRadius: 22,
-  elevation: 10,
-} as const;
-
 export const ScreenPadding = 20;

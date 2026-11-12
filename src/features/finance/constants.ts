@@ -36,10 +36,6 @@ export const EWALLETS: PayoutChannel[] = [
   { code: 'GOPAY', label: 'GoPay', short: 'GoPay' },
 ];
 
-export function findChannel(code: string): PayoutChannel | undefined {
-  return [...BANKS, ...EWALLETS].find((c) => c.code === code);
-}
-
 export function channelLabel(code: string | undefined | null): string {
   if (!code) return 'Rekening';
   const bank = BANKS.find((b) => b.code === code);
@@ -78,9 +74,4 @@ export function withdrawalStatusMeta(status: string): WithdrawalStatusMeta {
       background: Brand.divider,
     }
   );
-}
-
-/** Fee platform yang ditampilkan ke montir (estimasi dari persen). */
-export function estimateFee(gross: number, feePercent: number): number {
-  return Math.round((gross * feePercent) / 100);
 }
