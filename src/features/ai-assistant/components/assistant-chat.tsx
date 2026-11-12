@@ -1,4 +1,22 @@
-import { useRef, useState } from 'react';
+import { Ionicons } from "@/components/ui/icon";
+import { ScreenHeader } from "@/components/ui/screen-header";
+import { Brand, Radius, ScreenPadding, Space, Type } from "@/constants/brand";
+import {
+  AI_DISCLAIMER,
+  AI_MODES,
+  AI_SUGGESTIONS,
+  getAssistantIntro,
+  getAssistantSubtitle,
+  getInputPlaceholder,
+  type AssistantMode,
+  type AssistantPersona,
+  type AssistantVehicleOption,
+} from "@/features/ai-assistant/constants";
+import {
+  askAssistant,
+  type ChatMessage,
+} from "@/features/ai-assistant/service";
+import { useRef, useState } from "react";
 import {
   Alert,
   FlatList,
@@ -10,22 +28,7 @@ import {
   Text,
   TextInput,
   View,
-} from 'react-native';
-import { ScreenHeader } from '@/components/ui/screen-header';
-import { Ionicons } from '@/components/ui/icon';
-import { Brand, Radius, ScreenPadding, Space, Type } from '@/constants/brand';
-import {
-  AI_DISCLAIMER,
-  AI_MODES,
-  AI_SUGGESTIONS,
-  getAssistantIntro,
-  getAssistantSubtitle,
-  getInputPlaceholder,
-  type AssistantMode,
-  type AssistantPersona,
-  type AssistantVehicleOption,
-} from '@/features/ai-assistant/constants';
-import { askAssistant, type ChatMessage } from '@/features/ai-assistant/service';
+} from "react-native";
 
 interface AssistantChatProps {
   persona: AssistantPersona;
@@ -47,10 +50,15 @@ const EMPTY_THREADS: Record<AssistantMode, ChatMessage[]> = {
  * kerusakan, `sparepart` untuk tanya harga part. Tiap mode punya riwayat
  * sendiri, dan client bisa memilih kendaraan dari Garasi sebagai konteks.
  */
-export function AssistantChat({ persona, requestId, vehicles }: AssistantChatProps) {
-  const [mode, setMode] = useState<AssistantMode>('diagnose');
-  const [threads, setThreads] = useState<Record<AssistantMode, ChatMessage[]>>(EMPTY_THREADS);
-  const [input, setInput] = useState('');
+export function AssistantChat({
+  persona,
+  requestId,
+  vehicles,
+}: AssistantChatProps) {
+  const [mode, setMode] = useState<AssistantMode>("diagnose");
+  const [threads, setThreads] =
+    useState<Record<AssistantMode, ChatMessage[]>>(EMPTY_THREADS);
+  const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
   const [vehicleId, setVehicleId] = useState<string | null>(null);
   const listRef = useRef<FlatList<ChatMessage>>(null);
@@ -67,7 +75,7 @@ export function AssistantChat({ persona, requestId, vehicles }: AssistantChatPro
   const switchMode = (next: AssistantMode) => {
     if (next === mode || sending) return;
     setMode(next);
-    setInput('');
+    setInput("");
     scrollToEnd(false);
   };
 
@@ -78,10 +86,10 @@ export function AssistantChat({ persona, requestId, vehicles }: AssistantChatPro
     const activeMode = mode;
     const next: ChatMessage[] = [
       ...threads[activeMode],
-      { role: 'user', content },
+      { role: "user", content },
     ];
     setThreads((prev) => ({ ...prev, [activeMode]: next }));
-    setInput('');
+    setInput("");
     setSending(true);
     try {
       const reply = await askAssistant(next, {
@@ -92,10 +100,16 @@ export function AssistantChat({ persona, requestId, vehicles }: AssistantChatPro
       });
       setThreads((prev) => ({
         ...prev,
-        [activeMode]: [...prev[activeMode], { role: 'assistant', content: reply }],
+        [activeMode]: [
+          ...prev[activeMode],
+          { role: "assistant", content: reply },
+        ],
       }));
     } catch (e) {
-      Alert.alert('AI tidak tersedia', e instanceof Error ? e.message : 'Coba lagi nanti.');
+      Alert.alert(
+        "AI tidak tersedia",
+        e instanceof Error ? e.message : "Coba lagi nanti.",
+      );
     } finally {
       setSending(false);
       scrollToEnd();
@@ -129,7 +143,12 @@ export function AssistantChat({ persona, requestId, vehicles }: AssistantChatPro
                   size={14}
                   color={active ? Brand.volt : Brand.textMuted}
                 />
-                <Text style={[styles.segmentText, active && styles.segmentTextActive]}>
+                <Text
+                  style={[
+                    styles.segmentText,
+                    active && styles.segmentTextActive,
+                  ]}
+                >
                   {item.label}
                 </Text>
               </Pressable>
@@ -150,7 +169,10 @@ export function AssistantChat({ persona, requestId, vehicles }: AssistantChatPro
               accessibilityRole="button"
               accessibilityState={{ selected: vehicleId === null }}
               onPress={() => setVehicleId(null)}
-              style={[styles.vehicleChip, vehicleId === null && styles.vehicleChipActive]}
+              style={[
+                styles.vehicleChip,
+                vehicleId === null && styles.vehicleChipActive,
+              ]}
             >
               <Ionicons
                 name="globe-outline"
@@ -158,7 +180,10 @@ export function AssistantChat({ persona, requestId, vehicles }: AssistantChatPro
                 color={vehicleId === null ? Brand.volt : Brand.textMuted}
               />
               <Text
-                style={[styles.vehicleText, vehicleId === null && styles.vehicleTextActive]}
+                style={[
+                  styles.vehicleText,
+                  vehicleId === null && styles.vehicleTextActive,
+                ]}
               >
                 Umum
               </Text>
@@ -171,7 +196,10 @@ export function AssistantChat({ persona, requestId, vehicles }: AssistantChatPro
                   accessibilityRole="button"
                   accessibilityState={{ selected: active }}
                   onPress={() => setVehicleId(vehicle.id)}
-                  style={[styles.vehicleChip, active && styles.vehicleChipActive]}
+                  style={[
+                    styles.vehicleChip,
+                    active && styles.vehicleChipActive,
+                  ]}
                 >
                   <Ionicons
                     name="car-sport-outline"
@@ -180,7 +208,10 @@ export function AssistantChat({ persona, requestId, vehicles }: AssistantChatPro
                   />
                   <Text
                     numberOfLines={1}
-                    style={[styles.vehicleText, active && styles.vehicleTextActive]}
+                    style={[
+                      styles.vehicleText,
+                      active && styles.vehicleTextActive,
+                    ]}
                   >
                     {vehicle.label}
                   </Text>
@@ -193,7 +224,7 @@ export function AssistantChat({ persona, requestId, vehicles }: AssistantChatPro
 
       <KeyboardAvoidingView
         style={styles.flex}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        behavior={Platform.OS === "ios" ? "padding" : undefined}
         keyboardVerticalOffset={90}
       >
         <FlatList
@@ -203,13 +234,15 @@ export function AssistantChat({ persona, requestId, vehicles }: AssistantChatPro
           style={styles.list}
           contentContainerStyle={styles.listContent}
           keyboardShouldPersistTaps="handled"
-          onContentSizeChange={() => listRef.current?.scrollToEnd({ animated: true })}
+          onContentSizeChange={() =>
+            listRef.current?.scrollToEnd({ animated: true })
+          }
           ListEmptyComponent={
             <View>
               <View style={styles.intro}>
                 <View style={styles.introIcon}>
                   <Ionicons
-                    name={mode === 'sparepart' ? 'pricetag' : 'sparkles'}
+                    name={mode === "sparepart" ? "pricetag" : "sparkles"}
                     size={20}
                     color={Brand.volt}
                   />
@@ -234,22 +267,33 @@ export function AssistantChat({ persona, requestId, vehicles }: AssistantChatPro
                     ]}
                   >
                     <Text style={styles.suggestionText}>{suggestion}</Text>
-                    <Ionicons name="arrow-forward" size={14} color={Brand.primary} />
+                    <Ionicons
+                      name="arrow-forward"
+                      size={14}
+                      color={Brand.primary}
+                    />
                   </Pressable>
                 ))}
               </View>
             </View>
           }
           renderItem={({ item }) => {
-            const isUser = item.role === 'user';
+            const isUser = item.role === "user";
             return (
-              <View style={[styles.messageRow, isUser && styles.messageRowUser]}>
+              <View
+                style={[styles.messageRow, isUser && styles.messageRowUser]}
+              >
                 {!isUser ? (
                   <View style={styles.avatar}>
                     <Ionicons name="sparkles" size={12} color={Brand.volt} />
                   </View>
                 ) : null}
-                <View style={[styles.bubble, isUser ? styles.user : styles.assistant]}>
+                <View
+                  style={[
+                    styles.bubble,
+                    isUser ? styles.user : styles.assistant,
+                  ]}
+                >
                   <Text style={isUser ? styles.userText : styles.assistantText}>
                     {item.content}
                   </Text>
@@ -261,17 +305,26 @@ export function AssistantChat({ persona, requestId, vehicles }: AssistantChatPro
 
         {sending ? (
           <View style={styles.typing}>
-            <Ionicons name="ellipsis-horizontal" size={14} color={Brand.textMuted} />
+            <Ionicons
+              name="ellipsis-horizontal"
+              size={14}
+              color={Brand.textMuted}
+            />
             <Text style={styles.typingText}>
-              {mode === 'sparepart'
-                ? 'AI sedang mengecek kisaran harga…'
-                : 'AI sedang menganalisis…'}
+              {mode === "sparepart"
+                ? "AI sedang mengecek kisaran harga…"
+                : "AI sedang menganalisis…"}
             </Text>
           </View>
         ) : null}
 
         <View style={styles.disclaimer}>
-          <Ionicons name="information-circle-outline" size={14} color={Brand.textMuted} />
+          <Ionicons
+            name="information-circle-outline"
+            size={14}
+            color={Brand.textMuted}
+            style={{ paddingTop: 6 }}
+          />
           <Text style={styles.disclaimerText}>{AI_DISCLAIMER[mode]}</Text>
         </View>
 
@@ -315,7 +368,7 @@ const styles = StyleSheet.create({
     backgroundColor: Brand.background,
   },
   segment: {
-    flexDirection: 'row',
+    flexDirection: "row",
     gap: Space.xs,
     padding: 4,
     borderRadius: Radius.md,
@@ -326,21 +379,21 @@ const styles = StyleSheet.create({
   segmentItem: {
     flex: 1,
     minHeight: 38,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
     gap: 6,
     paddingHorizontal: Space.sm,
     borderRadius: Radius.sm,
   },
   segmentItemActive: { backgroundColor: Brand.ink },
-  segmentText: { fontSize: 12, fontWeight: '600', color: Brand.textSecondary },
-  segmentTextActive: { color: Brand.white, fontWeight: '700' },
+  segmentText: { fontSize: 12, fontWeight: "600", color: Brand.textSecondary },
+  segmentTextActive: { color: Brand.white, fontWeight: "700" },
   vehicleWrap: { backgroundColor: Brand.background, paddingBottom: Space.sm },
   vehicleRow: { paddingHorizontal: ScreenPadding, gap: Space.sm },
   vehicleChip: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     gap: 5,
     maxWidth: 210,
     paddingHorizontal: Space.md,
@@ -351,8 +404,12 @@ const styles = StyleSheet.create({
     borderColor: Brand.border,
   },
   vehicleChipActive: { backgroundColor: Brand.ink, borderColor: Brand.ink },
-  vehicleText: { fontSize: 11.5, fontWeight: '600', color: Brand.textSecondary },
-  vehicleTextActive: { color: Brand.white, fontWeight: '700' },
+  vehicleText: {
+    fontSize: 11.5,
+    fontWeight: "600",
+    color: Brand.textSecondary,
+  },
+  vehicleTextActive: { color: Brand.white, fontWeight: "700" },
   list: { flex: 1 },
   listContent: {
     paddingHorizontal: ScreenPadding,
@@ -360,7 +417,7 @@ const styles = StyleSheet.create({
     paddingBottom: Space.md,
   },
   intro: {
-    flexDirection: 'row',
+    flexDirection: "row",
     gap: Space.md,
     backgroundColor: Brand.ink,
     borderRadius: Radius.lg,
@@ -372,14 +429,19 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: Radius.sm,
-    backgroundColor: 'rgba(255,255,255,0.08)',
-    alignItems: 'center',
-    justifyContent: 'center',
+    backgroundColor: "rgba(255,255,255,0.08)",
+    alignItems: "center",
+    justifyContent: "center",
   },
   introCopy: { flex: 1 },
   introEyebrow: { ...Type.micro, fontSize: 8.5, color: Brand.inkMuted },
   introTitle: { ...Type.title, color: Brand.white, marginTop: 2 },
-  introText: { fontSize: 11.5, color: Brand.inkText, lineHeight: 16, marginTop: 4 },
+  introText: {
+    fontSize: 11.5,
+    color: Brand.inkText,
+    lineHeight: 16,
+    marginTop: 4,
+  },
   hint: {
     ...Type.micro,
     color: Brand.textMuted,
@@ -388,9 +450,9 @@ const styles = StyleSheet.create({
   },
   suggestions: { gap: Space.sm },
   suggestion: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
     gap: Space.md,
     backgroundColor: Brand.surface,
     borderRadius: Radius.md,
@@ -401,21 +463,21 @@ const styles = StyleSheet.create({
   },
   suggestionText: { flex: 1, fontSize: 12, color: Brand.text, lineHeight: 17 },
   messageRow: {
-    flexDirection: 'row',
-    alignItems: 'flex-end',
+    flexDirection: "row",
+    alignItems: "flex-end",
     gap: Space.sm,
     marginVertical: 4,
   },
-  messageRowUser: { justifyContent: 'flex-end' },
+  messageRowUser: { justifyContent: "flex-end" },
   avatar: {
     width: 24,
     height: 24,
     borderRadius: 12,
     backgroundColor: Brand.ink,
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: "center",
+    justifyContent: "center",
   },
-  bubble: { maxWidth: '82%', padding: Space.md, borderRadius: Radius.md },
+  bubble: { maxWidth: "82%", padding: Space.md, borderRadius: Radius.md },
   user: { backgroundColor: Brand.primary, borderBottomRightRadius: 4 },
   assistant: {
     backgroundColor: Brand.surface,
@@ -426,25 +488,31 @@ const styles = StyleSheet.create({
   userText: { color: Brand.white, fontSize: 13, lineHeight: 19 },
   assistantText: { color: Brand.text, fontSize: 13, lineHeight: 19 },
   typing: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     gap: 5,
     paddingHorizontal: ScreenPadding,
     paddingBottom: Space.xs,
   },
   typingText: { fontSize: 11, color: Brand.textMuted },
   disclaimer: {
-    flexDirection: 'row',
+    flexDirection: "row",
     gap: 5,
-    alignItems: 'flex-start',
+    alignItems: "flex-start",
     paddingHorizontal: ScreenPadding,
     paddingBottom: Space.sm,
   },
-  disclaimerText: { flex: 1, fontSize: 10, color: Brand.textMuted, lineHeight: 14 },
+  disclaimerText: {
+    flex: 1,
+    fontSize: 10,
+    color: Brand.textMuted,
+    lineHeight: 14,
+    paddingTop: 6,
+  },
   inputRow: {
-    flexDirection: 'row',
+    flexDirection: "row",
     gap: Space.sm,
-    alignItems: 'flex-end',
+    alignItems: "flex-end",
     paddingHorizontal: ScreenPadding,
     paddingTop: Space.sm,
     paddingBottom: Space.md,
@@ -469,8 +537,8 @@ const styles = StyleSheet.create({
     height: 46,
     borderRadius: 23,
     backgroundColor: Brand.ink,
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: "center",
+    justifyContent: "center",
   },
   sendDisabled: { opacity: 0.35 },
   pressed: { opacity: 0.8 },
