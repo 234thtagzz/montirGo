@@ -18,10 +18,12 @@ const LOCATION_PLUGIN: [string, { locationWhenInUsePermission: string }] = [
 
 export default ({ config }: ConfigContext): ExpoConfig => {
   const plugins = [...(config.plugins ?? [])];
-  const hasLocationPlugin = plugins.some((plugin) =>
-    Array.isArray(plugin) ? plugin[0] === 'expo-location' : plugin === 'expo-location',
-  );
-  if (!hasLocationPlugin) plugins.push(LOCATION_PLUGIN);
+  const hasPlugin = (name: string) =>
+    plugins.some((plugin) => (Array.isArray(plugin) ? plugin[0] === name : plugin === name));
+  if (!hasPlugin('expo-location')) plugins.push(LOCATION_PLUGIN);
+  // SDK 58 mewajibkan plugin expo-web-browser terdaftar (dipakai untuk
+  // membuka tautan eksternal di development/production build).
+  if (!hasPlugin('expo-web-browser')) plugins.push('expo-web-browser');
 
   return {
     ...config,
