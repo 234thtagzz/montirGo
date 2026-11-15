@@ -29,7 +29,7 @@ import {
 } from '@/features/mechanic/service';
 import { AiAnalysisCard } from '@/features/service-request/components/ai-analysis-card';
 import { VehicleProfileCard } from '@/features/vehicles/components/vehicle-profile-card';
-import { formatDateTime } from '@/utils/format';
+import { formatDateTime, formatMonthYear } from '@/utils/format';
 import { openWhatsApp } from '@/utils/whatsapp';
 
 /**
@@ -177,6 +177,13 @@ export default function MechanicRequestDetailScreen() {
     );
   }
 
+  const clientMeta = [
+    order.client_joined_at ? `Klien sejak ${formatMonthYear(order.client_joined_at)}` : null,
+    order.client_total_requests != null ? `${order.client_total_requests} pesanan` : null,
+  ]
+    .filter(Boolean)
+    .join(' · ');
+
   const hasVehicle = Boolean(
     order.vehicle_type ||
       order.vehicle_brand ||
@@ -223,12 +230,17 @@ export default function MechanicRequestDetailScreen() {
           <View style={styles.heroDivider} />
 
           <View style={styles.heroClient}>
-            <Avatar name={order.client_name ?? 'Client'} size={42} />
+            <Avatar name={order.client_name ?? 'Client'} uri={order.client_avatar_url} size={42} />
             <View style={styles.heroClientCopy}>
               <Text style={styles.heroClientName} numberOfLines={1}>
                 {order.client_name ?? 'Client MontirGo'}
               </Text>
               <Text style={styles.heroClientRole}>Client yang membutuhkan bantuan</Text>
+              {clientMeta ? (
+                <Text style={styles.heroClientMeta} numberOfLines={1}>
+                  {clientMeta}
+                </Text>
+              ) : null}
             </View>
             {order.contact_phone ? (
               <Pressable
@@ -363,6 +375,7 @@ const styles = StyleSheet.create({
   heroClientCopy: { flex: 1 },
   heroClientName: { ...Type.bodyStrong, color: Brand.white, fontWeight: '700' },
   heroClientRole: { ...Type.meta, color: Brand.inkMuted, marginTop: 2 },
+  heroClientMeta: { ...Type.micro, color: Brand.volt, marginTop: 3 },
   chatButton: {
     width: 42,
     height: 42,

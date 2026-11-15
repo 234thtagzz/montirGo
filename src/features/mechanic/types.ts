@@ -66,6 +66,8 @@ export interface IncomingOrder {
   vehicle_brand: string | null;
   vehicle_model: string | null;
   client_name: string | null;
+  /** Path/URL foto profil client (null bila belum diunggah). */
+  client_avatar_url?: string | null;
   /** Tingkat risiko dari analisis AI terbaru (null bila belum ada). */
   ai_risk_level: AiRiskLevel | null;
   has_analysis: boolean;
@@ -84,6 +86,12 @@ export interface IncomingRequestDetail {
   additional_notes: string | null;
   created_at: string;
   client_name: string | null;
+  /** Path/URL foto profil client (null bila belum diunggah). */
+  client_avatar_url?: string | null;
+  /** Kapan client bergabung dengan MontirGo. */
+  client_joined_at?: string | null;
+  /** Jumlah pesanan yang pernah dibuat client. */
+  client_total_requests?: number | null;
   vehicle_type: string | null;
   vehicle_brand: string | null;
   vehicle_model: string | null;

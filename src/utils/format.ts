@@ -34,3 +34,11 @@ export function formatTime(iso: string): string {
     minute: '2-digit',
   });
 }
+
+/** Bulan & tahun, mis. "Nov 2026" — dipakai untuk info bergabung client. */
+export function formatMonthYear(iso: string): string {
+  return new Date(iso).toLocaleDateString('id-ID', {
+    month: 'short',
+    year: 'numeric',
+  });
+}

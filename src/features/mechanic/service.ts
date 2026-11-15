@@ -130,7 +130,8 @@ export async function listIncomingOrders(): Promise<IncomingOrder[]> {
     .from('mechanic_open_request_view')
     .select(
       'id, issue_description, symptoms, address, contact_phone, status, created_at, ' +
-        'vehicle_type, vehicle_brand, vehicle_model, vehicle_photo_url, client_name, ai_analysis',
+        'vehicle_type, vehicle_brand, vehicle_model, vehicle_photo_url, client_name, ' +
+        'client_avatar_url, ai_analysis',
     )
     .order('created_at', { ascending: false })
     .limit(30);
@@ -152,6 +153,7 @@ export async function listIncomingOrders(): Promise<IncomingOrder[]> {
         vehicle_brand: (r.vehicle_brand as string | null) ?? null,
         vehicle_model: (r.vehicle_model as string | null) ?? null,
         client_name: (r.client_name as string | null) ?? null,
+        client_avatar_url: (r.client_avatar_url as string | null) ?? null,
         ai_risk_level: analysis?.riskLevel ?? null,
         has_analysis: analysis !== null,
       };
@@ -162,7 +164,8 @@ export async function listIncomingOrders(): Promise<IncomingOrder[]> {
     .from('service_requests')
     .select(
       'id, issue_description, symptoms, address, contact_phone, status, created_at, ' +
-        'vehicles (type, brand, model), client:profiles!service_requests_client_id_fkey (full_name)',
+        'vehicles (type, brand, model), ' +
+        'client:profiles!service_requests_client_id_fkey (full_name, avatar_url)',
     )
     .is('mechanic_id', null)
     .in('status', OPEN_REQUEST_STATUSES)
@@ -181,6 +184,7 @@ export async function listIncomingOrders(): Promise<IncomingOrder[]> {
     vehicle_brand: (r.vehicles as { brand?: string } | null)?.brand ?? null,
     vehicle_model: (r.vehicles as { model?: string } | null)?.model ?? null,
     client_name: (r.client as { full_name?: string } | null)?.full_name ?? null,
+    client_avatar_url: (r.client as { avatar_url?: string } | null)?.avatar_url ?? null,
     ai_risk_level: null,
     has_analysis: false,
   }));
@@ -197,8 +201,9 @@ export async function getIncomingRequestDetail(
     .from('mechanic_open_request_view')
     .select(
       'id, status, issue_description, symptoms, address, lat, lng, contact_phone, ' +
-        'additional_notes, created_at, client_name, vehicle_type, vehicle_brand, ' +
-        'vehicle_model, vehicle_year, vehicle_plate, vehicle_photo_url, ai_analysis, ai_created_at',
+        'additional_notes, created_at, client_name, client_avatar_url, client_joined_at, ' +
+        'client_total_requests, vehicle_type, vehicle_brand, vehicle_model, vehicle_year, ' +
+        'vehicle_plate, vehicle_photo_url, ai_analysis, ai_created_at',
     )
     .eq('id', id)
     .maybeSingle();
@@ -215,7 +220,7 @@ export async function getIncomingRequestDetail(
     .select(
       'id, status, issue_description, symptoms, address, lat, lng, contact_phone, ' +
         'additional_notes, created_at, vehicles ( type, brand, model, year, license_plate, photo_url ), ' +
-        'client:profiles!service_requests_client_id_fkey ( full_name )',
+        'client:profiles!service_requests_client_id_fkey ( full_name, avatar_url, created_at )',
     )
     .eq('id', id)
     .is('mechanic_id', null)
@@ -245,6 +250,9 @@ export async function getIncomingRequestDetail(
     additional_notes: (r.additional_notes as string | null) ?? null,
     created_at: r.created_at as string,
     client_name: (r.client as { full_name?: string } | null)?.full_name ?? null,
+    client_avatar_url: (r.client as { avatar_url?: string } | null)?.avatar_url ?? null,
+    client_joined_at: (r.client as { created_at?: string } | null)?.created_at ?? null,
+    client_total_requests: null,
     vehicle_type: vehicle?.type ?? null,
     vehicle_brand: vehicle?.brand ?? null,
     vehicle_model: vehicle?.model ?? null,
@@ -269,6 +277,10 @@ function mapIncomingDetail(r: Record<string, unknown>): IncomingRequestDetail {
     additional_notes: (r.additional_notes as string | null) ?? null,
     created_at: r.created_at as string,
     client_name: (r.client_name as string | null) ?? null,
+    client_avatar_url: (r.client_avatar_url as string | null) ?? null,
+    client_joined_at: (r.client_joined_at as string | null) ?? null,
+    client_total_requests:
+      r.client_total_requests == null ? null : Number(r.client_total_requests),
     vehicle_type: (r.vehicle_type as string | null) ?? null,
     vehicle_brand: (r.vehicle_brand as string | null) ?? null,
     vehicle_model: (r.vehicle_model as string | null) ?? null,

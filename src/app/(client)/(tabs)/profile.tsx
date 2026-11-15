@@ -10,6 +10,11 @@ import { Ionicons, type IconName } from '@/components/ui/icon';
 import { Brand, Radius, ScreenPadding, Space, Type } from '@/constants/brand';
 import { useSessionUser } from '@/hooks/use-session-user';
 import { useAuth } from '@/features/auth/service';
+import {
+  getMyClientSummary,
+  type ClientProfileSummary,
+} from '@/features/client/service';
+import { formatMonthYear } from '@/utils/format';
 
 interface MenuItem {
   key: string;
@@ -53,11 +58,15 @@ export default function ClientProfileScreen() {
   const insets = useSafeAreaInsets();
   const [logoutVisible, setLogoutVisible] = useState(false);
   const [loggingOut, setLoggingOut] = useState(false);
+  const [summary, setSummary] = useState<ClientProfileSummary | null>(null);
 
   // Profil bisa terisi setelah pendaftaran; segarkan setiap kali tab dibuka.
   useFocusEffect(
     useCallback(() => {
       void refresh();
+      getMyClientSummary()
+        .then(setSummary)
+        .catch(() => setSummary(null));
     }, [refresh]),
   );
 
@@ -93,7 +102,7 @@ export default function ClientProfileScreen() {
 
           <View style={styles.identity}>
             <View style={styles.avatarRing}>
-              <Avatar name={initials} size={72} />
+              <Avatar name={initials} uri={summary?.avatar_url} size={72} />
             </View>
             <View style={styles.identityCopy}>
               <Text style={styles.name} numberOfLines={1}>
@@ -145,6 +154,26 @@ export default function ClientProfileScreen() {
               label="Nomor WhatsApp"
               value={user?.phoneNumber || 'Belum diisi'}
               muted={!user?.phoneNumber}
+              isLast
+            />
+          </View>
+
+          <SectionHeading icon="analytics-outline" title="Ringkasan aktivitas" />
+          <View style={styles.infoCard}>
+            <InfoRow
+              label="Bergabung sejak"
+              value={
+                summary?.joined_at ? formatMonthYear(summary.joined_at) : 'Belum tersedia'
+              }
+              muted={!summary?.joined_at}
+            />
+            <InfoRow
+              label="Total pesanan"
+              value={summary ? String(summary.total_requests) : '-'}
+            />
+            <InfoRow
+              label="Kendaraan tersimpan"
+              value={summary ? String(summary.total_vehicles) : '-'}
               isLast
             />
           </View>

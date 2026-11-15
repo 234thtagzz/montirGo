@@ -40,6 +40,8 @@ Migrasi yang relevan:
 - `20261104120000_assignment_confirmation.sql` — konfirmasi client sebelum montir mulai
   (status `mechanic_assigned`, RPC `respond_to_assignment`, batas waktu 5 menit,
   dan jadwal `pg_cron` bila tersedia)
+- `20261115000000_client_request_profile_view.sql` — view request terbuka membawa
+  avatar, tanggal bergabung, dan total pesanan client untuk layar pengajuan montir
 
 Jika `db push` menolak karena riwayat migrasi remote tidak cocok, gunakan cara
 SQL Editor di atas (file migrasi idempotent, aman dijalankan ulang).

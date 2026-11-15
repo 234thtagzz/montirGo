@@ -131,6 +131,39 @@ export async function getMyId(): Promise<string> {
   return user.id;
 }
 
+// ---------- Ringkasan profil client ----------
+
+export interface ClientProfileSummary {
+  avatar_url: string | null;
+  joined_at: string | null;
+  total_requests: number;
+  total_vehicles: number;
+}
+
+/**
+ * Data ringkas untuk layar profil client. Hitungan memakai `head: true`
+ * supaya Supabase tidak mengirim baris yang tidak dibutuhkan.
+ */
+export async function getMyClientSummary(): Promise<ClientProfileSummary> {
+  const id = await getMyId();
+  const [profile, requests, vehicles] = await Promise.all([
+    supabase.from('profiles').select('avatar_url, created_at').eq('id', id).maybeSingle(),
+    supabase
+      .from('service_requests')
+      .select('id', { count: 'exact', head: true })
+      .eq('client_id', id),
+    supabase.from('vehicles').select('id', { count: 'exact', head: true }).eq('owner_id', id),
+  ]);
+
+  const row = profile.data as { avatar_url?: string | null; created_at?: string | null } | null;
+  return {
+    avatar_url: row?.avatar_url ?? null,
+    joined_at: row?.created_at ?? null,
+    total_requests: requests.count ?? 0,
+    total_vehicles: vehicles.count ?? 0,
+  };
+}
+
 // ---------- Kendaraan ----------
 
 export async function listMyVehicles(): Promise<ClientVehicle[]> {
