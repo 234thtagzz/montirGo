@@ -48,3 +48,6 @@ example
 
 # IDE
 .idea/
+
+#skills ai agents
+.agents/
