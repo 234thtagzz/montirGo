@@ -42,9 +42,35 @@ Migrasi yang relevan:
   dan jadwal `pg_cron` bila tersedia)
 - `20261115000000_client_request_profile_view.sql` — view request terbuka membawa
   avatar, tanggal bergabung, dan total pesanan client untuk layar pengajuan montir
+- `20261119000000_admin_role.sql` — enum role `client | mechanic | admin`,
+  policy CRUD admin di seluruh tabel, view admin, dan RPC `set_user_role`
 
 Jika `db push` menolak karena riwayat migrasi remote tidak cocok, gunakan cara
 SQL Editor di atas (file migrasi idempotent, aman dijalankan ulang).
+
+### 2b. Akun admin (web-only)
+
+Database memiliki tiga role: `client`, `mechanic`, dan `admin`. Aplikasi mobile
+hanya menyediakan pilihan `client`/`mechanic`; akun `admin` diblokir di mobile
+dan hanya bisa memakai panel web `montirgo-admin`.
+
+Membuat admin pertama:
+
+1. Buat user di Supabase Dashboard → Authentication → Users.
+2. Tambahkan emailnya ke `ADMIN_EMAILS` pada `.env.local` repo
+   `montirgo-admin`, **atau** jalankan SQL di Supabase SQL Editor:
+   ```sql
+   update public.profiles set role = 'admin' where email = 'admin@montirgo.id';
+   ```
+   RPC `public.set_user_role('<user-id>', 'admin')` tersedia untuk sesi
+   `service_role` atau admin yang sudah login (bukan SQL Editor).
+3. Login di panel web. Email yang ada di `ADMIN_EMAILS` otomatis dipromosikan
+   saat login pertama.
+
+Admin memiliki akses baca + CRUD ke seluruh data (profil client/montir,
+kendaraan, order, pembayaran, earning, wallet, dan transaksi lain) melalui
+policy `admin_all` dan view `admin_user_directory` /
+`admin_transaction_overview`.
 
 ## 3. Set secret AI (Groq)
 

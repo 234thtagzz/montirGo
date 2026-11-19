@@ -77,5 +77,8 @@ supabase/
 
 - Konfigurasi native diatur lewat `app.json` + `app.config.ts`. Jangan edit
   `android/` atau `ios/` secara manual.
+- Database memiliki tiga role: `client`, `mechanic`, `admin`. Aplikasi mobile
+  hanya menampilkan pilihan client/montir; akun admin diblokir di mobile dan
+  hanya boleh memakai panel web `montirgo-admin`.
 - Panduan deploy ada di [`DEPLOY.md`](./DEPLOY.md).
 - Aturan kontribusi ada di [`AGENTS.md`](./AGENTS.md).

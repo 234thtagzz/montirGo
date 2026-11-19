@@ -17,6 +17,7 @@ export default function MechanicLayout() {
 
   if (loading) return <AppLoadingScreen instant status="Memeriksa akses…" />;
   if (!user) return <Redirect href="/(auth)/login" />;
+  if (user.role === 'ADMIN') return <Redirect href="/(auth)/admin-only" />;
   if (user.role !== 'MONTIR') return <Redirect href="/(client)/(tabs)" />;
 
   return (

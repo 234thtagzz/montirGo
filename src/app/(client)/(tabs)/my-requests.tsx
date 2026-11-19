@@ -11,6 +11,8 @@ import { useSessionUser } from '@/hooks/use-session-user';
 import { createRealtimeChannel } from '@/lib/realtime';
 import { supabase } from '@/lib/supabase';
 import { listMyRequests, type ClientOrder } from '@/features/client/service';
+import { ComplaintBadge } from '@/features/complaints/components/complaint-badge';
+import { listMyComplaintRequestIds } from '@/features/complaints/service';
 import { formatVehicleLabel } from '@/features/vehicles/constants';
 import { getStatusMeta, isActiveStatus } from '@/features/service-request/status';
 import { formatDayLabel, formatTime } from '@/utils/format';
@@ -35,6 +37,7 @@ export default function MyRequestsScreen() {
   const router = useRouter();
 
   const [orders, setOrders] = useState<ClientOrder[]>([]);
+  const [complaintIds, setComplaintIds] = useState<Set<string>>(new Set());
   const [filter, setFilter] = useState<FilterKey>('all');
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -50,6 +53,10 @@ export default function MyRequestsScreen() {
       setLoading(false);
       setRefreshing(false);
     }
+    // Badge "ada keluahan" terpisah, kegagalannya tidak mengganggu riwayat.
+    void listMyComplaintRequestIds()
+      .then((ids) => setComplaintIds(new Set(ids)))
+      .catch(() => setComplaintIds(new Set()));
   }, []);
 
   useFocusEffect(
@@ -171,6 +178,7 @@ export default function MyRequestsScreen() {
                   <OrderRow
                     key={order.id}
                     order={order}
+                    hasComplaint={complaintIds.has(order.id)}
                     onPress={() =>
                       router.push({
                         pathname: '/(client)/orders/[id]',
@@ -207,7 +215,15 @@ function SummaryStat({
   );
 }
 
-function OrderRow({ order, onPress }: { order: ClientOrder; onPress: () => void }) {
+function OrderRow({
+  order,
+  onPress,
+  hasComplaint,
+}: {
+  order: ClientOrder;
+  onPress: () => void;
+  hasComplaint?: boolean;
+}) {
   const meta = getStatusMeta(order.status);
   const pendingConfirmation =
     order.status === 'mechanic_assigned' && Boolean(order.mechanic_id);
@@ -234,6 +250,12 @@ function OrderRow({ order, onPress }: { order: ClientOrder; onPress: () => void 
           </View>
           <Text style={[styles.time, Tabular]}>{formatTime(order.created_at)}</Text>
         </View>
+
+        {hasComplaint ? (
+          <View style={styles.badgeRow}>
+            <ComplaintBadge />
+          </View>
+        ) : null}
 
         <Text style={styles.issue} numberOfLines={2}>
           {order.issue_description}
@@ -308,6 +330,7 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   rail: { width: 3 },
+  badgeRow: { marginTop: Space.sm },
   cardBody: { flex: 1, padding: Space.lg },
   pressed: { opacity: 0.78 },
   cardTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },

@@ -17,6 +17,7 @@ export default function ClientLayout() {
 
   if (loading) return <AppLoadingScreen instant status="Memeriksa akses…" />;
   if (!user) return <Redirect href="/(auth)/login" />;
+  if (user.role === "ADMIN") return <Redirect href="/(auth)/admin-only" />;
   if (user.role === "MONTIR") return <Redirect href="/(mechanic)/(tabs)" />;
   if (user.role !== "CLIENT") return <Redirect href="/(auth)/login" />;
 

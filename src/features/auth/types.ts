@@ -1,7 +1,8 @@
 // Role di database (PRD §6): 'client' | 'mechanic' | 'admin'.
-// Role di UI: 'CLIENT' | 'MONTIR'. Mapping dijaga di service agar satu pintu.
+// Role di UI mobile: 'CLIENT' | 'MONTIR'. 'ADMIN' hanya dipakai untuk
+// mendeteksi akun admin lalu mengarahkannya ke panel web (bukan role pilihan).
 export type DbRole = 'client' | 'mechanic' | 'admin';
-export type UserRole = 'CLIENT' | 'MONTIR';
+export type UserRole = 'CLIENT' | 'MONTIR' | 'ADMIN';
 
 export interface AuthUser {
   id: string;

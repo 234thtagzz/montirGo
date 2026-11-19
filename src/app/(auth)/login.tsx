@@ -22,8 +22,11 @@ export default function LoginScreen() {
     setLoading(true);
     try {
       const { user } = await login({ email: email.trim().toLowerCase(), password });
-      // Navigasi sesuai role asli dari database
-      if (user.role === 'MONTIR') {
+      // Navigasi sesuai role asli dari database.
+      // Akun admin hanya boleh memakai panel web, bukan aplikasi mobile.
+      if (user.role === 'ADMIN') {
+        router.replace('/(auth)/admin-only');
+      } else if (user.role === 'MONTIR') {
         router.replace('/(mechanic)/(tabs)');
       } else {
         router.replace('/(client)/(tabs)');

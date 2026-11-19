@@ -842,6 +842,22 @@ export default function MechanicOrderDetailScreen() {
           </>
         ) : null}
 
+        <SectionHeader eyebrow="LAPORAN" title="Laporkan keluahan ke admin" />
+        <View style={styles.reportCard}>
+          <Text style={styles.reportText}>
+            Jika ada yang terjadi selama perjalanan atau transaksi ini yang perlu dilaporkan —
+            masalah pembayaran, kendaraan rusak, atau hal lain — ajukan ke admin.
+          </Text>
+          <Button
+            label="Ajukan Keluhan"
+            icon="alert-circle-outline"
+            onPress={() =>
+              router.push({ pathname: '/(mechanic)/complaints', params: { requestId: id } })
+            }
+            style={styles.reportButton}
+          />
+        </View>
+
         {stageAction ? (
           <Button
             label={stageAction.label}
@@ -1259,6 +1275,16 @@ const styles = StyleSheet.create({
     color: Brand.primary,
     lineHeight: 16,
   },
+  reportCard: {
+    backgroundColor: Brand.surface,
+    borderRadius: Radius.lg,
+    borderWidth: 1,
+    borderColor: Brand.border,
+    padding: Space.lg,
+    marginTop: Space.xxl,
+  },
+  reportText: { ...Type.meta, color: Brand.textSecondary, lineHeight: 18 },
+  reportButton: { marginTop: Space.lg },
   doneCard: {
     flexDirection: "row",
     alignItems: "center",

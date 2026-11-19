@@ -800,6 +800,22 @@ export default function ClientOrderDetailScreen() {
           </>
         ) : null}
 
+        <SectionHeader eyebrow="LAPORAN" title="Keluhan transaksi" />
+        <View style={styles.reportCard}>
+          <Text style={styles.reportText}>
+            Gunakan fitur ini untuk mengalihkan apa pun yang berhubungan dengan transaksi ini ke
+            admin — masalah, bugs, atau hal lain yang perlu dilaporkan.
+          </Text>
+          <Button
+            label="Ajukan Keluhan"
+            icon="alert-circle-outline"
+            onPress={() =>
+              router.push({ pathname: '/(client)/complaints', params: { requestId: order.id } })
+            }
+            style={styles.reportButton}
+          />
+        </View>
+
         {isCancellable(order.status) ? (
           <Button
             label="Batalkan Pesanan"
@@ -1008,6 +1024,16 @@ const styles = StyleSheet.create({
   timelineTitle: { fontSize: 13, fontWeight: '600', color: Brand.text },
   timelineNote: { fontSize: 11.5, color: Brand.textSecondary, marginTop: 2 },
   timelineTime: { fontSize: 10.5, color: Brand.textMuted, marginTop: 3 },
+  reportCard: {
+    backgroundColor: Brand.surface,
+    borderRadius: Radius.lg,
+    borderWidth: 1,
+    borderColor: Brand.border,
+    padding: Space.lg,
+    marginTop: Space.xxl,
+  },
+  reportText: { ...Type.meta, color: Brand.textSecondary, lineHeight: 18 },
+  reportButton: { marginTop: Space.lg },
   cancel: { marginTop: Space.xxl },
   invoiceCard: {
     backgroundColor: Brand.surface,

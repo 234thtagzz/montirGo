@@ -5,6 +5,7 @@ import type { AuthUser, DbRole, ProfileRow, UserRole } from './types';
 export * from './types';
 
 export function toAppRole(role: DbRole): UserRole {
+  if (role === 'admin') return 'ADMIN';
   return role === 'mechanic' ? 'MONTIR' : 'CLIENT';
 }
 

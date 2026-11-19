@@ -4,7 +4,9 @@ import { AppLoadingScreen } from '@/components/app-loading-screen';
 import { getSessionUser } from '@/features/auth/service';
 
 export default function RootIndex() {
-  const [target, setTarget] = useState<'/(auth)/login' | '/(client)/(tabs)' | '/(mechanic)/(tabs)' | null>(null);
+  const [target, setTarget] = useState<
+    '/(auth)/login' | '/(auth)/admin-only' | '/(client)/(tabs)' | '/(mechanic)/(tabs)' | null
+  >(null);
 
   useEffect(() => {
     const resolve = async () => {
@@ -13,6 +15,11 @@ export default function RootIndex() {
         const user = await getSessionUser();
         if (!user) {
           setTarget('/(auth)/login');
+          return;
+        }
+        if (user.role === 'ADMIN') {
+          // Admin hanya boleh memakai panel web, bukan aplikasi mobile.
+          setTarget('/(auth)/admin-only');
           return;
         }
         setTarget(user.role === 'MONTIR' ? '/(mechanic)/(tabs)' : '/(client)/(tabs)');
