@@ -46,7 +46,7 @@ async function fetchProfile(userId: string): Promise<ProfileRow | null> {
   const [profileResult, identityResult] = await Promise.all([
     supabase
       .from('profiles')
-      .select('role, full_name, phone_number')
+      .select('role, full_name, phone_number, identity_number')
       .eq('id', userId)
       .maybeSingle(),
     supabase
@@ -56,12 +56,13 @@ async function fetchProfile(userId: string): Promise<ProfileRow | null> {
       .maybeSingle(),
   ]);
   if (profileResult.error) return null;
-  const row = profileResult.data as Omit<ProfileRow, 'identity_number'> | null;
+  const row = profileResult.data as ProfileRow | null;
   if (!row) return null;
   return {
     ...row,
     identity_number:
-      (identityResult.data as { identity_number?: string | null } | null)?.identity_number ??
+      row.identity_number ||
+      (identityResult.data as { identity_number?: string | null } | null)?.identity_number ||
       null,
   };
 }
@@ -177,10 +178,19 @@ export async function setMyIdentityNumber(identityNumber: string): Promise<void>
   const userId = session?.user.id;
   if (!userId) throw new Error('Sesi berakhir. Silakan login kembali.');
 
-  const { error } = await supabase
-    .from('profile_identities')
-    .insert({ profile_id: userId, identity_number: normalized });
-  if (error) throw error;
+  // Simpan secara dual-sync ke profile_identities dan profiles
+  const [identitiesRes, profilesRes] = await Promise.all([
+    supabase
+      .from('profile_identities')
+      .insert({ profile_id: userId, identity_number: normalized }),
+    supabase
+      .from('profiles')
+      .update({ identity_number: normalized })
+      .eq('id', userId),
+  ]);
+  if (identitiesRes.error && profilesRes.error) {
+    throw identitiesRes.error || profilesRes.error;
+  }
 }
 
 export async function signOut(): Promise<void> {
