@@ -42,3 +42,10 @@ export function formatMonthYear(iso: string): string {
     year: 'numeric',
   });
 }
+
+/** Nomor identitas (KTP) dikelompokkan 4 digit, mis. "3201 2345 6789 0001". */
+export function formatIdentityNumber(value?: string | null): string {
+  const digits = (value ?? '').replace(/\D/g, '');
+  if (!digits) return '';
+  return digits.replace(/(\d{4})(?=\d)/g, '$1 ');
+}

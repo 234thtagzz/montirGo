@@ -24,6 +24,14 @@ export function getAuthErrorMessage(error: unknown, fallback: string): string {
   if (/email not confirmed/i.test(raw)) return 'Email belum diverifikasi. Cek inbox lalu login kembali.';
   if (/password should be at least/i.test(raw)) return 'Kata sandi minimal 6 karakter.';
   if (/invalid email/i.test(raw)) return 'Format email tidak valid.';
+  if (/profile_identities_pkey/i.test(raw))
+    return 'Nomor identitas sudah tersimpan dan bersifat permanen.';
+  if (/profiles_identity_number_key|profile_identities_identity_number_key|duplicate key/i.test(raw))
+    return 'Nomor identitas (KTP) sudah terdaftar. Gunakan nomor lain atau login.';
+  if (/profiles_identity_number_format|profile_identities_identity_number_check/i.test(raw))
+    return 'Nomor identitas (KTP) harus 16 digit angka.';
+  if (/nomor identitas.*(permanen|tidak dapat diubah)/i.test(raw))
+    return 'Nomor identitas (KTP) bersifat permanen dan tidak dapat diubah.';
   if (/network|fetch|failed/i.test(raw))
     return 'Tidak dapat terhubung ke server. Periksa koneksi internet.';
   return raw || fallback;
@@ -35,13 +43,27 @@ export function getAuthErrorMessage(error: unknown, fallback: string): string {
  * alih-alih menganggap pengguna sudah logout.
  */
 async function fetchProfile(userId: string): Promise<ProfileRow | null> {
-  const { data, error } = await supabase
-    .from('profiles')
-    .select('role, full_name, phone_number')
-    .eq('id', userId)
-    .maybeSingle();
-  if (error) return null;
-  return (data as ProfileRow | null) ?? null;
+  const [profileResult, identityResult] = await Promise.all([
+    supabase
+      .from('profiles')
+      .select('role, full_name, phone_number')
+      .eq('id', userId)
+      .maybeSingle(),
+    supabase
+      .from('profile_identities')
+      .select('identity_number')
+      .eq('profile_id', userId)
+      .maybeSingle(),
+  ]);
+  if (profileResult.error) return null;
+  const row = profileResult.data as Omit<ProfileRow, 'identity_number'> | null;
+  if (!row) return null;
+  return {
+    ...row,
+    identity_number:
+      (identityResult.data as { identity_number?: string | null } | null)?.identity_number ??
+      null,
+  };
 }
 
 type SessionUser = {
@@ -59,6 +81,7 @@ function toAuthUser(sessionUser: SessionUser, profile: ProfileRow | null): AuthU
   const meta = (sessionUser.user_metadata ?? {}) as {
     full_name?: unknown;
     role?: unknown;
+    identity_number?: unknown;
   };
   const metaRole = meta.role === 'mechanic' ? 'mechanic' : 'client';
   const role: DbRole = profile?.role ?? metaRole;
@@ -70,6 +93,9 @@ function toAuthUser(sessionUser: SessionUser, profile: ProfileRow | null): AuthU
       '',
     email: sessionUser.email ?? '',
     phoneNumber: profile?.phone_number ?? null,
+    identityNumber:
+      profile?.identity_number ??
+      (typeof meta.identity_number === 'string' ? meta.identity_number : null),
     role: toAppRole(role),
   };
 }
@@ -99,6 +125,7 @@ export async function signUp(data: {
   email: string;
   password: string;
   phone: string;
+  identityNumber: string;
   role: UserRole;
 }): Promise<{ user: AuthUser | null; needsConfirmation: boolean }> {
   const { data: authData, error } = await supabase.auth.signUp({
@@ -108,6 +135,7 @@ export async function signUp(data: {
       data: {
         full_name: data.name,
         phone: data.phone,
+        identity_number: data.identityNumber,
         role: toDbRole(data.role),
       },
     },
@@ -128,9 +156,31 @@ export async function signUp(data: {
       fullName: user.fullName || data.name,
       email: user.email || data.email,
       phoneNumber: user.phoneNumber ?? data.phone,
+      identityNumber: user.identityNumber ?? data.identityNumber,
     },
     needsConfirmation: false,
   };
+}
+
+/**
+ * Simpan nomor identitas untuk akun yang belum memilikinya (akun lama).
+ * Hanya bisa diisi sekali; nilai yang sudah tersimpan bersifat permanen.
+ */
+export async function setMyIdentityNumber(identityNumber: string): Promise<void> {
+  const normalized = identityNumber.replace(/\D/g, '');
+  if (!/^\d{16}$/.test(normalized)) {
+    throw new Error('Nomor identitas (KTP) harus 16 digit angka.');
+  }
+  const {
+    data: { session },
+  } = await supabase.auth.getSession();
+  const userId = session?.user.id;
+  if (!userId) throw new Error('Sesi berakhir. Silakan login kembali.');
+
+  const { error } = await supabase
+    .from('profile_identities')
+    .insert({ profile_id: userId, identity_number: normalized });
+  if (error) throw error;
 }
 
 export async function signOut(): Promise<void> {

@@ -39,6 +39,7 @@ export default function RegisterScreen() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [phone, setPhone] = useState('');
+  const [identityNumber, setIdentityNumber] = useState('');
   const [role, setRole] = useState<UserRole>(initialRole);
   const [loading, setLoading] = useState(false);
   const { register } = useAuth();
@@ -53,6 +54,10 @@ export default function RegisterScreen() {
       Alert.alert('Gagal', 'Email tidak valid.');
       return;
     }
+    if (!/^\d{16}$/.test(identityNumber)) {
+      Alert.alert('Gagal', 'Nomor identitas (KTP) wajib diisi 16 digit angka.');
+      return;
+    }
     if (password.length < 6) {
       Alert.alert('Gagal', 'Kata sandi minimal 6 karakter.');
       return;
@@ -65,6 +70,7 @@ export default function RegisterScreen() {
         email: email.trim().toLowerCase(),
         password,
         phone: phone.trim(),
+        identityNumber,
         role,
       });
       if (needsConfirmation || !user) {
@@ -164,6 +170,17 @@ export default function RegisterScreen() {
         autoComplete="tel"
         keyboardType="phone-pad"
         textContentType="telephoneNumber"
+        returnKeyType="next"
+      />
+      <AuthField
+        label="Nomor identitas (KTP)"
+        icon="card-outline"
+        placeholder="16 digit sesuai KTP"
+        value={identityNumber}
+        onChangeText={(text) => setIdentityNumber(text.replace(/\D/g, '').slice(0, 16))}
+        autoComplete="off"
+        keyboardType="number-pad"
+        maxLength={16}
         returnKeyType="next"
       />
       <AuthField

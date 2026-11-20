@@ -9,6 +9,8 @@ export interface AuthUser {
   fullName: string;
   email: string;
   phoneNumber?: string | null;
+  /** Nomor identitas (KTP/NIK) 16 digit. */
+  identityNumber?: string | null;
   role: UserRole;
 }
 
@@ -16,4 +18,5 @@ export interface ProfileRow {
   role: DbRole;
   full_name: string | null;
   phone_number: string | null;
+  identity_number: string | null;
 }

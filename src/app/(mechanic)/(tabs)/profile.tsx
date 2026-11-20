@@ -29,7 +29,7 @@ import { Ionicons, type IconName } from '@/components/ui/icon';
 import { Brand, CardShadow, Radius, ScreenPadding, Space, Type } from '@/constants/brand';
 import { useAuth } from '@/features/auth/service';
 import { useSessionUser } from '@/hooks/use-session-user';
-import { formatDateTime } from '@/utils/format';
+import { formatDateTime, formatIdentityNumber } from '@/utils/format';
 import {
   getMechanicProfile,
   getMyProfileRow,
@@ -457,6 +457,11 @@ export default function MechanicProfileScreen() {
               keyboardType="phone-pad"
               placeholder="08xx xxxx xxxx"
             />
+            <ReadOnlyField
+              label="Nomor identitas (KTP)"
+              value={formatIdentityNumber(sessionUser?.identityNumber)}
+              helper="Permanen — nomor identitas tidak dapat diubah."
+            />
             <Field
               label="Tentang saya"
               value={bio}
@@ -755,6 +760,30 @@ function Field({
   );
 }
 
+/** Data permanen: ditampilkan tanpa input agar tidak bisa diubah pengguna. */
+function ReadOnlyField({
+  label,
+  value,
+  helper,
+}: {
+  label: string;
+  value: string;
+  helper?: string;
+}) {
+  return (
+    <View style={styles.field}>
+      <Text style={styles.label}>{label}</Text>
+      <View style={styles.readOnly}>
+        <Text style={[styles.readOnlyValue, !value && styles.readOnlyMuted]}>
+          {value || 'Belum diisi'}
+        </Text>
+        <Ionicons name="lock-closed" size={14} color={Brand.textMuted} />
+      </View>
+      {helper ? <Text style={styles.helper}>{helper}</Text> : null}
+    </View>
+  );
+}
+
 function ReviewRow({ review }: { review: MechanicReview }) {
   return (
     <View style={styles.reviewRow}>
@@ -912,6 +941,20 @@ const styles = StyleSheet.create({
     color: Brand.text,
   },
   inputMultiline: { minHeight: 78, paddingTop: Space.md, textAlignVertical: 'top' },
+  readOnly: {
+    minHeight: 48,
+    borderRadius: Radius.md,
+    borderWidth: 1,
+    borderColor: Brand.divider,
+    backgroundColor: Brand.background,
+    paddingHorizontal: Space.md,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: Space.sm,
+  },
+  readOnlyValue: { flex: 1, fontSize: 13.5, color: Brand.text, fontWeight: '600' },
+  readOnlyMuted: { color: Brand.textMuted, fontWeight: '400' },
   helper: { fontSize: 10.5, color: Brand.textMuted, marginTop: 5 },
   twoColumns: { flexDirection: 'row', gap: Space.md },
   column: { flex: 1 },

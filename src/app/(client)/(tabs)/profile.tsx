@@ -14,7 +14,7 @@ import {
   getMyClientSummary,
   type ClientProfileSummary,
 } from '@/features/client/service';
-import { formatMonthYear } from '@/utils/format';
+import { formatMonthYear, formatIdentityNumber } from '@/utils/format';
 
 interface MenuItem {
   key: string;
@@ -154,6 +154,11 @@ export default function ClientProfileScreen() {
               label="Nomor WhatsApp"
               value={user?.phoneNumber || 'Belum diisi'}
               muted={!user?.phoneNumber}
+            />
+            <InfoRow
+              label="Nomor identitas (KTP)"
+              value={formatIdentityNumber(user?.identityNumber) || 'Belum diisi'}
+              muted={!user?.identityNumber}
               isLast
             />
           </View>
