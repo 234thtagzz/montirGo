@@ -35,6 +35,12 @@ const ACTIVITY_META: Record<string, ActivityMeta> = {
     color: Brand.primary,
     background: Brand.primarySoft,
   },
+  order_cancelled: {
+    label: 'Order dibatalkan',
+    icon: 'close-circle-outline',
+    color: Brand.red,
+    background: Brand.redSoft,
+  },
   order_arrived: {
     label: 'Tiba di lokasi client',
     icon: 'location-outline',
@@ -119,3 +125,12 @@ const PROGRESS_LABEL: Record<string, string> = {
 export function getMechanicProgressLabel(status: string): string {
   return PROGRESS_LABEL[status] ?? 'Order aktif';
 }
+
+/** Pilihan alasan saat montir membatalkan order aktif (opsional). */
+export const MECHANIC_CANCEL_REASONS = [
+  'Tidak bisa menjangkau lokasi',
+  'Kendala kendaraan atau alat',
+  'Client tidak bisa dihubungi',
+  'Di luar kemampuan saya',
+  'Lainnya',
+] as const;

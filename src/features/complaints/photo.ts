@@ -1,4 +1,4 @@
-// Unggah & tampilkan foto lampiran keluahan.
+// Unggah & tampilkan foto lampiran keluhan.
 //
 // Bucket `complaint-photos` bersifat privat. Yang disimpan di kolom
 // `complaints.photo_paths` adalah *path* objek, bukan URL publik. Saat
@@ -25,25 +25,25 @@ const signedUrlCache = new Map<string, { url: string; expiresAt: number }>();
 const SIGNED_URL_TTL_SECONDS = 60 * 60; // 1 jam
 const SIGNED_URL_SAFETY_MS = 5 * 60 * 1000;
 
-/** Buka galeri & kembalikan pilihan (maksimal MAX_COMPLAINT_PHOTOS, batalkan -> []). */
-export async function pickComplaintPhotos(): Promise<PickedComplaintPhoto[]> {
+/** Buka galeri & kembalikan pilihan (maksimal `limit`, batalkan -> []). */
+export async function pickComplaintPhotos(
+  limit = MAX_COMPLAINT_PHOTOS,
+): Promise<PickedComplaintPhoto[]> {
   // Sejak SDK 54 pemilih galeri sistem tidak memerlukan izin media library.
   const result = await ImagePicker.launchImageLibraryAsync({
     mediaTypes: ['images'],
     // crop ganda tidak didukung saat pemilihan ganda — biarkan pilih saja.
     allowsEditing: false,
     allowsMultipleSelection: true,
-    selectionLimit: MAX_COMPLAINT_PHOTOS,
+    selectionLimit: limit,
     quality: 0.7,
     exif: false,
   });
   if (result.canceled) return [];
-  return result.assets
-    .slice(0, MAX_COMPLAINT_PHOTOS)
-    .map((asset) => ({
-      uri: asset.uri,
-      mimeType: asset.mimeType ?? 'image/jpeg',
-    }));
+  return result.assets.slice(0, limit).map((asset) => ({
+    uri: asset.uri,
+    mimeType: asset.mimeType ?? 'image/jpeg',
+  }));
 }
 
 async function readBytes(uri: string): Promise<ArrayBuffer> {
@@ -64,7 +64,7 @@ function extensionFor(mimeType: string, uri: string): string {
 }
 
 /**
- * Unggah foto keluahan milik pelapor. Path selalu diawali `ownerId/requestId/`,
+ * Unggah foto keluhan milik pelapor. Path selalu diawali `ownerId/requestId/`,
  * path ini dipakai di kolom `complaints.photo_paths`.
  */
 export async function uploadComplaintPhoto(
@@ -90,7 +90,7 @@ export async function uploadComplaintPhoto(
   return path;
 }
 
-/** Hapus objek foto; kegagalan diabaikan agar tidak menggagalkan penyimpanan keluahan. */
+/** Hapus objek foto; kegagalan diabaikan agar tidak menggagalkan penyimpanan keluhan. */
 export async function deleteComplaintPhotos(paths: string[]): Promise<void> {
   if (!paths.length) return;
   for (const path of paths) signedUrlCache.delete(path);

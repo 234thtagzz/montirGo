@@ -121,8 +121,9 @@ export default function MechanicActiveOrdersScreen() {
                   price={order.price_amount}
                   onPress={() => router.push(`/(mechanic)/active-order/${order.id}`)}
                   action={{
-                    label: "Keluhan",
+                    label: "Laporkan",
                     icon: "alert-circle-outline",
+                    variant: "ghost",
                     onPress: () =>
                       router.push({
                         pathname: "/(mechanic)/complaints",

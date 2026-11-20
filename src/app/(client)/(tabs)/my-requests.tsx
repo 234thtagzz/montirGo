@@ -53,7 +53,7 @@ export default function MyRequestsScreen() {
       setLoading(false);
       setRefreshing(false);
     }
-    // Badge "ada keluahan" terpisah, kegagalannya tidak mengganggu riwayat.
+    // Badge "ada keluhan" terpisah, kegagalannya tidak mengganggu riwayat.
     void listMyComplaintRequestIds()
       .then((ids) => setComplaintIds(new Set(ids)))
       .catch(() => setComplaintIds(new Set()));

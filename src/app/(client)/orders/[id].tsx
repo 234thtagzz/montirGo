@@ -802,13 +802,19 @@ export default function ClientOrderDetailScreen() {
 
         <SectionHeader eyebrow="LAPORAN" title="Keluhan transaksi" />
         <View style={styles.reportCard}>
-          <Text style={styles.reportText}>
-            Gunakan fitur ini untuk mengalihkan apa pun yang berhubungan dengan transaksi ini ke
-            admin — masalah, bugs, atau hal lain yang perlu dilaporkan.
-          </Text>
+          <View style={styles.reportHead}>
+            <View style={styles.reportIcon}>
+              <Ionicons name="shield-checkmark-outline" size={18} color={Brand.primary} />
+            </View>
+            <Text style={styles.reportText}>
+              Ada kendala dengan transaksi ini? Laporkan langsung ke admin MontirGo — soal pesanan,
+              pembayaran, montir, atau aplikasi.
+            </Text>
+          </View>
           <Button
             label="Ajukan Keluhan"
             icon="alert-circle-outline"
+            variant="secondary"
             onPress={() =>
               router.push({ pathname: '/(client)/complaints', params: { requestId: order.id } })
             }
@@ -1032,7 +1038,16 @@ const styles = StyleSheet.create({
     padding: Space.lg,
     marginTop: Space.xxl,
   },
-  reportText: { ...Type.meta, color: Brand.textSecondary, lineHeight: 18 },
+  reportHead: { flexDirection: 'row', gap: Space.md, alignItems: 'flex-start' },
+  reportIcon: {
+    width: 34,
+    height: 34,
+    borderRadius: Radius.sm,
+    backgroundColor: Brand.primarySoft,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  reportText: { ...Type.meta, color: Brand.textSecondary, lineHeight: 18, flex: 1 },
   reportButton: { marginTop: Space.lg },
   cancel: { marginTop: Space.xxl },
   invoiceCard: {

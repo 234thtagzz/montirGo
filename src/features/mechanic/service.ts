@@ -616,6 +616,83 @@ export async function updateOrderStatus(requestId: string, toStatus: OrderStatus
   );
 }
 
+/** Status order yang boleh dibatalkan montir (selaras policy `sr_mechanic_progress`). */
+const MECHANIC_CANCELLABLE_STATUSES = [
+  'mechanic_accepted',
+  'on_the_way',
+  'arrived',
+  'diagnosing',
+  'repairing',
+] as const;
+
+/**
+ * Montir hanya bisa membatalkan order yang sedang dikerjakan, sebelum tagihan
+ * dikirim. Status `mechanic_assigned` belum bisa dibatalkan karena masih
+ * menunggu konfirmasi client dan ditolak oleh policy database.
+ */
+export function canMechanicCancel(status: string): boolean {
+  return (MECHANIC_CANCELLABLE_STATUSES as readonly string[]).includes(status);
+}
+
+/**
+ * Montir membatalkan order aktif. Alasan (opsional) disimpan di riwayat status
+ * agar client & admin tahu kenapa order berhenti.
+ */
+export async function cancelOrderAsMechanic(
+  requestId: string,
+  reason?: string,
+): Promise<void> {
+  const id = await getMyId();
+  const { data: current, error: readError } = await supabase
+    .from('service_requests')
+    .select('status')
+    .eq('id', requestId)
+    .eq('mechanic_id', id)
+    .maybeSingle();
+  if (readError) throw readError;
+
+  const currentStatus = (current as { status?: string } | null)?.status ?? null;
+  if (!currentStatus) {
+    throw new Error('Order tidak ditemukan atau bukan milikmu.');
+  }
+  if (!canMechanicCancel(currentStatus)) {
+    throw new Error(
+      currentStatus === 'mechanic_assigned'
+        ? 'Pengajuan masih menunggu konfirmasi client, belum bisa dibatalkan.'
+        : 'Order ini sudah tidak bisa dibatalkan.',
+    );
+  }
+
+  const { data: updated, error } = await supabase
+    .from('service_requests')
+    .update({ status: 'cancelled' })
+    .eq('id', requestId)
+    .eq('mechanic_id', id)
+    .eq('status', currentStatus)
+    .select('id');
+  if (error) throw error;
+  if (!updated || updated.length === 0) {
+    throw new Error('Pesanan gagal dibatalkan. Muat ulang halaman lalu coba lagi.');
+  }
+
+  const trimmedReason = reason?.trim();
+  await supabase.from('service_request_status_history').insert({
+    request_id: requestId,
+    from_status: currentStatus,
+    to_status: 'cancelled',
+    changed_by: id,
+    notes: trimmedReason
+      ? `Dibatalkan oleh montir: ${trimmedReason}`
+      : 'Dibatalkan oleh montir.',
+  });
+
+  const shortId = requestId.slice(0, 8).toUpperCase();
+  await logActivity(
+    'order_cancelled',
+    `Membatalkan order ${shortId}${trimmedReason ? ` (${trimmedReason})` : ''}.`,
+  );
+}
+
 /** Kalimat aktivitas yang ramah dibaca di layar Aktivitas montir. */
 const ACTIVITY_DESCRIPTION: Partial<Record<OrderStatus, (shortId: string) => string>> = {
   mechanic_assigned: (shortId) => `Mengajukan diri untuk order #${shortId}, menunggu konfirmasi client.`,

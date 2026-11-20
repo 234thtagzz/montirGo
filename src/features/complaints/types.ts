@@ -1,4 +1,4 @@
-// Tipo data Keluhan (complaints).
+// Tipe data Keluhan (complaints).
 import type { IconName } from '@/components/ui/icon';
 
 export type ComplaintCategory = 'pesanan' | 'pembayaran' | 'montir' | 'aplikasi' | 'lainnya';
@@ -43,7 +43,7 @@ export interface ComplaintStatusMeta {
   icon: IconName;
 }
 
-/** Opsi kategori keluahan — dipakai di form dan badge berikut semuanya. */
+/** Opsi kategori keluhan — dipakai di form dan badge. */
 export const COMPLAINT_CATEGORY_META: Record<ComplaintCategory, { label: string; icon: IconName }> =
   {
     pesanan: { label: 'Pesanan', icon: 'receipt-outline' },

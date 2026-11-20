@@ -1,4 +1,5 @@
 import { Pressable, StyleSheet, Text, View } from 'react-native';
+import type { ComponentProps } from 'react';
 import { Button } from '@/components/ui/button';
 import { Money } from '@/components/ui/money';
 import { Ionicons, type IconName } from '@/components/ui/icon';
@@ -30,6 +31,7 @@ interface OrderCardProps {
   action?: {
     label: string;
     icon: IconName;
+    variant?: ComponentProps<typeof Button>['variant'];
     loading?: boolean;
     disabled?: boolean;
     onPress: () => void;
@@ -107,6 +109,7 @@ export function OrderCard({
         <Button
           label={action.label}
           icon={action.icon}
+          variant={action.variant}
           loading={action.loading}
           disabled={action.disabled}
           onPress={action.onPress}

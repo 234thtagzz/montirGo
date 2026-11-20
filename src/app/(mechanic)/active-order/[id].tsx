@@ -18,9 +18,12 @@ import {
 import {
   getMechanicProgressLabel,
   getNextAction,
+  MECHANIC_CANCEL_REASONS,
 } from "@/features/mechanic/constants";
 import {
   addOrderInvoiceItem,
+  cancelOrderAsMechanic,
+  canMechanicCancel,
   deleteOrderInvoiceItem,
   getMyOrder,
   listOrderInvoiceItems,
@@ -92,6 +95,9 @@ export default function MechanicOrderDetailScreen() {
   const [confirmingCash, setConfirmingCash] = useState(false);
   const [invoiceConfirmOpen, setInvoiceConfirmOpen] = useState(false);
   const [cashConfirmOpen, setCashConfirmOpen] = useState(false);
+  const [cancelOpen, setCancelOpen] = useState(false);
+  const [cancelling, setCancelling] = useState(false);
+  const [cancelReason, setCancelReason] = useState<string | null>(null);
 
   const loadAnalysis = useCallback(async () => {
     if (!id) return;
@@ -380,6 +386,35 @@ export default function MechanicOrderDetailScreen() {
   // Transisi "Mulai Perjalanan"/"Sampai di Lokasi" dimiliki layar trip agar
   // tidak ada dua tombol yang mengubah status yang sama.
   const stageAction = tripStatus ? null : nextAction;
+  const canCancel = order ? canMechanicCancel(order.status) : false;
+
+  const openCancel = () => {
+    if (!canCancel || cancelling) return;
+    setCancelReason(null);
+    setCancelOpen(true);
+  };
+
+  const submitCancel = async () => {
+    if (!order || cancelling) return;
+    setCancelling(true);
+    try {
+      await cancelOrderAsMechanic(order.id, cancelReason ?? undefined);
+      setCancelOpen(false);
+      setCancelReason(null);
+      await load();
+      Alert.alert(
+        "Pesanan dibatalkan",
+        "Client sudah menerima pembaruan bahwa pesanan dibatalkan.",
+      );
+    } catch (e) {
+      Alert.alert(
+        "Gagal membatalkan",
+        e instanceof Error ? e.message : "Coba lagi beberapa saat.",
+      );
+    } finally {
+      setCancelling(false);
+    }
+  };
 
   const advance = () => {
     if (!order || !nextAction) return;
@@ -842,15 +877,21 @@ export default function MechanicOrderDetailScreen() {
           </>
         ) : null}
 
-        <SectionHeader eyebrow="LAPORAN" title="Laporkan keluahan ke admin" />
+        <SectionHeader eyebrow="LAPORAN" title="Laporkan keluhan ke admin" />
         <View style={styles.reportCard}>
-          <Text style={styles.reportText}>
-            Jika ada yang terjadi selama perjalanan atau transaksi ini yang perlu dilaporkan —
-            masalah pembayaran, kendaraan rusak, atau hal lain — ajukan ke admin.
-          </Text>
+          <View style={styles.reportHead}>
+            <View style={styles.reportIcon}>
+              <Ionicons name="shield-checkmark-outline" size={18} color={Brand.primary} />
+            </View>
+            <Text style={styles.reportText}>
+              Ada kendala selama perjalanan atau transaksi ini? Laporkan ke admin MontirGo — soal
+              pembayaran, client, kendaraan, atau aplikasi.
+            </Text>
+          </View>
           <Button
             label="Ajukan Keluhan"
             icon="alert-circle-outline"
+            variant="secondary"
             onPress={() =>
               router.push({ pathname: '/(mechanic)/complaints', params: { requestId: id } })
             }
@@ -881,6 +922,23 @@ export default function MechanicOrderDetailScreen() {
             </Text>
           </View>
         )}
+
+        {canCancel ? (
+          <View style={styles.cancelZone}>
+            <View style={styles.cancelDivider} />
+            <Button
+              label="Batalkan Pesanan"
+              icon="close-circle-outline"
+              variant="danger"
+              loading={cancelling}
+              onPress={openCancel}
+            />
+            <Text style={styles.cancelHint}>
+              Pesanan akan dihentikan dan client diberi tahu. Gunakan hanya jika
+              kamu benar-benar tidak bisa melanjutkan pekerjaan ini.
+            </Text>
+          </View>
+        ) : null}
       </ScrollView>
 
       <ConfirmSheet
@@ -944,6 +1002,53 @@ export default function MechanicOrderDetailScreen() {
             Pendapatan tunai tercatat di menu Pendapatan, tetapi tidak masuk saldo dompet
             MontirGo.
           </Text>
+        </View>
+      </ConfirmSheet>
+
+      <ConfirmSheet
+        visible={cancelOpen}
+        title="Batalkan pesanan?"
+        message="Client akan diberi tahu bahwa pesanan dibatalkan. Tindakan ini tidak bisa diurungkan."
+        confirmLabel="Ya, batalkan pesanan"
+        cancelLabel="Kembali"
+        icon="close-circle-outline"
+        destructive
+        loading={cancelling}
+        onConfirm={submitCancel}
+        onCancel={() => {
+          if (!cancelling) setCancelOpen(false);
+        }}
+      >
+        <View style={styles.cancelSheet}>
+          <Text style={styles.cancelSheetLabel}>Alasan (opsional)</Text>
+          <View style={styles.reasonWrap}>
+            {MECHANIC_CANCEL_REASONS.map((reason) => {
+              const active = cancelReason === reason;
+              return (
+                <Pressable
+                  key={reason}
+                  accessibilityRole="button"
+                  accessibilityState={{ selected: active }}
+                  disabled={cancelling}
+                  onPress={() => setCancelReason(active ? null : reason)}
+                  style={({ pressed }) => [
+                    styles.reasonChip,
+                    active && styles.reasonChipActive,
+                    pressed && styles.reasonChipPressed,
+                  ]}
+                >
+                  <Text
+                    style={[
+                      styles.reasonText,
+                      active && styles.reasonTextActive,
+                    ]}
+                  >
+                    {reason}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </View>
         </View>
       </ConfirmSheet>
     </View>
@@ -1283,7 +1388,16 @@ const styles = StyleSheet.create({
     padding: Space.lg,
     marginTop: Space.xxl,
   },
-  reportText: { ...Type.meta, color: Brand.textSecondary, lineHeight: 18 },
+  reportHead: { flexDirection: "row", gap: Space.md, alignItems: "flex-start" },
+  reportIcon: {
+    width: 34,
+    height: 34,
+    borderRadius: Radius.sm,
+    backgroundColor: Brand.primarySoft,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  reportText: { ...Type.meta, color: Brand.textSecondary, lineHeight: 18, flex: 1 },
   reportButton: { marginTop: Space.lg },
   doneCard: {
     flexDirection: "row",
@@ -1301,6 +1415,38 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     lineHeight: 17,
   },
+  cancelZone: { marginTop: Space.xxl },
+  cancelDivider: {
+    height: StyleSheet.hairlineWidth,
+    backgroundColor: Brand.border,
+    marginBottom: Space.xl,
+  },
+  cancelHint: {
+    ...Type.meta,
+    color: Brand.textMuted,
+    lineHeight: 16,
+    textAlign: "center",
+    marginTop: Space.sm,
+  },
+  cancelSheet: { gap: Space.sm },
+  cancelSheetLabel: {
+    ...Type.meta,
+    color: Brand.textSecondary,
+    fontWeight: "600",
+  },
+  reasonWrap: { flexDirection: "row", flexWrap: "wrap", gap: Space.sm },
+  reasonChip: {
+    paddingHorizontal: Space.md,
+    paddingVertical: 9,
+    borderRadius: Radius.pill,
+    borderWidth: 1,
+    borderColor: Brand.border,
+    backgroundColor: Brand.surface,
+  },
+  reasonChipActive: { backgroundColor: Brand.redSoft, borderColor: Brand.red },
+  reasonChipPressed: { opacity: 0.7 },
+  reasonText: { ...Type.meta, fontSize: 11.5, color: Brand.textSecondary },
+  reasonTextActive: { color: Brand.red, fontWeight: "700" },
   sheetBox: {
     backgroundColor: Brand.background,
     borderRadius: Radius.md,
