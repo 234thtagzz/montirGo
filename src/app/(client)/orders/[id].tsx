@@ -26,8 +26,9 @@ import {
   Tabular,
   Type,
 } from '@/constants/brand';
-import { createRealtimeChannel } from '@/lib/realtime';
+import { createRealtimeChannel, subscribeWithResync } from '@/lib/realtime';
 import { supabase } from '@/lib/supabase';
+import { useRefreshOnForeground } from '@/hooks/use-foreground';
 import {
   cancelServiceRequest,
   getRequest,
@@ -148,6 +149,11 @@ export default function ClientOrderDetailScreen() {
     }, [load]),
   );
 
+  // Muat ulang saat app kembali aktif (status, pembayaran, signed URL foto).
+  useRefreshOnForeground(() => {
+    void load();
+  });
+
   // Realtime: detail mengikuti perubahan status dari montir + hasil analisis AI.
   useEffect(() => {
     if (!id) return;
@@ -171,8 +177,9 @@ export default function ClientOrderDetailScreen() {
         'postgres_changes',
         { event: 'INSERT', schema: 'public', table: 'ai_diagnoses', filter: `request_id=eq.${id}` },
         () => loadAnalysis(),
-      )
-      .subscribe();
+      );
+    // Setelah koneksi sempat putus, ambil ulang data yang terlewat.
+    subscribeWithResync(channel, () => void load());
     return () => {
       supabase.removeChannel(channel);
     };

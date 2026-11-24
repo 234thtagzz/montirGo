@@ -1,4 +1,5 @@
 // Data layer section client — langsung ke Supabase; otorisasi dijaga RLS (PRD §6/§22).
+import { getCurrentUserId } from '@/lib/auth-session';
 import { supabase } from '@/lib/supabase';
 import type { OrderStatus } from '@/features/service-request/status';
 import type {
@@ -124,11 +125,8 @@ function mapOrder(row: RawOrder): ClientOrder {
 }
 
 export async function getMyId(): Promise<string> {
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) throw new Error('Sesi berakhir. Silakan login kembali.');
-  return user.id;
+  // Sesi lokal saja — tidak memanggil /auth/v1/user di setiap query.
+  return getCurrentUserId();
 }
 
 // ---------- Ringkasan profil client ----------

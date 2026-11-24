@@ -21,8 +21,9 @@ import {
   formatDuration,
 } from '@/features/mechanic/tracking/geo';
 import { useTripTracking } from '@/features/mechanic/tracking/use-trip-tracking';
-import { createRealtimeChannel } from '@/lib/realtime';
+import { createRealtimeChannel, subscribeWithResync } from '@/lib/realtime';
 import { supabase } from '@/lib/supabase';
+import { useRefreshOnForeground } from '@/hooks/use-foreground';
 import { openWhatsApp } from '@/utils/whatsapp';
 
 const KEEP_AWAKE_TAG = 'montirgo-trip';
@@ -69,6 +70,11 @@ export default function MechanicTripScreen() {
     }, [load]),
   );
 
+  // Perjalanan berlangsung lama; segarkan data begitu app kembali aktif.
+  useRefreshOnForeground(() => {
+    void load();
+  });
+
   // Layar navigasi tidak boleh mati saat montir berkendara.
   useFocusEffect(
     useCallback(() => {
@@ -82,13 +88,13 @@ export default function MechanicTripScreen() {
   // Realtime: client bisa membatalkan / mengubah order di tengah perjalanan.
   useEffect(() => {
     if (!id) return;
-    const channel = createRealtimeChannel(`mechanic-trip-${id}`)
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'service_requests', filter: `id=eq.${id}` },
-        () => load(),
-      )
-      .subscribe();
+    const channel = createRealtimeChannel(`mechanic-trip-${id}`).on(
+      'postgres_changes',
+      { event: '*', schema: 'public', table: 'service_requests', filter: `id=eq.${id}` },
+      () => load(),
+    );
+    // Setelah koneksi sempat putus, ambil ulang data yang terlewat.
+    subscribeWithResync(channel, () => void load());
     return () => {
       supabase.removeChannel(channel);
     };

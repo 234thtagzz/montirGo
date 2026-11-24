@@ -5,8 +5,9 @@ import { ScreenHeader } from '@/components/ui/screen-header';
 import { EmptyState, ErrorState, LoadingState } from '@/components/ui/state';
 import { Ionicons } from '@/components/ui/icon';
 import { Brand, Radius, ScreenPadding, Space, Type } from '@/constants/brand';
-import { createRealtimeChannel } from '@/lib/realtime';
+import { createRealtimeChannel, subscribeWithResync } from '@/lib/realtime';
 import { supabase } from '@/lib/supabase';
+import { useRefreshOnForeground } from '@/hooks/use-foreground';
 import {
   acceptOrder,
   ACTIVE_ORDER_MESSAGE,
@@ -58,13 +59,17 @@ export default function MechanicRequestsScreen() {
     }, [load]),
   );
 
+  // Muat ulang saat app kembali aktif agar request terbaru tidak terlewat.
+  useRefreshOnForeground(load);
+
   // Realtime: request baru/berubah langsung menyegarkan daftar. Pemuatan awal
   // sudah ditangani `useFocusEffect` di atas.
   useEffect(() => {
     const ch = createRealtimeChannel('mechanic-incoming')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'service_requests' }, load)
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'ai_diagnoses' }, load)
-      .subscribe();
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'ai_diagnoses' }, load);
+    // Setelah koneksi sempat putus, ambil ulang request yang terlewat.
+    subscribeWithResync(ch, () => void load());
     return () => {
       supabase.removeChannel(ch);
     };

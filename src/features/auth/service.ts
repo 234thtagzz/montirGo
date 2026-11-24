@@ -1,4 +1,11 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import {
+  ensureFreshSession,
+  getCurrentUserId,
+  isAuthError,
+  readSession,
+} from '@/lib/auth-session';
+import { clearSignedUrlCaches } from '@/lib/signed-url-cache';
 import { supabase } from '@/lib/supabase';
 import type { AuthUser, DbRole, ProfileRow, UserRole } from './types';
 
@@ -43,18 +50,27 @@ export function getAuthErrorMessage(error: unknown, fallback: string): string {
  * alih-alih menganggap pengguna sudah logout.
  */
 async function fetchProfile(userId: string): Promise<ProfileRow | null> {
-  const [profileResult, identityResult] = await Promise.all([
-    supabase
-      .from('profiles')
-      .select('role, full_name, phone_number, identity_number')
-      .eq('id', userId)
-      .maybeSingle(),
-    supabase
-      .from('profile_identities')
-      .select('identity_number')
-      .eq('profile_id', userId)
-      .maybeSingle(),
-  ]);
+  const run = () =>
+    Promise.all([
+      supabase
+        .from('profiles')
+        .select('role, full_name, phone_number, identity_number')
+        .eq('id', userId)
+        .maybeSingle(),
+      supabase
+        .from('profile_identities')
+        .select('identity_number')
+        .eq('profile_id', userId)
+        .maybeSingle(),
+    ]);
+
+  let [profileResult, identityResult] = await run();
+  // Token bisa kedaluwarsa tepat saat query berjalan. Operasi baca aman
+  // diulang sekali setelah sesi di-refresh.
+  if (profileResult.error && isAuthError(profileResult.error)) {
+    const session = await ensureFreshSession({ force: true });
+    if (session) [profileResult, identityResult] = await run();
+  }
   if (profileResult.error) return null;
   const row = profileResult.data as ProfileRow | null;
   if (!row) return null;
@@ -118,6 +134,7 @@ export async function signIn(data: { email: string; password: string }): Promise
   await AsyncStorage.multiRemove(['montirgo_token', 'montirgo_user', 'montirgo_user_role']).catch(
     () => {},
   );
+  clearSignedUrlCaches();
   return { user: toAuthUser(authData.user, profile) };
 }
 
@@ -150,6 +167,7 @@ export async function signUp(data: {
   await AsyncStorage.multiRemove(['montirgo_token', 'montirgo_user', 'montirgo_user_role']).catch(
     () => {},
   );
+  clearSignedUrlCaches();
   const user = toAuthUser(authData.user, profile);
   return {
     user: {
@@ -172,11 +190,7 @@ export async function setMyIdentityNumber(identityNumber: string): Promise<void>
   if (!/^\d{16}$/.test(normalized)) {
     throw new Error('Nomor identitas (KTP) harus 16 digit angka.');
   }
-  const {
-    data: { session },
-  } = await supabase.auth.getSession();
-  const userId = session?.user.id;
-  if (!userId) throw new Error('Sesi berakhir. Silakan login kembali.');
+  const userId = await getCurrentUserId();
 
   // Simpan secara dual-sync ke profile_identities dan profiles
   const [identitiesRes, profilesRes] = await Promise.all([
@@ -195,6 +209,7 @@ export async function setMyIdentityNumber(identityNumber: string): Promise<void>
 
 export async function signOut(): Promise<void> {
   await supabase.auth.signOut();
+  clearSignedUrlCaches();
   await AsyncStorage.multiRemove(['montirgo_token', 'montirgo_user', 'montirgo_user_role']).catch(
     () => {},
   );
@@ -202,9 +217,9 @@ export async function signOut(): Promise<void> {
 
 // Dipakai root index/_layout untuk routing berbasis sesi + role dari database.
 export async function getSessionUser(): Promise<AuthUser | null> {
-  const {
-    data: { session },
-  } = await supabase.auth.getSession();
+  // `readSession` me-refresh token yang hampir habis dan membedakan sesi yang
+  // benar-benar berakhir dari gangguan jaringan sementara.
+  const session = await readSession();
   if (!session?.user) return null;
   // Profil mungkin belum terbaca (RLS/jaringan). Sesi tetap dianggap valid dan
   // metadata auth dipakai sebagai cadangan agar layar tidak kosong.
@@ -213,9 +228,7 @@ export async function getSessionUser(): Promise<AuthUser | null> {
 }
 
 export async function getAccessToken(): Promise<string | null> {
-  const {
-    data: { session },
-  } = await supabase.auth.getSession();
+  const session = await readSession();
   return session?.access_token ?? null;
 }
 

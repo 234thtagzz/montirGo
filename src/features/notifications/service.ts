@@ -1,4 +1,5 @@
 // Data layer notifikasi in-app (dipakai section montir maupun client).
+import { getCurrentUserId } from '@/lib/auth-session';
 import { supabase } from '@/lib/supabase';
 
 export interface AppNotification {
@@ -13,11 +14,7 @@ export interface AppNotification {
 }
 
 async function getMyId(): Promise<string> {
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) throw new Error('Sesi berakhir. Silakan login kembali.');
-  return user.id;
+  return getCurrentUserId();
 }
 
 export async function getUnreadNotificationCount(): Promise<number> {

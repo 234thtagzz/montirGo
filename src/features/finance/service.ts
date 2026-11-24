@@ -2,6 +2,7 @@
 // Semua angka saldo berasal dari database (RPC/trigger), bukan perhitungan lokal.
 // Secret key Xendit hanya ada di Edge Function — aplikasi hanya memanggil function.
 
+import { getCurrentUserId } from '@/lib/auth-session';
 import { supabase } from '@/lib/supabase';
 import type {
   FinanceSettings,
@@ -26,11 +27,7 @@ const DEFAULT_SETTINGS: FinanceSettings = {
 };
 
 async function getMyId(): Promise<string> {
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) throw new Error('Sesi berakhir. Silakan login kembali.');
-  return user.id;
+  return getCurrentUserId();
 }
 
 function isMissingFunction(error: { code?: string; message?: string } | null): boolean {

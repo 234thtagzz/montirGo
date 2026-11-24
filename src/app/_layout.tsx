@@ -5,6 +5,7 @@ import { Platform, StyleSheet, useColorScheme } from 'react-native';
 import { useCallback, useEffect, useState } from 'react';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { AppLoadingScreen } from '@/components/app-loading-screen';
+import { startAppLifecycle } from '@/lib/app-lifecycle';
 import { supabase } from '@/lib/supabase';
 
 SplashScreen.preventAutoHideAsync();
@@ -30,6 +31,9 @@ export default function RootLayout() {
     SplashScreen.hideAsync().catch(() => {});
   }, []);
 
+  // AppState + listener auth dipasang sekali untuk seluruh aplikasi.
+  useEffect(() => startAppLifecycle(), []);
+
   useEffect(() => {
     let cancelled = false;
     let exitTimer: ReturnType<typeof setTimeout> | undefined;
@@ -39,7 +43,12 @@ export default function RootLayout() {
       try {
         // Pulihkan sesi Supabase (persisted di AsyncStorage oleh supabase-js).
         // Redirect otomatis per-role ditangani di src/app/index.tsx.
-        await supabase.auth.getSession();
+        // Jangan tahan splash terlalu lama bila jaringan lambat: index.tsx
+        // tetap menunggu sesi dan menampilkan status yang sesuai.
+        await Promise.race([
+          supabase.auth.getSession(),
+          new Promise((resolve) => setTimeout(resolve, 1500)),
+        ]);
       } catch {
         // Gagal restore sesi tidak boleh menahan aplikasi; index.tsx akan redirect ke login.
       }

@@ -18,8 +18,9 @@ import { SectionHeader } from '@/components/ui/section-header';
 import { EmptyState, ErrorState, LoadingState } from '@/components/ui/state';
 import { Ionicons } from '@/components/ui/icon';
 import { Brand, Radius, ScreenPadding, Space, Type } from '@/constants/brand';
-import { createRealtimeChannel } from '@/lib/realtime';
+import { createRealtimeChannel, subscribeWithResync } from '@/lib/realtime';
 import { supabase } from '@/lib/supabase';
+import { useRefreshOnForeground } from '@/hooks/use-foreground';
 import {
   acceptOrder,
   ACTIVE_ORDER_MESSAGE,
@@ -73,6 +74,9 @@ export default function MechanicRequestDetailScreen() {
     }, [load]),
   );
 
+  // Muat ulang saat app kembali aktif agar status request tidak basi.
+  useRefreshOnForeground(load);
+
   // Realtime: request diambil montir lain, dibatalkan, atau analisis AI selesai.
   useEffect(() => {
     if (!id) return;
@@ -86,8 +90,9 @@ export default function MechanicRequestDetailScreen() {
         'postgres_changes',
         { event: 'INSERT', schema: 'public', table: 'ai_diagnoses', filter: `request_id=eq.${id}` },
         () => load(),
-      )
-      .subscribe();
+      );
+    // Setelah koneksi sempat putus, ambil ulang data yang terlewat.
+    subscribeWithResync(channel, () => void load());
     return () => {
       supabase.removeChannel(channel);
     };

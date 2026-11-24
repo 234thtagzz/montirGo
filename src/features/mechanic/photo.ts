@@ -8,6 +8,7 @@
 import { File } from 'expo-file-system';
 import * as ImagePicker from 'expo-image-picker';
 import { Platform } from 'react-native';
+import { forgetSignedUrl, readSignedUrl, writeSignedUrl } from '@/lib/signed-url-cache';
 import { supabase } from '@/lib/supabase';
 
 export const MECHANIC_AVATAR_BUCKET = 'avatars';
@@ -17,9 +18,7 @@ export const WORKSHOP_PHOTO_BUCKET = 'workshop-photos';
 export const MAX_WORKSHOP_PHOTOS = 5;
 
 const SIGNED_URL_TTL_SECONDS = 60 * 60; // 1 jam
-const SIGNED_URL_SAFETY_MS = 5 * 60 * 1000;
-
-const signedUrlCache = new Map<string, { url: string; expiresAt: number }>();
+const CACHE_NAMESPACE = 'workshop-photos';
 
 export interface PickedMechanicPhoto {
   uri: string;
@@ -130,25 +129,28 @@ export async function uploadWorkshopPhoto(
 export async function deleteWorkshopPhotos(paths: string[] | null | undefined): Promise<void> {
   const items = (paths ?? []).filter((path) => path && !/^https?:/i.test(path));
   if (items.length === 0) return;
-  items.forEach((path) => signedUrlCache.delete(path));
+  items.forEach((path) => forgetSignedUrl(CACHE_NAMESPACE, path));
   await supabase.storage.from(WORKSHOP_PHOTO_BUCKET).remove(items);
 }
 
-/** Tukar path foto bengkel menjadi signed URL (di-cache sampai hampir kedaluwarsa). */
+/**
+ * Tukar path foto bengkel menjadi signed URL (di-cache sampai hampir kedaluwarsa).
+ * `force` memaksa URL baru untuk path yang gambarnya gagal dimuat.
+ */
 export async function resolveWorkshopPhotoUrls(
   paths: string[] | null | undefined,
+  options?: { force?: boolean },
 ): Promise<Record<string, string>> {
   const items = (paths ?? []).filter(Boolean);
   if (items.length === 0) return {};
 
-  const now = Date.now();
   const resolved: Record<string, string> = {};
   const missing: string[] = [];
 
   for (const path of items) {
-    const cached = signedUrlCache.get(path);
-    if (cached && cached.expiresAt - SIGNED_URL_SAFETY_MS > now) {
-      resolved[path] = cached.url;
+    const cached = options?.force ? null : readSignedUrl(CACHE_NAMESPACE, path);
+    if (cached) {
+      resolved[path] = cached;
     } else {
       missing.push(path);
     }
@@ -164,10 +166,13 @@ export async function resolveWorkshopPhotoUrls(
   for (const item of data) {
     if (!item.signedUrl || !item.path) continue;
     resolved[item.path] = item.signedUrl;
-    signedUrlCache.set(item.path, {
-      url: item.signedUrl,
-      expiresAt: now + SIGNED_URL_TTL_SECONDS * 1000,
-    });
+    writeSignedUrl(CACHE_NAMESPACE, item.path, item.signedUrl, SIGNED_URL_TTL_SECONDS);
   }
   return resolved;
+}
+
+/** Buang signed URL yang gagal dimuat agar permintaan berikutnya membuat URL baru. */
+export function forgetWorkshopPhotoUrl(path: string | null | undefined): void {
+  if (!path) return;
+  forgetSignedUrl(CACHE_NAMESPACE, path);
 }

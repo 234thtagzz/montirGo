@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -24,7 +24,7 @@ import {
   type ClientReview,
   type MechanicAssignmentProfile,
 } from '@/features/client/service';
-import { resolveWorkshopPhotoUrls } from '@/features/mechanic/photo';
+import { forgetWorkshopPhotoUrl, resolveWorkshopPhotoUrls } from '@/features/mechanic/photo';
 import { formatSpecializations } from '@/features/mechanic/specializations';
 import { formatDateTime } from '@/utils/format';
 
@@ -62,6 +62,7 @@ export function AssignmentConfirmationSheet({
   const [profile, setProfile] = useState<MechanicAssignmentProfile | null>(null);
   const [reviews, setReviews] = useState<ClientReview[]>([]);
   const [photoUrl, setPhotoUrl] = useState<string | null>(null);
+  const photoRetried = useRef(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [responding, setResponding] = useState<AssignmentDecision | null>(null);
@@ -74,6 +75,7 @@ export function AssignmentConfirmationSheet({
 
   const load = useCallback(async () => {
     if (!mechanicId) return;
+    photoRetried.current = false;
     setLoading(true);
     setError(null);
     try {
@@ -330,6 +332,19 @@ export function AssignmentConfirmationSheet({
                     style={styles.workshopPhoto}
                     contentFit="cover"
                     transition={150}
+                    onError={() => {
+                      const path = profile.workshop_photo;
+                      if (!path) return;
+                      if (photoRetried.current) {
+                        setPhotoUrl(null);
+                        return;
+                      }
+                      photoRetried.current = true;
+                      forgetWorkshopPhotoUrl(path);
+                      void resolveWorkshopPhotoUrls([path])
+                        .then((urls) => setPhotoUrl(urls[path] ?? null))
+                        .catch(() => setPhotoUrl(null));
+                    }}
                   />
                 ) : null}
                 <Text style={styles.workshopName}>

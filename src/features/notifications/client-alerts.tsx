@@ -2,6 +2,8 @@ import * as Notifications from 'expo-notifications';
 import { useRouter } from 'expo-router';
 import { useEffect, type ReactNode } from 'react';
 import { createRealtimeChannel } from '@/lib/realtime';
+import { readSession } from '@/lib/auth-session';
+import { useForegroundEpoch } from '@/hooks/use-foreground';
 import { supabase } from '@/lib/supabase';
 import { prepareNotifications, presentLocalAlert } from './local';
 
@@ -23,6 +25,7 @@ interface RawNotificationRow {
  */
 export function ClientAlertsProvider({ children }: { children: ReactNode }) {
   const router = useRouter();
+  const foregroundEpoch = useForegroundEpoch();
 
   // Izin notifikasi + aksi saat notifikasi HP diketuk.
   useEffect(() => {
@@ -56,9 +59,8 @@ export function ClientAlertsProvider({ children }: { children: ReactNode }) {
     let channel: ReturnType<typeof supabase.channel> | null = null;
 
     (async () => {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
+      const session = await readSession().catch(() => null);
+      const user = session?.user;
       if (!active || !user) return;
 
       channel = createRealtimeChannel(`client-notifications-${user.id}`)
@@ -92,7 +94,8 @@ export function ClientAlertsProvider({ children }: { children: ReactNode }) {
       active = false;
       if (channel) supabase.removeChannel(channel);
     };
-  }, []);
+    // `foregroundEpoch` membuat langganan dipasang ulang setelah app kembali aktif.
+  }, [foregroundEpoch]);
 
   return <>{children}</>;
 }

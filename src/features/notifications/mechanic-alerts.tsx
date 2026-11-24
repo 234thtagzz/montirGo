@@ -10,6 +10,8 @@ import {
   type ReactNode,
 } from 'react';
 import { createRealtimeChannel } from '@/lib/realtime';
+import { readSession } from '@/lib/auth-session';
+import { useForegroundEpoch } from '@/hooks/use-foreground';
 import { supabase } from '@/lib/supabase';
 import { prepareNotifications, presentLocalAlert } from './local';
 import { getUnreadNotificationCount } from './service';
@@ -48,6 +50,7 @@ interface RawNotificationRow {
  */
 export function MechanicAlertsProvider({ children }: { children: ReactNode }) {
   const router = useRouter();
+  const foregroundEpoch = useForegroundEpoch();
   const [unread, setUnread] = useState(0);
 
   const refresh = useCallback(async () => {
@@ -101,9 +104,8 @@ export function MechanicAlertsProvider({ children }: { children: ReactNode }) {
     let channel: ReturnType<typeof supabase.channel> | null = null;
 
     (async () => {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
+      const session = await readSession().catch(() => null);
+      const user = session?.user;
       if (!active || !user) return;
 
       void refresh();
@@ -152,7 +154,8 @@ export function MechanicAlertsProvider({ children }: { children: ReactNode }) {
       active = false;
       if (channel) supabase.removeChannel(channel);
     };
-  }, [refresh]);
+    // `foregroundEpoch` membuat langganan dipasang ulang setelah app kembali aktif.
+  }, [refresh, foregroundEpoch]);
 
   const value = useMemo(() => ({ unread, refresh }), [unread, refresh]);
 

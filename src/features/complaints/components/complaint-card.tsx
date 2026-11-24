@@ -1,11 +1,12 @@
 // Kartu satu keluhan pada tab Riwayat.
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { Image } from 'expo-image';
 import { Ionicons } from '@/components/ui/icon';
 import { Brand, Radius, Space, Type } from '@/constants/brand';
+import { useForegroundEpoch } from '@/hooks/use-foreground';
 import { formatDateTime } from '@/utils/format';
-import { resolveComplaintPhotoUrl } from '../photo';
+import { forgetComplaintPhotoUrl, resolveComplaintPhotoUrl } from '../photo';
 import { COMPLAINT_CATEGORY_META, COMPLAINT_STATUS_META, type Complaint } from '../types';
 
 const MAX_THUMBNAILS = 3;
@@ -16,7 +17,10 @@ export function ComplaintCard({ complaint }: { complaint: Complaint }) {
     label: complaint.category,
     icon: 'alert-circle-outline' as const,
   };
+  const foregroundEpoch = useForegroundEpoch();
   const [photoUrls, setPhotoUrls] = useState<(string | null)[]>([]);
+  const [reloadToken, setReloadToken] = useState(0);
+  const retried = useRef(new Set<string>());
 
   const paths = complaint.photo_paths.slice(0, MAX_THUMBNAILS);
   const pathsKey = paths.join('|');
@@ -31,8 +35,19 @@ export function ComplaintCard({ complaint }: { complaint: Complaint }) {
     return () => {
       alive = false;
     };
-    // `pathsKey` merangkum isi `paths`, cukup untuk memicu pemuatan ulang.
-  }, [pathsKey]); // eslint-disable-line react-hooks/exhaustive-deps
+    // `pathsKey` merangkum isi `paths`; signed URL di-refresh saat app kembali aktif.
+  }, [pathsKey, foregroundEpoch, reloadToken]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const handlePhotoError = (path: string, index: number) => {
+    // Coba sekali dengan signed URL baru; bila tetap gagal tampilkan placeholder.
+    if (retried.current.has(path)) {
+      setPhotoUrls((current) => current.map((url, i) => (i === index ? null : url)));
+      return;
+    }
+    retried.current.add(path);
+    forgetComplaintPhotoUrl(path);
+    setReloadToken((token) => token + 1);
+  };
 
   return (
     <View style={styles.card}>
@@ -66,6 +81,7 @@ export function ComplaintCard({ complaint }: { complaint: Complaint }) {
                 style={styles.photo}
                 contentFit="cover"
                 transition={120}
+                onError={() => handlePhotoError(path, index)}
               />
             ) : (
               <View key={path} style={styles.photoPlaceholder}>

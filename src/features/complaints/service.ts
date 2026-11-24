@@ -1,14 +1,11 @@
 // Service Keluhan: ajukan + daftar milik sendiri (client & montir).
+import { getCurrentUserId } from '@/lib/auth-session';
 import { supabase } from '@/lib/supabase';
 import { deleteComplaintPhotos, uploadComplaintPhoto } from './photo';
 import type { Complaint, ComplaintFormDraft, TransactionSummary } from './types';
 
 async function getMyId(): Promise<string> {
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) throw new Error('Sesi berakhir. Silakan login kembali.');
-  return user.id;
+  return getCurrentUserId();
 }
 
 const COMPLAINT_SELECT =

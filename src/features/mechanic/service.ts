@@ -1,4 +1,5 @@
 // Data layer section montir — langsung ke Supabase (RLS menjaga otorisasi, PRD §6/§22).
+import { getCurrentUserId } from '@/lib/auth-session';
 import { supabase } from '@/lib/supabase';
 import {
   mapAiAnalysis,
@@ -33,11 +34,8 @@ const ACTIVE_STATUSES = [
 ];
 
 export async function getMyId(): Promise<string> {
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) throw new Error('Sesi berakhir. Silakan login kembali.');
-  return user.id;
+  // Sesi lokal saja — tidak memanggil /auth/v1/user di setiap query.
+  return getCurrentUserId();
 }
 
 export async function getMechanicProfile(): Promise<MechanicProfile | null> {

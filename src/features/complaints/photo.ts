@@ -10,6 +10,7 @@
 import { File } from 'expo-file-system';
 import * as ImagePicker from 'expo-image-picker';
 import { Platform } from 'react-native';
+import { forgetSignedUrl, readSignedUrl, writeSignedUrl } from '@/lib/signed-url-cache';
 import { supabase } from '@/lib/supabase';
 
 export const COMPLAINT_PHOTO_BUCKET = 'complaint-photos';
@@ -20,10 +21,8 @@ export interface PickedComplaintPhoto {
   mimeType: string;
 }
 
-const signedUrlCache = new Map<string, { url: string; expiresAt: number }>();
-
 const SIGNED_URL_TTL_SECONDS = 60 * 60; // 1 jam
-const SIGNED_URL_SAFETY_MS = 5 * 60 * 1000;
+const CACHE_NAMESPACE = 'complaint-photos';
 
 /** Buka galeri & kembalikan pilihan (maksimal `limit`, batalkan -> []). */
 export async function pickComplaintPhotos(
@@ -93,19 +92,25 @@ export async function uploadComplaintPhoto(
 /** Hapus objek foto; kegagalan diabaikan agar tidak menggagalkan penyimpanan keluhan. */
 export async function deleteComplaintPhotos(paths: string[]): Promise<void> {
   if (!paths.length) return;
-  for (const path of paths) signedUrlCache.delete(path);
+  for (const path of paths) forgetSignedUrl(CACHE_NAMESPACE, path);
   await supabase.storage.from(COMPLAINT_PHOTO_BUCKET).remove(paths).catch(() => {});
 }
 
 /**
  * Ubah nilai path foto menjadi URL yang bisa ditampilkan.
  * - path objek bucket privat -> signed URL (di-cache sampai hampir kedaluwarsa)
+ * `force` memaksa URL baru untuk path yang gambarnya gagal dimuat.
  */
-export async function resolveComplaintPhotoUrl(value: string | null | undefined): Promise<string | null> {
+export async function resolveComplaintPhotoUrl(
+  value: string | null | undefined,
+  options?: { force?: boolean },
+): Promise<string | null> {
   if (!value) return null;
-  const now = Date.now();
-  const cached = signedUrlCache.get(value);
-  if (cached && cached.expiresAt - SIGNED_URL_SAFETY_MS > now) return cached.url;
+
+  if (!options?.force) {
+    const cached = readSignedUrl(CACHE_NAMESPACE, value);
+    if (cached) return cached;
+  }
 
   const { data, error } = await supabase
     .storage
@@ -113,6 +118,12 @@ export async function resolveComplaintPhotoUrl(value: string | null | undefined)
     .createSignedUrl(value, SIGNED_URL_TTL_SECONDS);
   if (error || !data?.signedUrl) return null;
 
-  signedUrlCache.set(value, { url: data.signedUrl, expiresAt: now + SIGNED_URL_TTL_SECONDS * 1000 });
+  writeSignedUrl(CACHE_NAMESPACE, value, data.signedUrl, SIGNED_URL_TTL_SECONDS);
   return data.signedUrl;
+}
+
+/** Buang signed URL yang gagal dimuat agar permintaan berikutnya membuat URL baru. */
+export function forgetComplaintPhotoUrl(value: string | null | undefined): void {
+  if (!value) return;
+  forgetSignedUrl(CACHE_NAMESPACE, value);
 }

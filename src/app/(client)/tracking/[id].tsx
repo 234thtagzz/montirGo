@@ -6,8 +6,9 @@ import { EmptyState, ErrorState, LoadingState } from '@/components/ui/state';
 import { Brand } from '@/constants/brand';
 import { ClientTripView } from '@/features/client/components/tracking/client-trip-view';
 import { getRequest, type ClientOrder } from '@/features/client/service';
-import { createRealtimeChannel } from '@/lib/realtime';
+import { createRealtimeChannel, subscribeWithResync } from '@/lib/realtime';
 import { supabase } from '@/lib/supabase';
+import { useRefreshOnForeground } from '@/hooks/use-foreground';
 
 /**
  * Layar perjalanan client (padanan `(mechanic)/trip/[id]`).
@@ -42,16 +43,20 @@ export default function ClientTrackingScreen() {
     }, [load]),
   );
 
+  // Perjalanan montir bergerak cepat; pastikan data segar setelah app aktif lagi.
+  useRefreshOnForeground(() => {
+    void load();
+  });
+
   // Status order bisa berubah di tengah perjalanan (tiba / dibatalkan).
   useEffect(() => {
     if (!id) return;
-    const channel = createRealtimeChannel(`client-tracking-${id}`)
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'service_requests', filter: `id=eq.${id}` },
-        () => load(),
-      )
-      .subscribe();
+    const channel = createRealtimeChannel(`client-tracking-${id}`).on(
+      'postgres_changes',
+      { event: '*', schema: 'public', table: 'service_requests', filter: `id=eq.${id}` },
+      () => load(),
+    );
+    subscribeWithResync(channel, () => void load());
     return () => {
       supabase.removeChannel(channel);
     };

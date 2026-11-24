@@ -1,20 +1,26 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Image } from 'expo-image';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { Avatar } from '@/components/ui/avatar';
 import { Ionicons } from '@/components/ui/icon';
 import { Brand, Radius, Space, Type } from '@/constants/brand';
+import { useForegroundEpoch } from '@/hooks/use-foreground';
 import type { NearbyMechanic } from '@/features/client/types';
 import { formatSpecializations } from '@/features/mechanic/specializations';
-import { resolveWorkshopPhotoUrls } from '@/features/mechanic/photo';
+import { forgetWorkshopPhotoUrl, resolveWorkshopPhotoUrls } from '@/features/mechanic/photo';
 
 interface NearbyMechanicsProps {
   mechanics: NearbyMechanic[];
 }
 
-/** Foto bengkel (path privat) → signed URL, dimuat sekali untuk semua kartu. */
+/**
+ * Foto bengkel (path privat) → signed URL, dimuat sekali untuk semua kartu.
+ * Dimuat ulang saat app kembali ke foreground karena signed URL hanya ±1 jam.
+ */
 function useWorkshopPhotos(mechanics: NearbyMechanic[]) {
+  const foregroundEpoch = useForegroundEpoch();
   const [urls, setUrls] = useState<Record<string, string>>({});
+  const [reloadToken, setReloadToken] = useState(0);
   const key = mechanics.map((item) => item.workshop_photo ?? '').join('|');
 
   useEffect(() => {
@@ -33,13 +39,35 @@ function useWorkshopPhotos(mechanics: NearbyMechanic[]) {
     };
     // `key` mewakili isi daftar foto; `mechanics` sendiri dibuat ulang tiap render.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [key]);
+  }, [key, foregroundEpoch, reloadToken]);
 
-  return urls;
+  const retry = useCallback((path: string) => {
+    forgetWorkshopPhotoUrl(path);
+    setReloadToken((token) => token + 1);
+  }, []);
+
+  return { urls, retry };
 }
 
 export function NearbyMechanics({ mechanics }: NearbyMechanicsProps) {
-  const photoUrls = useWorkshopPhotos(mechanics);
+  const { urls: photoUrls, retry } = useWorkshopPhotos(mechanics);
+  const retried = useRef(new Set<string>());
+  const [failedPaths, setFailedPaths] = useState<Set<string>>(new Set());
+
+  const handlePhotoError = (path: string) => {
+    // Coba sekali dengan signed URL baru; bila tetap gagal, pakai avatar.
+    if (retried.current.has(path)) {
+      setFailedPaths((current) => {
+        if (current.has(path)) return current;
+        const next = new Set(current);
+        next.add(path);
+        return next;
+      });
+      return;
+    }
+    retried.current.add(path);
+    retry(path);
+  };
 
   if (mechanics.length === 0) {
     return (
@@ -64,9 +92,10 @@ export function NearbyMechanics({ mechanics }: NearbyMechanicsProps) {
       {mechanics.map((mechanic) => {
         const name = mechanic.full_name?.trim() || 'Montir MontirGo';
         const specialization = formatSpecializations(mechanic.vehicle_specialization);
-        const workshopPhoto = mechanic.workshop_photo
-          ? photoUrls[mechanic.workshop_photo]
-          : null;
+        const workshopPath = mechanic.workshop_photo ?? '';
+        // Foto yang gagal setelah retry diperlakukan seperti tidak ada foto.
+        const workshopPhoto =
+          workshopPath && !failedPaths.has(workshopPath) ? photoUrls[workshopPath] ?? null : null;
         const workshopName = mechanic.workshop_name?.trim() || 'Montir panggilan';
 
         return (
@@ -78,6 +107,7 @@ export function NearbyMechanics({ mechanics }: NearbyMechanicsProps) {
                   style={styles.workshopPhoto}
                   contentFit="cover"
                   transition={150}
+                  onError={() => handlePhotoError(workshopPath)}
                 />
               ) : (
                 <View style={styles.mediaFallback}>

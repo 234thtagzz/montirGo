@@ -8,7 +8,8 @@ import { EmptyState, ErrorState, LoadingState } from '@/components/ui/state';
 import { Ionicons } from '@/components/ui/icon';
 import { Brand, Radius, ScreenPadding, Space, Tabular, Type } from '@/constants/brand';
 import { useSessionUser } from '@/hooks/use-session-user';
-import { createRealtimeChannel } from '@/lib/realtime';
+import { useRefreshOnForeground } from '@/hooks/use-foreground';
+import { createRealtimeChannel, subscribeWithResync } from '@/lib/realtime';
 import { supabase } from '@/lib/supabase';
 import { listMyRequests, type ClientOrder } from '@/features/client/service';
 import { ComplaintBadge } from '@/features/complaints/components/complaint-badge';
@@ -65,20 +66,22 @@ export default function MyRequestsScreen() {
     }, [load]),
   );
 
+  // Data & signed URL di-refresh saat app kembali aktif.
+  useRefreshOnForeground(load);
+
   useEffect(() => {
     if (!user?.id) return;
-    const channel = createRealtimeChannel(`client-orders-${user.id}`)
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'service_requests',
-          filter: `client_id=eq.${user.id}`,
-        },
-        () => load(),
-      )
-      .subscribe();
+    const channel = createRealtimeChannel(`client-orders-${user.id}`).on(
+      'postgres_changes',
+      {
+        event: '*',
+        schema: 'public',
+        table: 'service_requests',
+        filter: `client_id=eq.${user.id}`,
+      },
+      () => load(),
+    );
+    subscribeWithResync(channel, () => void load());
     return () => {
       supabase.removeChannel(channel);
     };

@@ -50,8 +50,9 @@ import { getStatusMeta, TOTAL_STEPS } from "@/features/service-request/status";
 import { TripEntryCard } from "@/features/mechanic/components/trip/trip-entry-card";
 import { AssignmentPendingCard } from "@/features/mechanic/components/assignment-pending-card";
 import { VehicleProfileCard } from "@/features/vehicles/components/vehicle-profile-card";
-import { createRealtimeChannel } from "@/lib/realtime";
+import { createRealtimeChannel, subscribeWithResync } from "@/lib/realtime";
 import { supabase } from "@/lib/supabase";
+import { useRefreshOnForeground } from "@/hooks/use-foreground";
 import { formatDateTime, formatIDR } from "@/utils/format";
 import { openWhatsApp } from "@/utils/whatsapp";
 import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
@@ -138,6 +139,11 @@ export default function MechanicOrderDetailScreen() {
     }, [load]),
   );
 
+  // Muat ulang saat app kembali aktif (status, pembayaran, signed URL foto).
+  useRefreshOnForeground(() => {
+    void load();
+  });
+
   // Realtime: perubahan status order + hasil analisis AI.
   useEffect(() => {
     if (!id) return;
@@ -161,8 +167,9 @@ export default function MechanicOrderDetailScreen() {
           filter: `request_id=eq.${id}`,
         },
         () => loadAnalysis(),
-      )
-      .subscribe();
+      );
+    // Setelah koneksi sempat putus, ambil ulang data yang terlewat.
+    subscribeWithResync(channel, () => void load());
     return () => {
       supabase.removeChannel(channel);
     };

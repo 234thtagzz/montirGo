@@ -13,3 +13,25 @@ export function createRealtimeChannel(topic: string): RealtimeChannel {
   channelSequence += 1;
   return supabase.channel(`${topic}#${channelSequence}`);
 }
+
+/**
+ * Subscribe dengan sinkronisasi ulang setelah koneksi sempat putus.
+ *
+ * Saat jaringan hilang, channel bisa berstatus `CHANNEL_ERROR` / `TIMED_OUT`.
+ * Supabase akan mencoba menyambung lagi sendiri, tetapi perubahan data yang
+ * terjadi selama terputus tidak dikirim ulang. `onResync` dipanggil sekali
+ * setelah channel kembali `SUBSCRIBED` supaya layar memuat data terbaru.
+ */
+export function subscribeWithResync(channel: RealtimeChannel, onResync: () => void): RealtimeChannel {
+  let interrupted = false;
+  return channel.subscribe((status) => {
+    if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
+      interrupted = true;
+      return;
+    }
+    if (status === 'SUBSCRIBED' && interrupted) {
+      interrupted = false;
+      onResync();
+    }
+  });
+}

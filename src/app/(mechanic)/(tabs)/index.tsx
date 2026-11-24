@@ -9,7 +9,8 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { EmptyState, ErrorState } from '@/components/ui/state';
 import { Brand, ScreenPadding, Space } from '@/constants/brand';
 import { useSessionUser } from '@/hooks/use-session-user';
-import { createRealtimeChannel } from '@/lib/realtime';
+import { useRefreshOnForeground } from '@/hooks/use-foreground';
+import { createRealtimeChannel, subscribeWithResync } from '@/lib/realtime';
 import { supabase } from '@/lib/supabase';
 import {
   getEarningsSummary,
@@ -49,47 +50,51 @@ export default function MechanicDashboardScreen() {
   const { unread } = useMechanicAlerts();
 
   const load = useCallback(async () => {
-    const startOfDay = new Date();
-    startOfDay.setHours(0, 0, 0, 0);
+    try {
+      const startOfDay = new Date();
+      startOfDay.setHours(0, 0, 0, 0);
 
-    // Satu sumber data yang gagal tidak boleh mengosongkan seluruh Beranda.
-    const [profileResult, earningsResult, ordersResult, walletResult] = await Promise.allSettled([
-      getMechanicProfile(),
-      getEarningsSummary(startOfDay.toISOString()),
-      (async () => {
-        await expireStaleAssignments();
-        let orders = await listMyOrders(true);
-        // Webhook Xendit bisa telat/belum terdaftar: cek langsung ke Xendit agar
-        // order yang sudah dibayar client berubah menjadi lunas di Beranda.
-        try {
-          if (await syncMechanicPendingPayments(orders)) {
-            orders = await listMyOrders(true);
+      // Satu sumber data yang gagal tidak boleh mengosongkan seluruh Beranda.
+      const [profileResult, earningsResult, ordersResult, walletResult] = await Promise.allSettled([
+        getMechanicProfile(),
+        getEarningsSummary(startOfDay.toISOString()),
+        (async () => {
+          await expireStaleAssignments();
+          let orders = await listMyOrders(true);
+          // Webhook Xendit bisa telat/belum terdaftar: cek langsung ke Xendit agar
+          // order yang sudah dibayar client berubah menjadi lunas di Beranda.
+          try {
+            if (await syncMechanicPendingPayments(orders)) {
+              orders = await listMyOrders(true);
+            }
+          } catch {
+            // Tetap tampilkan order yang sudah terbaca.
           }
-        } catch {
-          // Tetap tampilkan order yang sudah terbaca.
-        }
-        return orders;
-      })(),
-      getWallet(),
-    ]);
+          return orders;
+        })(),
+        getWallet(),
+      ]);
 
-    if (profileResult.status === 'fulfilled') {
-      setOnline(profileResult.value?.is_online ?? false);
-      setVerified(profileResult.value?.is_verified ?? false);
-    }
-    if (earningsResult.status === 'fulfilled') {
-      setTodayNet(earningsResult.value.net);
-      setTodayJobs(earningsResult.value.totalJobs);
-    }
-    if (ordersResult.status === 'fulfilled') setActiveOrders(ordersResult.value);
-    if (walletResult.status === 'fulfilled') setWallet(walletResult.value);
+      if (profileResult.status === 'fulfilled') {
+        setOnline(profileResult.value?.is_online ?? false);
+        setVerified(profileResult.value?.is_verified ?? false);
+      }
+      if (earningsResult.status === 'fulfilled') {
+        setTodayNet(earningsResult.value.net);
+        setTodayJobs(earningsResult.value.totalJobs);
+      }
+      if (ordersResult.status === 'fulfilled') setActiveOrders(ordersResult.value);
+      if (walletResult.status === 'fulfilled') setWallet(walletResult.value);
 
-    const failed = [profileResult, earningsResult, ordersResult, walletResult].filter(
-      (result) => result.status === 'rejected',
-    ).length;
-    setError(failed === 4);
-    setLoading(false);
-    setRefreshing(false);
+      const failed = [profileResult, earningsResult, ordersResult, walletResult].filter(
+        (result) => result.status === 'rejected',
+      ).length;
+      setError(failed === 4);
+    } finally {
+      // Skeleton tidak boleh tampil selamanya bila satu tahap melempar error.
+      setLoading(false);
+      setRefreshing(false);
+    }
   }, []);
 
   // Pastikan order yang baru diterima langsung muncul saat kembali ke Beranda,
@@ -100,13 +105,17 @@ export default function MechanicDashboardScreen() {
     }, [load]),
   );
 
+  // Muat ulang saat app kembali aktif (token & signed URL mungkin sudah tua).
+  useRefreshOnForeground(load);
+
   useEffect(() => {
     // Realtime: order baru / perubahan status langsung refresh dashboard.
     const ch = createRealtimeChannel('mechanic-dashboard')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'service_requests' }, load)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'mechanic_wallets' }, load)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'withdrawals' }, load)
-      .subscribe();
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'withdrawals' }, load);
+    // Setelah koneksi sempat putus, ambil ulang data yang terlewat.
+    subscribeWithResync(ch, () => void load());
     return () => {
       supabase.removeChannel(ch);
     };

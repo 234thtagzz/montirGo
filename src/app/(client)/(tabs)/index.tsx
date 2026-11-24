@@ -9,7 +9,8 @@ import { SectionHeader } from '@/components/ui/section-header';
 import { Ionicons } from '@/components/ui/icon';
 import { Brand, Radius, ScreenPadding, Space, Type } from '@/constants/brand';
 import { useSessionUser } from '@/hooks/use-session-user';
-import { createRealtimeChannel } from '@/lib/realtime';
+import { useRefreshOnForeground } from '@/hooks/use-foreground';
+import { createRealtimeChannel, subscribeWithResync } from '@/lib/realtime';
 import { supabase } from '@/lib/supabase';
 import {
   getUnreadNotificationCount,
@@ -88,26 +89,30 @@ export default function ClientHomeScreen() {
   };
 
   const load = useCallback(async () => {
-    await expireStaleAssignments();
-    const results = await Promise.allSettled([
-      listMyRequests(20),
-      listMyVehicles(),
-      listOnlineMechanics(10),
-      getUnreadNotificationCount(),
-    ]);
+    try {
+      await expireStaleAssignments();
+      const results = await Promise.allSettled([
+        listMyRequests(20),
+        listMyVehicles(),
+        listOnlineMechanics(10),
+        getUnreadNotificationCount(),
+      ]);
 
-    const [orderResult, vehicleResult, mechanicResult, notificationResult] = results;
+      const [orderResult, vehicleResult, mechanicResult, notificationResult] = results;
 
-    if (orderResult.status === 'fulfilled') setOrders(orderResult.value);
-    if (vehicleResult.status === 'fulfilled') setVehicles(vehicleResult.value);
-    if (mechanicResult.status === 'fulfilled') setMechanics(mechanicResult.value);
-    if (notificationResult.status === 'fulfilled') setUnread(notificationResult.value);
+      if (orderResult.status === 'fulfilled') setOrders(orderResult.value);
+      if (vehicleResult.status === 'fulfilled') setVehicles(vehicleResult.value);
+      if (mechanicResult.status === 'fulfilled') setMechanics(mechanicResult.value);
+      if (notificationResult.status === 'fulfilled') setUnread(notificationResult.value);
 
-    const failed = results.filter((result) => result.status === 'rejected').length;
-    setFatalError(failed === results.length);
-    setPartialError(failed > 0 && failed < results.length);
-    setLoading(false);
-    setRefreshing(false);
+      const failed = results.filter((result) => result.status === 'rejected').length;
+      setFatalError(failed === results.length);
+      setPartialError(failed > 0 && failed < results.length);
+    } finally {
+      // Apa pun yang terjadi, skeleton tidak boleh tampil selamanya.
+      setLoading(false);
+      setRefreshing(false);
+    }
   }, []);
 
   useFocusEffect(
@@ -116,21 +121,24 @@ export default function ClientHomeScreen() {
     }, [load]),
   );
 
+  // Muat ulang data saat app kembali aktif (token & signed URL mungkin sudah tua).
+  useRefreshOnForeground(load);
+
   // Status pesanan berubah tanpa perlu tarik-refresh.
   useEffect(() => {
     if (!user?.id) return;
-    const channel = createRealtimeChannel(`client-home-${user.id}`)
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'service_requests',
-          filter: `client_id=eq.${user.id}`,
-        },
-        () => load(),
-      )
-      .subscribe();
+    const channel = createRealtimeChannel(`client-home-${user.id}`).on(
+      'postgres_changes',
+      {
+        event: '*',
+        schema: 'public',
+        table: 'service_requests',
+        filter: `client_id=eq.${user.id}`,
+      },
+      () => load(),
+    );
+    // Setelah koneksi sempat putus, ambil ulang data yang terlewat.
+    subscribeWithResync(channel, () => void load());
     return () => {
       supabase.removeChannel(channel);
     };
