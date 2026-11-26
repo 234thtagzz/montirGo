@@ -36,7 +36,11 @@
         "expo-notifications",
         {
           "color": "#0B74E5",
-          "defaultChannel": "requests"
+          "defaultChannel": "requests",
+          "sounds": [
+            "./assets/sounds/safeyable-tung-tung-wyung-244250.mp3",
+            "./assets/sounds/safeyable-tung-tung-wyung-244250.aiff"
+          ]
         }
       ],
       [
@@ -51,6 +55,16 @@
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
+    },
+    "extra": {
+      "router": {
+        "asyncRoutes": {
+          "web": true
+        }
+      },
+      "eas": {
+        "projectId": "70cd9664-d7a4-48be-9cf8-60b3a6432411"
+      }
     }
   }
 }

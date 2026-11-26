@@ -11,6 +11,14 @@ import { Brand } from '@/constants/brand';
 export const REQUESTS_CHANNEL_ID = 'requests';
 export const ORDERS_CHANNEL_ID = 'orders';
 
+// Suara notifikasi kustom yang didaftarkan di plugin `expo-notifications`
+// pada `app.json` (`sounds`). iOS mewajibkan nama file beserta ekstensinya,
+// sedangkan Android mengabaikan ekstensi saat mencari resource `res/raw`.
+const ALERT_SOUND =
+  Platform.OS === 'ios'
+    ? 'safeyable-tung-tung-wyung-244250.aiff'
+    : 'safeyable-tung-tung-wyung-244250.mp3';
+
 /** Menentukan layar yang dibuka saat notifikasi lokal diketuk. */
 export type LocalAlertAudience = 'client' | 'mechanic';
 
@@ -46,7 +54,7 @@ export async function prepareNotifications(): Promise<boolean> {
       importance: ANDROID_IMPORTANCE_HIGH as Notifications.AndroidImportance,
       vibrationPattern: [0, 250, 250, 250],
       lightColor: Brand.primary,
-      sound: 'default',
+      sound: ALERT_SOUND,
     }).catch(() => {
       // Channel gagal dibuat — notifikasi tetap memakai channel bawaan sistem.
     });
@@ -57,7 +65,7 @@ export async function prepareNotifications(): Promise<boolean> {
       importance: ANDROID_IMPORTANCE_HIGH as Notifications.AndroidImportance,
       vibrationPattern: [0, 250, 250, 250],
       lightColor: Brand.primary,
-      sound: 'default',
+      sound: ALERT_SOUND,
     }).catch(() => {
       // Channel gagal dibuat — notifikasi tetap memakai channel bawaan sistem.
     });
@@ -98,7 +106,7 @@ export async function presentLocalAlert({
       content: {
         title,
         body: body ?? undefined,
-        sound: 'default',
+        sound: ALERT_SOUND,
         data: requestId ? { requestId, audience, type: type ?? null } : {},
       },
       trigger: {
