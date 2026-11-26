@@ -36,7 +36,11 @@
         "expo-notifications",
         {
           "color": "#0B74E5",
-          "defaultChannel": "requests"
+          "defaultChannel": "requests",
+          "sounds": [
+            "./assets/sounds/safeyable-tung-tung-wyung-244250.mp3",
+            "./assets/sounds/safeyable-tung-tung-wyung-244250.aiff"
+          ]
         }
       ],
       [
