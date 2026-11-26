@@ -7,6 +7,7 @@ import { Ionicons } from '@/components/ui/icon';
 import { Brand, Radius, ScreenPadding, Space, Type } from '@/constants/brand';
 import { createRealtimeChannel, subscribeWithResync } from '@/lib/realtime';
 import { supabase } from '@/lib/supabase';
+import { useSessionUser } from '@/hooks/use-session-user';
 import { useRefreshOnForeground } from '@/hooks/use-foreground';
 import {
   acceptOrder,
@@ -27,6 +28,7 @@ const NEW_REQUEST_BADGE = {
 };
 
 export default function MechanicRequestsScreen() {
+  const { user } = useSessionUser();
   const [orders, setOrders] = useState<IncomingOrder[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -62,18 +64,33 @@ export default function MechanicRequestsScreen() {
   // Muat ulang saat app kembali aktif agar request terbaru tidak terlewat.
   useRefreshOnForeground(load);
 
-  // Realtime: request baru/berubah langsung menyegarkan daftar. Pemuatan awal
-  // sudah ditangani `useFocusEffect` di atas.
+  // Realtime terfilter untuk user montir ini + debounced reload agar bebas broadcast storm.
   useEffect(() => {
-    const ch = createRealtimeChannel('mechanic-incoming')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'service_requests' }, load)
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'ai_diagnoses' }, load);
-    // Setelah koneksi sempat putus, ambil ulang request yang terlewat.
+    if (!user?.id) return;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    const scheduleReload = () => {
+      if (timer) clearTimeout(timer);
+      timer = setTimeout(() => {
+        void load();
+      }, 350);
+    };
+
+    const ch = createRealtimeChannel(`mechanic-incoming-${user.id}`).on(
+      'postgres_changes',
+      {
+        event: 'INSERT',
+        schema: 'public',
+        table: 'notifications',
+        filter: `user_id=eq.${user.id}`,
+      },
+      scheduleReload,
+    );
     subscribeWithResync(ch, () => void load());
     return () => {
+      if (timer) clearTimeout(timer);
       supabase.removeChannel(ch);
     };
-  }, [load]);
+  }, [user?.id, load]);
 
   const handleAccept = async (id: string) => {
     if (activeOrderId) {
@@ -216,7 +233,12 @@ export default function MechanicRequestsScreen() {
                   order.vehicle_model,
                 )}
                 clientName={order.client_name}
-                address={order.address}
+                address={[
+                  order.address_area,
+                  order.distance_km != null ? `± ${order.distance_km.toFixed(1)} km` : null,
+                ]
+                  .filter(Boolean)
+                  .join(' · ') || null}
                 aiRisk={order.ai_risk_level}
                 badge={NEW_REQUEST_BADGE}
                 onPress={() =>

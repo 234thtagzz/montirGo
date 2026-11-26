@@ -247,10 +247,10 @@ export default function MechanicActivityScreen() {
                                   {detailRows.map((row) => (
                                     <View key={row.id} style={styles.invoiceDetailRow}>
                                       <Text style={styles.invoiceDetailLabel} numberOfLines={2}>
-                                        {row.keterangan}
+                                        {row.description}
                                       </Text>
                                       <Text style={[styles.invoiceDetailAmount, Tabular]}>
-                                        {formatIDR(row.harga)}
+                                        {formatIDR(row.amount)}
                                       </Text>
                                     </View>
                                   ))}
@@ -258,7 +258,7 @@ export default function MechanicActivityScreen() {
                                     <Text style={styles.invoiceDetailTotalLabel}>Total</Text>
                                     <Text style={[styles.invoiceDetailTotalValue, Tabular]}>
                                       {formatIDR(
-                                        detailRows.reduce((sum, row) => sum + row.harga, 0),
+                                        detailRows.reduce((sum, row) => sum + row.amount, 0),
                                       )}
                                     </Text>
                                   </View>

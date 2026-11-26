@@ -5,6 +5,7 @@
 
 import {
   authenticate,
+  cors,
   friendlyXenditError,
   getServiceClient,
   json,
@@ -67,14 +68,16 @@ const RPC_MESSAGES: Record<string, string> = {
   ACTIVE_WITHDRAWAL_EXISTS: 'Masih ada pencairan yang sedang diproses.',
   INVALID_ACCOUNT: 'Rekening tujuan tidak ditemukan.',
   INVALID_STATUS: 'Status pencairan tidak valid.',
+  COMMISSION_DEBT_OUTSTANDING:
+    'Lunasi hutang komisi order tunai terlebih dahulu sebelum melakukan penarikan saldo.',
 };
 
 Deno.serve(async (req: Request) => {
-  if (req.method === 'OPTIONS') return new Response('ok');
+  if (req.method === 'OPTIONS') return new Response('ok', { headers: cors });
   if (req.method !== 'POST') return json({ error: 'Metode tidak didukung' }, 405);
 
   try {
-    const { sb } = await authenticate(req);
+    const { user } = await authenticate(req);
     const body = (await req.json().catch(() => null)) as Body | null;
     const amount = Math.round(Number(body?.amount ?? 0));
     const accountId = typeof body?.accountId === 'string' ? body.accountId : '';
@@ -84,7 +87,9 @@ Deno.serve(async (req: Request) => {
     }
     if (!accountId) return json({ error: 'Pilih rekening tujuan' }, 400);
 
-    const { data, error } = await sb.rpc('request_withdrawal', {
+    const svc = getServiceClient();
+    const { data, error } = await svc.rpc('request_withdrawal', {
+      p_mechanic_id: user.id,
       p_amount: amount,
       p_account_id: accountId,
     });
@@ -110,27 +115,48 @@ Deno.serve(async (req: Request) => {
     });
 
     if (!payout.ok || !payout.data?.payout_id) {
-      const svc = getServiceClient();
-      await svc.rpc('settle_withdrawal', {
-        p_withdrawal_id: withdrawal.id,
-        p_status: 'failed',
-        p_failure_code: payout.errorCode ?? 'PAYOUT_REQUEST_FAILED',
-      });
+      // Hanya auto-refund bila penolakan definitif (4xx non-429). Jika timeout/5xx,
+      // biarkan saldo tetap ditahan dan serahkan ke webhook / xendit-sync-withdrawal.
+      const isDefinitiveClientReject =
+        !payout.isAmbiguous && payout.status >= 400 && payout.status < 500 && payout.status !== 429;
+
+      if (isDefinitiveClientReject) {
+        await svc.rpc('settle_withdrawal', {
+          p_withdrawal_id: withdrawal.id,
+          p_status: 'failed',
+          p_failure_code: payout.errorCode ?? 'PAYOUT_REQUEST_FAILED',
+        });
+
+        return json(
+          {
+            error: friendlyXenditError(
+              payout.errorCode,
+              payout.errorMessage ?? 'Pencairan gagal diproses. Saldo dikembalikan.',
+            ),
+            code: payout.errorCode,
+          },
+          502,
+        );
+      }
+
+      await svc
+        .from('withdrawals')
+        .update({ status: 'processing', updated_at: new Date().toISOString() })
+        .eq('id', withdrawal.id)
+        .eq('status', 'requested');
 
       return json(
         {
-          error: friendlyXenditError(
-            payout.errorCode,
-            payout.message,
-            'Pencairan gagal diproses. Saldo dikembalikan.',
-          ),
+          error:
+            'Koneksi ke gateway pencairan tertunda. Status pencairan akan disinkronkan otomatis.',
+          pendingReconciliation: true,
+          withdrawalId: withdrawal.id,
           code: payout.errorCode,
         },
-        502,
+        504,
       );
     }
 
-    const svc = getServiceClient();
     const { error: updateError } = await svc
       .from('withdrawals')
       .update({
@@ -141,8 +167,6 @@ Deno.serve(async (req: Request) => {
       .eq('id', withdrawal.id);
 
     if (updateError) {
-      // Payout sudah dibuat; jangan refund. Biarkan rekonsiliasi webhook
-      // yang memperbaiki status.
       console.error('Payout dibuat tetapi gagal update status', updateError);
     }
 

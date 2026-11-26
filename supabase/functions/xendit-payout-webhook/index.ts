@@ -6,7 +6,7 @@
 // Alur: verifikasi token -> cari withdrawal -> simpan event idempoten ->
 // settle_withdrawal (RPC) untuk status terminal.
 
-import { getServiceClient, json } from '../_shared/xendit.ts';
+import { cors, getServiceClient, isValidUuid, json } from '../_shared/xendit.ts';
 
 interface PayoutWebhook {
   event?: string;
@@ -58,7 +58,7 @@ function verifyPayoutToken(req: Request): boolean {
 }
 
 Deno.serve(async (req: Request) => {
-  if (req.method === 'OPTIONS') return new Response('ok');
+  if (req.method === 'OPTIONS') return new Response('ok', { headers: cors });
   if (req.method !== 'POST') return json({ error: 'Metode tidak didukung' }, 405);
 
   if (!verifyPayoutToken(req)) {
@@ -100,12 +100,21 @@ Deno.serve(async (req: Request) => {
   }
 
   if (!withdrawal && referenceId) {
-    const { data: row } = await svc
+    const { data: byRef } = await svc
       .from('withdrawals')
       .select('id, status')
-      .or(`reference_id.eq.${referenceId},id.eq.${referenceId}`)
+      .eq('reference_id', referenceId)
       .maybeSingle();
-    withdrawal = row ?? null;
+    withdrawal = byRef ?? null;
+
+    if (!withdrawal && isValidUuid(referenceId)) {
+      const { data: byId } = await svc
+        .from('withdrawals')
+        .select('id, status')
+        .eq('id', referenceId)
+        .maybeSingle();
+      withdrawal = byId ?? null;
+    }
   }
 
   if (!withdrawal) {
@@ -122,10 +131,14 @@ Deno.serve(async (req: Request) => {
     payload: body,
   });
 
-  if (eventError) {
-    if (eventError.code === '23505') return json({ ok: true, duplicate: true });
+  const isDuplicate = eventError?.code === '23505';
+  const isTerminal = ['succeeded', 'failed', 'cancelled'].includes(withdrawal.status);
+  if (eventError && !isDuplicate) {
     console.error('Gagal menyimpan withdrawal event', eventError);
     return json({ error: 'Gagal menyimpan event' }, 500);
+  }
+  if (isDuplicate && isTerminal) {
+    return json({ ok: true, duplicate: true });
   }
 
   // Simpan payout id bila webhook tiba sebelum update dari request-withdrawal.

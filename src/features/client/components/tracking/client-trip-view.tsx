@@ -47,7 +47,16 @@ export function ClientTripView({ order, onBack, onOpenDetail }: ClientTripViewPr
     [order.lat, order.lng],
   );
 
-  const tracking = useMechanicTracking({ requestId: order.id, destination });
+  const tracking = useMechanicTracking({
+    requestId: order.id,
+    destination,
+    routeSnapshot: {
+      polyline: order.route_polyline,
+      distanceMeters: order.route_distance_m,
+      durationSeconds: order.route_duration_s,
+      updatedAt: order.route_updated_at,
+    },
+  });
   const route = tracking.route;
 
   // Jam relatif & perkiraan tiba ikut diperbarui walau tidak ada titik baru.

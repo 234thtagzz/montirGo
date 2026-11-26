@@ -122,7 +122,9 @@ export function AssignmentConfirmationSheet({
     };
   }, [visible]);
 
-  const remainingMs = expiresAt == null || now === 0 ? null : Math.max(0, expiresAt - now);
+  const rawRemainingMs = expiresAt == null || now === 0 ? null : Math.max(0, expiresAt - now);
+  const remainingMs =
+    rawRemainingMs == null ? null : Math.min(5 * 60 * 1000, rawRemainingMs);
   const expired = remainingMs != null && remainingMs <= 0;
 
   const specialization = useMemo(
@@ -152,7 +154,7 @@ export function AssignmentConfirmationSheet({
   const confirmReject = () => {
     Alert.alert(
       'Tolak montir ini?',
-      'Pesanan akan kembali ke kolam dan montir lain bisa mengajukan diri.',
+      'Pesanan akan dibuka kembali agar montir lain bisa mengajukan diri.',
       [
         { text: 'Batal', style: 'cancel' },
         {
@@ -394,7 +396,7 @@ export function AssignmentConfirmationSheet({
                 onPress={() => void runDecision('accept')}
               />
               <Button
-                label="Tolak & kembalikan ke kolam"
+                label="Tolak & cari montir lain"
                 icon="refresh-outline"
                 variant="ghost"
                 loading={responding === 'reject'}

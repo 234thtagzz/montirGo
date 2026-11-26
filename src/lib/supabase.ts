@@ -1,5 +1,5 @@
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { createClient } from '@supabase/supabase-js';
+import { secureStorage } from '@/lib/secure-storage';
 
 // Mendukung dua nama env: ANON_KEY (standar) atau KEY (format publishable key baru).
 const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL;
@@ -130,7 +130,7 @@ const fetchWithTimeout = async (input: FetchInput, init?: FetchInit): Promise<Re
 
 export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   auth: {
-    storage: AsyncStorage,
+    storage: secureStorage,
     autoRefreshToken: true,
     persistSession: true,
     detectSessionInUrl: false,

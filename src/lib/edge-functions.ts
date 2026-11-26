@@ -5,6 +5,9 @@
 const DEPLOY_HINT: Record<string, string> = {
   'analyze-request': 'npx supabase functions deploy analyze-request',
   'ai-assistant': 'npx supabase functions deploy ai-assistant',
+  'confirm-cash-payment': 'npx supabase functions deploy confirm-cash-payment',
+  'xendit-sync-withdrawal': 'npx supabase functions deploy xendit-sync-withdrawal',
+  'send-push-notification': 'npx supabase functions deploy send-push-notification',
 };
 
 interface ResponseLike {

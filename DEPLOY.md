@@ -1,320 +1,74 @@
-# Deploy Supabase (wajib sekali)
+# Panduan Deploy & Setup Supabase MontirGo
 
-Perbaikan alur request dan fitur AI membutuhkan dua hal di project Supabase:
-migrasi database dan deploy Edge Function. Jalankan dari root project.
+> Panduan lengkap pemisahan environment (`Local -> Staging -> Production`), aturan migrasi CLI, setup database webhook, dan rilis mobile kini tersedia di [`docs/development-and-deploy.md`](./docs/development-and-deploy.md).
 
-## 1. Login & link project
+## Ringkasan Cepat
+
+### 1. Login & Link ke Project Target (Staging / Production)
+
+Gunakan **Staging** terlebih dahulu sebelum Production:
 
 ```bash
 npx supabase login
-npx supabase link --project-ref biifjpuvbwdwrstkatem
+npx supabase link --project-ref <PROJECT_REF>
 ```
 
-Saat `link`, masukkan password database project (Supabase Dashboard >
-Project Settings > Database).
+### 2. Terapkan Migrasi Database (Wajib via CLI)
 
-## 2. Terapkan migrasi
-
-Cara cepat (cukup satu file, sudah mencakup policy + view + RPC):
-
-1. Buka **Supabase Dashboard > SQL Editor > New query**.
-2. Copy seluruh isi `supabase/migrations/20261023000000_fix_request_accept_flow.sql`.
-3. Klik **Run**.
-
-Atau lewat CLI (akan menjalankan semua migrasi yang belum tercatat):
+> **Penting**: Jangan menyalin-tempel SQL secara manual ke SQL Editor untuk menghindari *migration drift*. Selalu gunakan Supabase CLI.
 
 ```bash
 npx supabase db push
 ```
 
-> Fitur **konfirmasi montir** membutuhkan file
-> `supabase/migrations/20261104120000_assignment_confirmation.sql`. Jalankan file
-> itu dengan cara yang sama bila migrasi sebelumnya sudah diterapkan.
+### 3. Pasang Secrets Server-Side
 
-Migrasi yang relevan:
-
-- `20261015000001_mechanic_actions.sql` — policy montir menerima/memajukan order
-- `20261019000000_client_home.sql` — direktori montir online
-- `20261022000000_request_ai_analysis.sql` — view request terbuka + akses AI
-- `20261023000000_fix_request_accept_flow.sql` — RPC ambil order atomik + perbaikan view
-- `20261104120000_assignment_confirmation.sql` — konfirmasi client sebelum montir mulai
-  (status `mechanic_assigned`, RPC `respond_to_assignment`, batas waktu 5 menit,
-  dan jadwal `pg_cron` bila tersedia)
-- `20261115000000_client_request_profile_view.sql` — view request terbuka membawa
-  avatar, tanggal bergabung, dan total pesanan client untuk layar pengajuan montir
-- `20261119000000_admin_role.sql` — enum role `client | mechanic | admin`,
-  policy CRUD admin di seluruh tabel, view admin, dan RPC `set_user_role`
-
-Jika `db push` menolak karena riwayat migrasi remote tidak cocok, gunakan cara
-SQL Editor di atas (file migrasi idempotent, aman dijalankan ulang).
-
-### 2b. Akun admin (web-only)
-
-Database memiliki tiga role: `client`, `mechanic`, dan `admin`. Aplikasi mobile
-hanya menyediakan pilihan `client`/`mechanic`; akun `admin` diblokir di mobile
-dan hanya bisa memakai panel web `montirgo-admin`.
-
-Membuat admin pertama:
-
-1. Buat user di Supabase Dashboard → Authentication → Users.
-2. Tambahkan emailnya ke `ADMIN_EMAILS` pada `.env.local` repo
-   `montirgo-admin`, **atau** jalankan SQL di Supabase SQL Editor:
-   ```sql
-   update public.profiles set role = 'admin' where email = 'admin@montirgo.id';
-   ```
-   RPC `public.set_user_role('<user-id>', 'admin')` tersedia untuk sesi
-   `service_role` atau admin yang sudah login (bukan SQL Editor).
-3. Login di panel web. Email yang ada di `ADMIN_EMAILS` otomatis dipromosikan
-   saat login pertama.
-
-Admin memiliki akses baca + CRUD ke seluruh data (profil client/montir,
-kendaraan, order, pembayaran, earning, wallet, dan transaksi lain) melalui
-policy `admin_all` dan view `admin_user_directory` /
-`admin_transaction_overview`.
-
-## 3. Set secret AI (Groq)
+Siapkan `supabase/.env` dari [`supabase/.env.example`](./supabase/.env.example), lalu kirim ke server:
 
 ```bash
-npx supabase secrets set AI_PROVIDER_API_KEY=<key-groq-anda> AI_PROVIDER_MODEL=openai/gpt-oss-120b AI_PROVIDER_BASE_URL=https://api.groq.com/openai/v1
+npx supabase secrets set --env-file supabase/.env
 ```
 
-Gunakan key dari `.env.local` (`AI_PROVIDER_API_KEY`). Jangan pernah memakai
-prefix `EXPO_PUBLIC_` untuk key ini.
+Jangan pernah menaruh `SUPABASE_SERVICE_ROLE_KEY`, `XENDIT_SECRET_KEY`, atau `AI_PROVIDER_API_KEY` di `.env` mobile maupun memakai prefix `EXPO_PUBLIC_`.
 
-## 4. Deploy Edge Function
+### 4. Deploy Seluruh Edge Functions
+
+Pastikan seluruh pemeriksaan lokal lulus lebih dulu sebelum deploy:
 
 ```bash
-npx supabase functions deploy analyze-request
-npx supabase functions deploy ai-assistant
+npm run supabase:check
+npm run supabase:test:functions
+npm run test:backend
+npm run supabase:deploy
 ```
 
-Cek cepat bahwa function sudah hidup:
+Verifikasi cepat fungsi AI:
 
 ```bash
 npm run supabase:verify
 ```
 
-Harus muncul `OK ... aktif` untuk kedua fungsi. Selama masih `404 NOT_FOUND`,
-aplikasi akan menampilkan *"Fitur AI belum aktif di server (Edge Function tidak
-ditemukan)"*.
+### 5. Konfigurasi Webhook Eksternal & Database
 
-Alternatif tanpa CLI (kalau `supabase login` tidak bisa):
+- **Xendit Dashboard** (Test Mode untuk Staging, Live Mode untuk Production):
+  - Payment Session Webhook → `https://<PROJECT_REF>.supabase.co/functions/v1/xendit-webhook`
+  - Payout Webhook → `https://<PROJECT_REF>.supabase.co/functions/v1/xendit-payout-webhook`
+- **Supabase Database Webhook** (untuk Push Notification):
+  - Tabel `public.notifications`, event `INSERT` → `https://<PROJECT_REF>.supabase.co/functions/v1/send-push-notification`
+  - Header: `x-webhook-secret: <PUSH_WEBHOOK_SECRET>`
 
-1. Dashboard → **Edge Functions** → **Deploy a new function**.
-2. Slug: `analyze-request`, tempel isi
-   `supabase/functions/analyze-request/index.ts`, deploy.
-3. Ulangi untuk slug `ai-assistant` dengan file
-   `supabase/functions/ai-assistant/index.ts`.
-4. Pastikan **Verify JWT** aktif untuk keduanya.
+### 6. Akun Admin (Web-Only)
 
-Setelah deploy, uji ulang:
+Role `admin` tidak pernah bisa dibuat lewat registrasi aplikasi mobile. Untuk mempromosikan akun admin pertama, gunakan SQL Editor atau `service_role` dengan RPC:
 
-- Analisis: buat request baru dari akun client; kartu "Analisis AI" harus terisi.
-- Chat: buka tab **AI Asisten** (montir) atau **Tanya AI** (client). Uji mode
-  **Diagnosa** dan **Harga Sparepart** — jawaban harga harus berupa rentang,
-  bukan angka pasti.
-
-## 5. Pembayaran Xendit (status lunas otomatis)
-
-Migrasi pembayaran/dompet wajib diterapkan lebih dulu:
-
-- `20261024000000_xendit_payments_wallets.sql` — tabel pembayaran, dompet,
-  `set_order_price`, `finalize_payment`, pencairan, dan realtime.
-
-Deploy semua function pembayaran:
-
-```bash
-npx supabase functions deploy xendit-create-payment
-npx supabase functions deploy xendit-sync-payment
-npx supabase functions deploy xendit-webhook --no-verify-jwt
-npx supabase functions deploy xendit-request-withdrawal
-npx supabase functions deploy xendit-payout-webhook --no-verify-jwt
+```sql
+select public.set_user_role('<USER_UUID>', 'admin');
 ```
 
-Secret yang dibutuhkan:
+## Dokumentasi Terkait
 
-```bash
-npx supabase secrets set \
-  XENDIT_SECRET_KEY=<secret-key-xendit> \
-  XENDIT_WEBHOOK_TOKEN=<verification-token-dashboard-xendit> \
-  XENDIT_PAYOUT_WEBHOOK_TOKEN=<token-payout> \
-  APP_PAYMENT_RETURN_URL=https://montirgo.app/payment-return \
-  PLATFORM_FEE_PERCENT=10
-```
-
-`XENDIT_WEBHOOK_TOKEN` **harus sama** dengan *Webhook Verification Token* di
-Dashboard Xendit. Bila belum di-set, function webhook membalas `500` dengan
-pesan `XENDIT_WEBHOOK_TOKEN belum di-set di server`.
-
-Daftarkan URL webhook di Dashboard Xendit:
-
-- **Payment session** → `https://biifjpuvbwdwrstkatem.supabase.co/functions/v1/xendit-webhook`
-- **Payout** → `https://biifjpuvbwdwrstkatem.supabase.co/functions/v1/xendit-payout-webhook`
-
-Verifikasi alur pembayaran:
-
-1. Montir mengirim tagihan → order berstatus **Menunggu pembayaran**.
-2. Client menekan **Bayar Sekarang** dan menyelesaikan pembayaran.
-3. Kembali ke aplikasi: status order berubah menjadi **Lunas** di sisi client
-   dan montir, saldo pending montir bertambah.
-
-Bila webhook belum terdaftar atau telat, aplikasi tetap menyinkronkan status
-langsung ke Xendit lewat `xendit-sync-payment` (dipanggil otomatis saat layar
-order/pembayaran dibuka dan setiap beberapa detik selama status masih
-`payment`).
-
-## 6. Restart aplikasi
-
-```bash
-npx expo start --clear
-```
-
-## Troubleshooting
-
-- **Muncul "Edge Function returned a non-2xx status code"** — ini bukan bug kode
-  AI, melainkan respons server. Cek dulu `npm run supabase:verify`:
-  - `404` → fungsi belum dideploy (penyebab paling umum).
-  - `401` → fungsi sudah ada, tapi sesi login di aplikasi kedaluwarsa.
-  - `500` dengan pesan `AI_PROVIDER_API_KEY` → secret belum di-set.
-- **VS Code menandai error `Deno` / import `npm:` di `supabase/functions`**
-  Folder itu berjalan di Deno, bukan bundler React Native. Install ekstensi
-  **Deno** (`denoland.vscode-deno`); pengaturan `deno.enablePaths` sudah ada di
-  `.vscode/settings.json`, dan `supabase/functions/deno.json` menyediakan
-  compiler options-nya. Cek tipe dengan `npm run supabase:check`.
-- **Fungsi balas 404** berarti belum dideploy (atau salah nama project).
-- **Fungsi balas 500 "AI_PROVIDER_API_KEY belum di-set"** berarti secret belum
-  terpasang — ulangi langkah 3.
-- **`db push` menolak riwayat migrasi** — pakai SQL Editor seperti di langkah 2.
-
-## Verifikasi alur request
-
-1. Client membuat request baru → status **Mencari montir**.
-2. Akun montir membuka tab **Request** → request terlihat.
-3. Montir menekan **Terima Order** → request hilang dari tab Request dan muncul
-   di **Beranda > Order aktif** milik montir tersebut.
-4. Akun montir lain tidak lagi melihat request itu.
-
-# Peta & lokasi
-
-Layar perjalanan montir punya dua renderer peta (lihat `MAP_RENDERER` di
-`src/features/mechanic/components/trip/trip-map.tsx`):
-
-- **`webview` (default)** — Leaflet + tile OpenStreetMap di dalam WebView.
-  Jalan di **Expo Go** maupun development build, tanpa Google Maps SDK/key.
-  Tidak perlu langkah tambahan; cukup `npx expo start`.
-- **`google`** — `react-native-maps` native. Lebih halus, tetapi **hanya tampil
-  di development build**: Expo Go tidak lagi mendukung Google Maps di Android
-  sejak SDK 52 (`MapView` ter-mount tapi petak peta kosong/hitam).
-
-## Rute & ETA (Google Cloud)
-
-Rute + ETA memakai key di `.env.local`:
-
-```bash
-EXPO_PUBLIC_MAPS_API_KEY=AIza...
-```
-
-Di Google Cloud, pada project key tersebut:
-- aktifkan **Maps SDK for Android** (hanya untuk renderer `google`),
-- aktifkan **Routes API** untuk rute + ETA (kode otomatis jatuh ke
-  **Directions API** lama bila yang aktif justru itu),
-- aktifkan billing, lalu batasi key ke API tersebut.
-
-Urutan sumber rute di aplikasi:
-
-1. **Google Routes API** — rute tercepat dengan data lalu lintas (`TRAFFIC_AWARE`).
-2. **Google Directions API** — fallback untuk project yang hanya mengaktifkan API lama.
-3. **OSRM / OpenStreetMap** — rute jalan nyata tanpa API key. Dipakai otomatis
-   bila Google belum aktif, key dibatasi, atau tanpa key sama sekali. Rute
-   tercepat tetap dipilih dari beberapa alternatif, tetapi tanpa data lalu lintas
-   realtime (chip "Rute tercepat · tanpa data lalu lintas" muncul di peta).
-4. **Garis lurus + estimasi** — hanya saat offline total; chip "Rute estimasi"
-   muncul dan garis digambar putus-putus.
-
-Server OSRM default adalah demo publik. Untuk produksi arahkan ke server sendiri:
-
-```bash
-EXPO_PUBLIC_OSRM_URL=https://osrm.contoh.com
-```
-
-Tanpa key Google, aplikasi tetap menampilkan rute jalan lewat OSRM. Bila OSRM
-juga tidak dapat dihubungi (offline), ETA memakai estimasi 25 km/jam.
-
-## Pelacakan montir di sisi client
-
-Saat montir menekan **Mulai Perjalanan** (status `on_the_way`), client bisa
-membuka **layar perjalanan penuh** (`/(client)/tracking/[id]`) dari kartu
-pesanan aktif, tombol **Lacak**, atau kartu "Perjalanan sedang berlangsung" di
-detail pesanan. Tampilannya mengikuti layar trip montir:
-
-- peta penuh dengan posisi montir + rute tercepat ke lokasi client,
-- kartu status mengambang di atas: judul, ETA/jarak, dan tombol chat montir,
-- bottom sheet yang bisa dilipat (geser/ketuk) berisi identitas montir, sisa
-  waktu, sisa jarak, perkiraan jam tiba, alamat, langkah status, telepon, dan
-  pintasan **Detail pesanan**.
-
-Chip **Live** berubah **Terakhir** bila belum ada titik baru ±45 detik (montir
-berhenti/bergeser <15 m memang tidak mengirim titik baru). Selama belum ada
-sinyal sama sekali, chip **Menunggu** dan sheet menjelaskan bahwa posisi muncul
-otomatis.
-
-Sumber data di perangkat client bersifat pasif (tanpa izin GPS, tanpa menulis
-posisi):
-
-1. Realtime Supabase `mechanic_locations` (INSERT, filter `request_id`) —
-   membutuhkan migration `20261031000000_mechanic_trip_tracking.sql` yang sudah
-   menambahkan tabel ini ke publication `supabase_realtime`.
-2. Polling 10 detik sebagai cadangan bila websocket terputus.
-3. Rute dihitung ulang saat montir bergeser ≥30 m atau sudah 30 detik.
-
-RLS `ml_select_involved` mengizinkan client membaca titik lokasi milik
-pesanannya; client lain dan pengguna anonim tidak bisa.
-
-## Tile peta (opsional)
-
-Default memakai tile OpenStreetMap. Untuk produksi ganti ke penyedia ber-SLA:
-
-```bash
-EXPO_PUBLIC_MAP_TILE_URL=https://api.maptiler.com/maps/streets-v2/{z}/{x}/{y}.png?key=xxx
-EXPO_PUBLIC_MAP_TILE_ATTRIBUTION=&copy; MapTiler &copy; OpenStreetMap contributors
-```
-
-## Development build (hanya untuk renderer `google`)
-
-```bash
-npx expo run:android      # build lokal, butuh JDK 17+ & Android SDK
-# atau
-npx eas-cli build --profile development --platform android
-```
-
-Build lokal di Windows butuh environment berikut (sesuaikan path):
-
-```powershell
-$env:JAVA_HOME = "C:\Program Files\Microsoft\jdk-25.0.4.101-hotspot"
-$env:ANDROID_HOME = "$env:LOCALAPPDATA\Android\Sdk"
-npx expo run:android
-```
-
-Setelah pindah ke dev build, `npm run android` juga menjalankan
-`expo run:android`. SHA-1 debug keystore (untuk membatasi key per aplikasi)
-bisa dilihat dengan:
-
-```powershell
-keytool -list -v -keystore "$env:USERPROFILE\.android\debug.keystore" -alias androiddebugkey -storepass android
-```
-
-
-# Verifikasi alur perjalanan montir
-
-1. Montir menerima request → langsung masuk layar perjalanan.
-2. Tekan **Mulai Perjalanan** → status `on_the_way`, posisi mulai dikirim ke
-   `mechanic_locations` (butuh migration `20261031000000_mechanic_trip_tracking.sql`
-   sudah di-push).
-3. Peta mengikuti posisi; sheet menampilkan sisa waktu, jarak, dan jam tiba.
-4. Di sekitar lokasi client, muncul penanda "Kamu sudah dekat lokasi client".
-5. Buka akun client → kartu pesanan aktif / **Lacak** membuka layar perjalanan
-   penuh: posisi montir, rute, ETA, dan jam tiba secara realtime (chip **Live**).
-   Tombol **Detail pesanan** di bottom sheet membuka rincian order; dari detail,
-   kartu "Perjalanan sedang berlangsung" mengembalikan ke peta.
-6. Tekan **Sampai di Lokasi** → status `arrived`, layar perjalanan client
-   menampilkan "Montir sudah tiba di lokasimu" dengan tombol ke detail order.
+- [`docs/architecture.md`](./docs/architecture.md)
+- [`docs/order-state-machine.md`](./docs/order-state-machine.md)
+- [`docs/database-and-rls.md`](./docs/database-and-rls.md)
+- [`docs/payments-and-wallet.md`](./docs/payments-and-wallet.md)
+- [`docs/development-and-deploy.md`](./docs/development-and-deploy.md)

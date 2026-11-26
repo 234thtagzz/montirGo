@@ -23,46 +23,12 @@ const ORDER_RELATIONS =
   'vehicles ( type, brand, model, year, license_plate, photo_url ), ' +
   'mechanic:profiles!service_requests_mechanic_id_fkey ( full_name, phone_number, avatar_url )';
 
-const ORDER_COLUMNS =
+const ORDER_SELECT =
   'id, status, issue_description, symptoms, address, lat, lng, contact_phone, ' +
   'additional_notes, price_amount, payment_method, created_at, updated_at, vehicle_id, ' +
-  'mechanic_id, ';
-
-const ORDER_SELECT =
-  ORDER_COLUMNS +
-  'assignment_requested_at, assignment_expires_at, ' +
+  'mechanic_id, assignment_requested_at, assignment_expires_at, ' +
+  'route_polyline, route_distance_m, route_duration_s, route_updated_at, ' +
   ORDER_RELATIONS;
-
-/** Dipakai bila migrasi konfirmasi montir belum dijalankan di server. */
-const ORDER_SELECT_LEGACY = ORDER_COLUMNS + ORDER_RELATIONS;
-
-/**
- * PostgREST menolak kolom yang belum ada setelah migrasi baru dibuat. Deteksi
- * error itu agar aplikasi tetap bisa menampilkan order lama sebelum migrasi
- * konfirmasi montir dijalankan.
- */
-function isMissingColumnError(error: { code?: string; message?: string } | null): boolean {
-  if (!error) return false;
-  return (
-    error.code === '42703' ||
-    error.code === 'PGRST204' ||
-    /column .* does not exist|could not find the '.*' column/i.test(error.message ?? '')
-  );
-}
-
-/**
- * PostgREST juga bisa menolak relasi embed saat cache skema belum dimuat ulang
- * setelah migrasi (PGRST200). Tanpa fallback, satu embed yang gagal membuat
- * seluruh riwayat pesanan tampak kosong.
- */
-function isEmbedError(error: { code?: string; message?: string } | null): boolean {
-  if (!error) return false;
-  return (
-    isMissingColumnError(error) ||
-    error.code === 'PGRST200' ||
-    /could not find a relationship|schema cache/i.test(error.message ?? '')
-  );
-}
 
 interface RawOrder {
   id: string;
@@ -225,38 +191,22 @@ export async function deleteVehicle(id: string): Promise<void> {
 
 export async function listMyRequests(limit = 50): Promise<ClientOrder[]> {
   const id = await getMyId();
-  const query = (select: string) =>
-    supabase
-      .from('service_requests')
-      .select(select)
-      .eq('client_id', id)
-      .order('created_at', { ascending: false })
-      .limit(limit);
-
-  let { data, error } = await query(ORDER_SELECT);
-  if (isEmbedError(error)) {
-    ({ data, error } = await query(ORDER_SELECT_LEGACY));
-  }
-  // Relasi bisa tetap tidak dikenali bila cache skema PostgREST basi. Ambil
-  // kolom datar supaya riwayat tetap tampil (detail kendaraan jadi kosong).
-  if (error && isEmbedError(error)) {
-    ({ data, error } = await query(ORDER_COLUMNS));
-  }
+  const { data, error } = await supabase
+    .from('service_requests')
+    .select(ORDER_SELECT)
+    .eq('client_id', id)
+    .order('created_at', { ascending: false })
+    .limit(limit);
   if (error) throw error;
   return ((data ?? []) as unknown as RawOrder[]).map(mapOrder);
 }
 
 export async function getRequest(id: string): Promise<ClientOrder | null> {
-  const query = (select: string) =>
-    supabase.from('service_requests').select(select).eq('id', id).maybeSingle();
-
-  let { data, error } = await query(ORDER_SELECT);
-  if (isEmbedError(error)) {
-    ({ data, error } = await query(ORDER_SELECT_LEGACY));
-  }
-  if (error && isEmbedError(error)) {
-    ({ data, error } = await query(ORDER_COLUMNS));
-  }
+  const { data, error } = await supabase
+    .from('service_requests')
+    .select(ORDER_SELECT)
+    .eq('id', id)
+    .maybeSingle();
   if (error) throw error;
   return data ? mapOrder(data as unknown as RawOrder) : null;
 }
@@ -282,52 +232,50 @@ export async function getLatestMechanicLocation(
   return (data as MechanicLocationSnapshot | null) ?? null;
 }
 
+const CREATE_REQUEST_ERRORS: Record<string, string> = {
+  UNAUTHORIZED: 'Sesi berakhir. Silakan login kembali.',
+  FORBIDDEN: 'Hanya akun client yang dapat membuat permintaan layanan.',
+  ACTIVE_ORDER_EXISTS: 'Kamu masih memiliki pesanan aktif. Selesaikan atau batalkan sebelum membuat yang baru.',
+  INVALID_ISSUE_DESCRIPTION: 'Jelaskan keluhan kendaraan minimal 5 karakter.',
+  INVALID_CONTACT_PHONE: 'Nomor WhatsApp wajib diisi dengan benar.',
+  INVALID_COORDINATES: 'Koordinat lokasi tidak valid.',
+  INVALID_VEHICLE: 'Kendaraan yang dipilih tidak valid.',
+};
+
 export async function createServiceRequest(
   input: CreateServiceRequestInput,
 ): Promise<{ id: string }> {
-  const { data, error } = await supabase
-    .from('service_requests')
-    .insert({
-      client_id: input.clientId,
-      vehicle_id: input.vehicleId || null,
-      issue_description: input.issueDescription.trim(),
-      symptoms: input.symptoms?.trim() || null,
-      lat: input.lat,
-      lng: input.lng,
-      address: input.address?.trim() || null,
-      contact_phone: input.contactPhone.trim(),
-      additional_notes: input.additionalNotes?.trim() || null,
-      status: 'requested',
-    })
-    .select('id')
-    .single();
-  if (error) throw error;
-  return data as { id: string };
+  const { data, error } = await supabase.rpc('create_service_request', {
+    p_vehicle_id: input.vehicleId || null,
+    p_issue_description: input.issueDescription.trim(),
+    p_symptoms: input.symptoms?.trim() || null,
+    p_lat: input.lat,
+    p_lng: input.lng,
+    p_address: input.address?.trim() || null,
+    p_contact_phone: input.contactPhone.trim(),
+    p_additional_notes: input.additionalNotes?.trim() || null,
+  });
+  if (error) {
+    const code = (error.message ?? '').trim();
+    throw new Error(CREATE_REQUEST_ERRORS[code] ?? (code || 'Gagal membuat permintaan layanan.'));
+  }
+  const row = (Array.isArray(data) ? data[0] : data) as { id?: string } | null;
+  if (!row?.id) throw new Error('Permintaan gagal dibuat.');
+  return { id: row.id };
 }
 
-export async function cancelServiceRequest(id: string): Promise<void> {
-  const userId = await getMyId();
-  const { data: current, error: readError } = await supabase
-    .from('service_requests')
-    .select('status')
-    .eq('id', id)
-    .maybeSingle();
-  if (readError) throw readError;
-
-  const { error } = await supabase
-    .from('service_requests')
-    .update({ status: 'cancelled' })
-    .eq('id', id)
-    .in('status', ['requested', 'matching']);
-  if (error) throw error;
-
-  await supabase.from('service_request_status_history').insert({
-    request_id: id,
-    from_status: (current as { status?: string } | null)?.status ?? null,
-    to_status: 'cancelled',
-    changed_by: userId,
-    notes: 'Dibatalkan oleh client.',
+export async function cancelServiceRequest(id: string, reason?: string): Promise<void> {
+  const { error } = await supabase.rpc('cancel_order', {
+    p_request_id: id,
+    p_reason: reason?.trim() || null,
   });
+  if (error) {
+    const code = (error.message ?? '').trim();
+    if (code.includes('CANNOT_CANCEL_AT_STAGE')) {
+      throw new Error('Pesanan tidak dapat dibatalkan setelah montir tiba di lokasi.');
+    }
+    throw new Error(code || 'Gagal membatalkan pesanan.');
+  }
 }
 
 export async function listStatusHistory(requestId: string): Promise<OrderStatusEvent[]> {
@@ -341,7 +289,7 @@ export async function listStatusHistory(requestId: string): Promise<OrderStatusE
 }
 
 /**
- * Rincian baris tagihan (keterangan + harga) yang dikirim montir.
+ * Rincian baris tagihan (deskripsi + nominal) yang dikirim montir.
  * RLS memperbolehkan client membaca baris milik ordernya sendiri.
  */
 export async function listOrderInvoiceItems(
@@ -349,7 +297,7 @@ export async function listOrderInvoiceItems(
 ): Promise<OrderInvoiceItem[]> {
   const { data, error } = await supabase
     .from('order_invoice_items')
-    .select('id, request_id, mechanic_id, keterangan, harga, created_at, updated_at')
+    .select('id, request_id, mechanic_id, description, amount, created_at, updated_at')
     .eq('request_id', requestId)
     .order('created_at', { ascending: true });
   if (error) throw error;
@@ -372,6 +320,7 @@ interface RawDirectoryMechanic {
   skills?: string[] | null;
   vehicle_specialization?: string[] | null;
   workshop_photo?: string | null;
+  distance_km?: number | null;
 }
 
 function mapMechanic(row: RawDirectoryMechanic): NearbyMechanic {
@@ -389,37 +338,26 @@ function mapMechanic(row: RawDirectoryMechanic): NearbyMechanic {
     skills: row.skills ?? [],
     vehicle_specialization: row.vehicle_specialization ?? [],
     workshop_photo: row.workshop_photo ?? null,
+    distance_km: row.distance_km == null ? null : Number(row.distance_km),
   };
 }
 
 /**
- * Membaca view `mechanic_directory` (kolom aman: tanpa telepon/koordinat).
- * Jika migration view belum dijalankan, fallback ke mechanic_profiles
- * sehingga Beranda tetap tampil dengan nama generik.
+ * Membaca daftar montir online terverifikasi lewat RPC `list_nearby_mechanics`.
+ * Tidak pernah menyentuh tabel `mechanic_profiles` langsung atau mengekspos koordinat.
  */
-export async function listOnlineMechanics(limit = 10): Promise<NearbyMechanic[]> {
-  const { data, error } = await supabase
-    .from('mechanic_directory')
-    .select(
-      'profile_id, full_name, avatar_url, workshop_name, rating_avg, rating_count, total_jobs, is_online, bio, experience_years, skills, vehicle_specialization, workshop_photo',
-    )
-    .eq('is_online', true)
-    .order('rating_avg', { ascending: false })
-    .limit(limit);
-
-  if (!error) {
-    return ((data ?? []) as RawDirectoryMechanic[]).map(mapMechanic);
-  }
-
-  const { data: fallback, error: fallbackError } = await supabase
-    .from('mechanic_profiles')
-    .select('profile_id, workshop_name, rating_avg, total_jobs, is_online')
-    .eq('is_online', true)
-    .order('rating_avg', { ascending: false })
-    .limit(limit);
-
-  if (fallbackError) throw fallbackError;
-  return ((fallback ?? []) as RawDirectoryMechanic[]).map(mapMechanic);
+export async function listOnlineMechanics(
+  limit = 10,
+  coords?: { lat: number; lng: number; radiusKm?: number } | null,
+): Promise<NearbyMechanic[]> {
+  const { data, error } = await supabase.rpc('list_nearby_mechanics', {
+    p_lat: coords?.lat ?? null,
+    p_lng: coords?.lng ?? null,
+    p_radius_km: coords?.radiusKm ?? 15,
+    p_limit: limit,
+  });
+  if (error) throw error;
+  return ((data ?? []) as RawDirectoryMechanic[]).map(mapMechanic);
 }
 
 // ---------- Notifikasi ----------

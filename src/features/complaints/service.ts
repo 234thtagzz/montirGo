@@ -29,21 +29,26 @@ export async function submitComplaint(draft: ComplaintFormDraft): Promise<Compla
   const reporterId = await getMyId();
   const photoPaths = await uploadAndCollect(reporterId, draft);
 
-  const { data, error } = await supabase
-    .from('complaints')
-    .insert({
-      reporter_id: reporterId,
-      request_id: draft.requestId,
-      category: draft.category,
-      subject: draft.subject,
-      description: draft.description,
-      photo_paths: photoPaths,
-    })
-    .select(COMPLAINT_SELECT)
-    .maybeSingle();
-  if (error) throw error;
-  if (!data) throw new Error('Keluhan gagal diajukan. Coba lagi.');
-  return data as Complaint;
+  try {
+    const { data, error } = await supabase
+      .from('complaints')
+      .insert({
+        reporter_id: reporterId,
+        request_id: draft.requestId,
+        category: draft.category,
+        subject: draft.subject,
+        description: draft.description,
+        photo_paths: photoPaths,
+      })
+      .select(COMPLAINT_SELECT)
+      .maybeSingle();
+    if (error) throw error;
+    if (!data) throw new Error('Keluhan gagal diajukan. Coba lagi.');
+    return data as Complaint;
+  } catch (error) {
+    await deleteComplaintPhotos(photoPaths);
+    throw error;
+  }
 }
 
 export async function listMyComplaints(limit = 50): Promise<Complaint[]> {

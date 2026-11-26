@@ -24,6 +24,7 @@ const DEFAULT_SETTINGS: FinanceSettings = {
   minWithdrawal: 50000,
   minOrderPrice: 10000,
   maxOrderPrice: 10000000,
+  maxCashCommissionDebt: 100000,
 };
 
 async function getMyId(): Promise<string> {
@@ -100,6 +101,10 @@ export async function getFinanceSettings(): Promise<FinanceSettings> {
     minWithdrawal: num('min_withdrawal', DEFAULT_SETTINGS.minWithdrawal),
     minOrderPrice: num('min_order_price', DEFAULT_SETTINGS.minOrderPrice),
     maxOrderPrice: num('max_order_price', DEFAULT_SETTINGS.maxOrderPrice),
+    maxCashCommissionDebt: num(
+      'max_cash_commission_debt',
+      DEFAULT_SETTINGS.maxCashCommissionDebt,
+    ),
   };
 }
 
@@ -214,6 +219,9 @@ export async function getPaymentForRequest(requestId: string): Promise<OrderPaym
       'id, request_id, amount, platform_fee, net_amount, method, status, payment_url, payment_session_id, expires_at, paid_at',
     )
     .eq('request_id', requestId)
+    .order('attempt_no', { ascending: false })
+    .order('created_at', { ascending: false })
+    .limit(1)
     .maybeSingle();
   if (error) return null;
   return (data as OrderPayment | null) ?? null;
@@ -230,6 +238,9 @@ function cashErrorMessage(message: string | undefined): string {
   if (code.includes('INVALID_STATUS')) return 'Order ini tidak sedang menunggu pembayaran.';
   if (code.includes('INVALID_PRICE')) return 'Nominal tagihan belum diisi montir.';
   if (code.includes('INVALID_PAYMENT_METHOD')) return 'Metode pembayaran tidak dikenal.';
+  if (code.includes('PAYMENT_METHOD_NOT_CASH')) {
+    return 'Client belum memilih pembayaran tunai di aplikasi.';
+  }
   if (code.includes('CASH_NOT_AVAILABLE')) return 'Pembayaran tunai belum tersedia.';
   return code || 'Pembayaran tunai gagal diproses.';
 }
@@ -257,11 +268,31 @@ export async function choosePaymentMethod(
  * tetapi TIDAK menambah saldo dompet. Setelah ini order menjadi `paid`.
  */
 export async function confirmCashPayment(requestId: string): Promise<OrderPayment> {
-  const { data, error } = await supabase.rpc('confirm_cash_payment', {
-    p_request_id: requestId,
+  const { data, error } = await supabase.functions.invoke('confirm-cash-payment', {
+    body: { requestId },
   });
-  if (error) throw new Error(cashErrorMessage(error.message));
-  return data as OrderPayment;
+  if (error) {
+    throw new Error(await functionErrorMessage(error, 'Gagal mengonfirmasi pembayaran tunai.'));
+  }
+  const payment = (data as { payment?: OrderPayment } | null)?.payment;
+  if (!payment) throw new Error('Data pembayaran tunai tidak diterima dari server.');
+  return payment;
+}
+
+/** Sinkronkan status pencairan dana yang tertunda langsung ke Xendit. */
+export async function syncWithdrawalStatus(
+  withdrawalId: string,
+): Promise<{ status: string; settled: boolean }> {
+  const { data, error } = await supabase.functions.invoke('xendit-sync-withdrawal', {
+    body: { withdrawalId },
+  });
+  if (error) {
+    throw new Error(await functionErrorMessage(error, 'Gagal memeriksa status pencairan.'));
+  }
+  return (data as { status: string; settled: boolean } | null) ?? {
+    status: 'processing',
+    settled: false,
+  };
 }
 
 /** Buat / pakai ulang sesi checkout Xendit, lalu buka URL-nya di browser. */

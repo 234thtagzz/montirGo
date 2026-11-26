@@ -24,6 +24,7 @@ export default function ClientAIAssistantScreen() {
               label: [vehicle.brand, vehicle.model, vehicle.year]
                 .filter(Boolean)
                 .join(' '),
+              type: vehicle.type,
             })),
           );
         })

@@ -91,10 +91,16 @@ export function AssistantChat({
     setThreads((prev) => ({ ...prev, [activeMode]: next }));
     setInput("");
     setSending(true);
+    const vehicleContext = selectedVehicle
+      ? selectedVehicle.type
+        ? `${selectedVehicle.type === 'motor' ? 'Sepeda motor' : selectedVehicle.type === 'mobil' ? 'Mobil' : selectedVehicle.type} — ${selectedVehicle.label}`
+        : selectedVehicle.label
+      : undefined;
+
     try {
       const reply = await askAssistant(next, {
         requestId,
-        vehicle: selectedVehicle?.label,
+        vehicle: vehicleContext,
         mode: activeMode,
         persona,
       });
@@ -202,7 +208,7 @@ export function AssistantChat({
                   ]}
                 >
                   <Ionicons
-                    name="car-sport-outline"
+                    name={vehicle.type === 'motor' ? 'bicycle-outline' : 'car-sport-outline'}
                     size={12}
                     color={active ? Brand.volt : Brand.textMuted}
                   />

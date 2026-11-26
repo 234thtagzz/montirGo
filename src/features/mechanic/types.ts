@@ -1,9 +1,14 @@
 import type { AiAnalysis, AiRiskLevel } from '@/features/service-request/ai';
 
 export type OrderStatus =
-  | 'requested' | 'matching' | 'mechanic_assigned' | 'mechanic_accepted'
-  | 'on_the_way' | 'arrived' | 'diagnosing' | 'repairing'
-  | 'completed' | 'payment' | 'paid' | 'cancelled';
+  | 'requested'
+  | 'mechanic_assigned'
+  | 'mechanic_accepted'
+  | 'on_the_way'
+  | 'arrived'
+  | 'payment'
+  | 'paid'
+  | 'cancelled';
 
 /**
  * Profil montir — hanya data yang membantu client mengenali identitas montir:
@@ -58,8 +63,8 @@ export interface IncomingOrder {
   id: string;
   issue_description: string;
   symptoms: string | null;
-  address: string | null;
-  contact_phone: string;
+  address_area: string | null;
+  distance_km: number | null;
   status: OrderStatus;
   created_at: string;
   vehicle_type: string | null;
@@ -73,16 +78,14 @@ export interface IncomingOrder {
   has_analysis: boolean;
 }
 
-/** Detail request terbuka (sebelum diterima) untuk layar otorisasi montir. */
+/** Detail request terbuka (sebelum diterima client) untuk layar otorisasi montir. */
 export interface IncomingRequestDetail {
   id: string;
   status: OrderStatus;
   issue_description: string;
   symptoms: string | null;
-  address: string | null;
-  lat: number;
-  lng: number;
-  contact_phone: string;
+  address_area: string | null;
+  distance_km: number | null;
   additional_notes: string | null;
   created_at: string;
   client_name: string | null;
@@ -96,7 +99,6 @@ export interface IncomingRequestDetail {
   vehicle_brand: string | null;
   vehicle_model: string | null;
   vehicle_year: number | null;
-  vehicle_plate: string | null;
   /** Path foto kendaraan di bucket privat `vehicle-photos`. */
   vehicle_photo_url: string | null;
   ai_analysis: AiAnalysis | null;
@@ -155,13 +157,13 @@ export interface OrderStatusEvent {
   created_at: string;
 }
 
-/** Satu baris pada tagihan terperinci (keterangan + harga). */
+/** Satu baris pada tagihan terperinci (deskripsi + nominal). */
 export interface OrderInvoiceItem {
   id: string;
   request_id: string;
   mechanic_id?: string;
-  keterangan: string;
-  harga: number;
+  description: string;
+  amount: number;
   created_at: string;
   updated_at?: string;
 }

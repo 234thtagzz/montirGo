@@ -11,6 +11,7 @@ import {
 } from 'react-native';
 import { useLocalSearchParams, useFocusEffect, useRouter } from 'expo-router';
 import { openBrowserAsync } from 'expo-web-browser';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ScreenHeader } from '@/components/ui/screen-header';
 import { SectionHeader } from '@/components/ui/section-header';
 import { Avatar } from '@/components/ui/avatar';
@@ -71,6 +72,7 @@ import { openWhatsApp } from '@/utils/whatsapp';
 export default function ClientOrderDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
+  const insets = useSafeAreaInsets();
 
   const [order, setOrder] = useState<ClientOrder | null>(null);
   const [history, setHistory] = useState<OrderStatusEvent[]>([]);
@@ -86,6 +88,7 @@ export default function ClientOrderDetailScreen() {
   const [payment, setPayment] = useState<OrderPayment | null>(null);
   const [invoiceItems, setInvoiceItems] = useState<OrderInvoiceItem[]>([]);
   const [paying, setPaying] = useState(false);
+  const [checkingPayment, setCheckingPayment] = useState(false);
   const [choosingCash, setChoosingCash] = useState(false);
   const [review, setReview] = useState<ClientReview | null>(null);
   const [reviewRating, setReviewRating] = useState(0);
@@ -245,20 +248,47 @@ export default function ClientOrderDetailScreen() {
 
   // Selama tagihan belum lunas, sinkronkan berkala agar status berubah walau
   // webhook Xendit belum/tidak terkirim ke server.
+  // Polling cadangan dengan exponential backoff (15s -> 30s -> 60s) untuk menyinkronkan pembayaran Xendit.
   useEffect(() => {
     if (!id || order?.status !== 'payment' || !payment?.payment_session_id) return;
     let active = true;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    const delays = [15_000, 30_000, 60_000];
+    let attempt = 0;
+
     const tick = async () => {
       const paid = await checkPayment();
       if (!active || paid) return;
+      const delay = delays[Math.min(attempt, delays.length - 1)];
+      attempt += 1;
+      timer = setTimeout(() => {
+        void tick();
+      }, delay);
     };
     void tick();
-    const timer = setInterval(tick, 7000);
+
     return () => {
       active = false;
-      clearInterval(timer);
+      if (timer) clearTimeout(timer);
     };
   }, [id, order?.status, payment?.payment_session_id, checkPayment]);
+
+  const manualCheckPayment = async () => {
+    if (!id || checkingPayment) return;
+    setCheckingPayment(true);
+    try {
+      const paid = await checkPayment();
+      if (!paid) {
+        await load();
+        Alert.alert(
+          'Belum lunas',
+          'Pembayaran belum terkonfirmasi oleh gateway. Selesaikan checkout lalu coba lagi.',
+        );
+      }
+    } finally {
+      setCheckingPayment(false);
+    }
+  };
 
   const doCancel = async () => {
     if (!id) return;
@@ -347,7 +377,16 @@ export default function ClientOrderDetailScreen() {
       Alert.alert('Terima kasih', 'Ulasanmu tersimpan dan rating montir sudah diperbarui.');
       await load();
     } catch (error) {
-      Alert.alert('Gagal mengirim ulasan', error instanceof Error ? error.message : 'Coba lagi.');
+      const message =
+        error instanceof Error
+          ? error.message
+          : typeof error === 'object' &&
+              error !== null &&
+              'message' in error &&
+              typeof (error as { message?: unknown }).message === 'string'
+            ? (error as { message: string }).message
+            : 'Coba lagi.';
+      Alert.alert('Gagal mengirim ulasan', message);
     } finally {
       setSubmittingReview(false);
     }
@@ -397,6 +436,19 @@ export default function ClientOrderDetailScreen() {
   /** Client sudah memilih tunai dan menunggu montir mengonfirmasi. */
   const cashSelected = order.status === 'payment' && order.payment_method === 'cash';
   const paidWithCash = order.status === 'paid' && payment?.method === 'cash';
+  const progressTitle = getProgressLabel(order.status);
+  const heroSub =
+    order.status === 'paid'
+      ? paidWithCash
+        ? 'Dibayar tunai langsung ke montir'
+        : 'Pembayaran online terverifikasi'
+      : order.status === 'payment'
+        ? cashSelected
+          ? 'Menunggu montir mengonfirmasi uang tunai'
+          : 'Silakan selesaikan pembayaran tagihan'
+        : meta.label.toLowerCase() !== progressTitle.toLowerCase()
+          ? meta.label
+          : null;
 
   return (
     <View style={styles.screen}>
@@ -405,7 +457,7 @@ export default function ClientOrderDetailScreen() {
         subtitle={`#${order.id.slice(0, 8).toUpperCase()}`}
       />
       <ScrollView
-        contentContainerStyle={styles.content}
+        contentContainerStyle={[styles.content, { paddingBottom: Space.xxxl + insets.bottom }]}
         showsVerticalScrollIndicator={false}
         refreshControl={
           <RefreshControl
@@ -442,8 +494,8 @@ export default function ClientOrderDetailScreen() {
             <Text style={styles.statusTime}>{formatDateTime(order.created_at)}</Text>
           </View>
 
-          <Text style={styles.statusTitle}>{getProgressLabel(order.status)}</Text>
-          <Text style={styles.statusSub}>{meta.label}</Text>
+          <Text style={styles.statusTitle}>{progressTitle}</Text>
+          {heroSub ? <Text style={styles.statusSub}>{heroSub}</Text> : null}
 
           {meta.step > 0 ? (
             <View style={styles.progress}>
@@ -545,9 +597,9 @@ export default function ClientOrderDetailScreen() {
                 <Text style={styles.invoiceTitle}>Rincian tagihan</Text>
                 {invoiceItems.map((item) => (
                   <View key={item.id} style={styles.invoiceRow}>
-                    <Text style={styles.invoiceRowLabel}>{item.keterangan}</Text>
+                    <Text style={styles.invoiceRowLabel}>{item.description}</Text>
                     <Text style={[styles.invoiceRowAmount, Tabular]}>
-                      {formatIDR(item.harga)}
+                      {formatIDR(item.amount)}
                     </Text>
                   </View>
                 ))}
@@ -555,7 +607,7 @@ export default function ClientOrderDetailScreen() {
                   <Text style={styles.invoiceTotalLabel}>Total</Text>
                   <Text style={[styles.invoiceTotalValue, Tabular]}>
                     {formatIDR(
-                      invoiceItems.reduce((sum, item) => sum + item.harga, 0),
+                      invoiceItems.reduce((sum, item) => sum + item.amount, 0),
                     )}
                   </Text>
                 </View>
@@ -650,6 +702,17 @@ export default function ClientOrderDetailScreen() {
                     onPress={payOrder}
                     style={styles.payButton}
                   />
+                  {payment?.payment_session_id ? (
+                    <Button
+                      label="Cek Status Pembayaran"
+                      icon="refresh-outline"
+                      variant="secondary"
+                      loading={checkingPayment}
+                      disabled={paying}
+                      onPress={manualCheckPayment}
+                      style={styles.cashButton}
+                    />
+                  ) : null}
                   <Button
                     label="Bayar Tunai ke Montir"
                     icon="cash-outline"
@@ -699,8 +762,7 @@ export default function ClientOrderDetailScreen() {
               <View style={styles.reviewCard}>
                 <Text style={styles.reviewTitle}>Bagaimana pelayanan montir?</Text>
                 <Text style={styles.reviewHint}>
-                  Rating dan ulasanmu tersimpan di database serta membantu client lain memilih
-                  montir.
+                  Penilaian dan ulasanmu membantu pelanggan lain memilih montir yang tepat.
                 </Text>
                 <View style={styles.ratingPicker}>
                   {Array.from({ length: 5 }).map((_, index) => {
@@ -1043,7 +1105,6 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: Brand.border,
     padding: Space.lg,
-    marginTop: Space.xxl,
   },
   reportHead: { flexDirection: 'row', gap: Space.md, alignItems: 'flex-start' },
   reportIcon: {

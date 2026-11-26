@@ -17,6 +17,8 @@ export interface MechanicWallet {
   pending_balance: number;
   /** Saldo yang sedang ditahan karena proses pencairan. */
   held_balance: number;
+  /** Hutang komisi platform dari order tunai (otomatis terpotong saat earning online matang). */
+  commission_debt?: number;
   total_earned: number;
   total_withdrawn: number;
   updated_at: string;
@@ -84,6 +86,7 @@ export interface FinanceSettings {
   minWithdrawal: number;
   minOrderPrice: number;
   maxOrderPrice: number;
+  maxCashCommissionDebt: number;
 }
 
 /** Hasil sinkronisasi status pembayaran langsung ke Xendit. */

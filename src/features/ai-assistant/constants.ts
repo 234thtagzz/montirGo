@@ -10,6 +10,7 @@ export type AssistantPersona = 'client' | 'mechanic';
 export interface AssistantVehicleOption {
   id: string;
   label: string;
+  type?: string | null;
 }
 
 export const AI_MODES: readonly {
@@ -38,7 +39,7 @@ export const AI_SUGGESTIONS: Record<AssistantMode, string[]> = {
 
 export const AI_DISCLAIMER: Record<AssistantMode, string> = {
   diagnose:
-    'Asisten AI memberi indikasi awal, bukan diagnosis final. Montir tetap wajib pemeriksaan langsung (PRD §32).',
+    'Asisten AI memberi indikasi awal, bukan diagnosis final. Montir tetap wajib melakukan pemeriksaan langsung.',
   sparepart:
     'Harga bersifat estimasi pasar, bukan penawaran resmi. Konfirmasi ke bengkel atau toko sparepart sebelum membeli.',
 };

@@ -7,6 +7,7 @@
 // Status pembayaran TIDAK pernah dipercaya dari aplikasi mobile.
 
 import {
+  cors,
   getServiceClient,
   json,
   verifyCallbackToken,
@@ -31,12 +32,10 @@ interface XenditWebhook {
 }
 
 Deno.serve(async (req: Request) => {
-  if (req.method === 'OPTIONS') return new Response('ok');
+  if (req.method === 'OPTIONS') return new Response('ok', { headers: cors });
   if (req.method !== 'POST') return json({ error: 'Metode tidak didukung' }, 405);
 
   if (!webhookTokenConfigured()) {
-    // Tanpa token, semua notifikasi Xendit akan ditolak. Tampilkan pesan jelas
-    // agar terlihat di dashboard webhook Xendit.
     console.error('XENDIT_WEBHOOK_TOKEN belum di-set di Supabase secrets');
     return json({ error: 'XENDIT_WEBHOOK_TOKEN belum di-set di server' }, 500);
   }
@@ -64,14 +63,18 @@ Deno.serve(async (req: Request) => {
     (typeof data.id === 'string' ? data.id : null);
   const referenceId = typeof data.reference_id === 'string' ? data.reference_id : null;
 
-  // Cari baris payments: utamakan payment_session_id, lalu external id, lalu
-  // reference_id (request id) bila payload tidak membawa id sesi.
-  let payment: { id: string; request_id: string; status: string } | null = null;
+  let payment: {
+    id: string;
+    request_id: string;
+    status: string;
+    amount: number;
+    currency: string;
+  } | null = null;
 
   if (sessionId) {
     const { data: row } = await svc
       .from('payments')
-      .select('id, request_id, status')
+      .select('id, request_id, status, amount, currency')
       .eq('payment_session_id', sessionId)
       .maybeSingle();
     payment = row ?? null;
@@ -80,23 +83,34 @@ Deno.serve(async (req: Request) => {
   if (!payment && externalPaymentId) {
     const { data: row } = await svc
       .from('payments')
-      .select('id, request_id, status')
+      .select('id, request_id, status, amount, currency')
       .eq('external_payment_id', externalPaymentId)
       .maybeSingle();
     payment = row ?? null;
   }
 
   if (!payment && referenceId && isUuid(referenceId)) {
-    const { data: row } = await svc
+    const { data: byPaymentId } = await svc
       .from('payments')
-      .select('id, request_id, status')
-      .eq('request_id', referenceId)
+      .select('id, request_id, status, amount, currency')
+      .eq('id', referenceId)
       .maybeSingle();
-    payment = row ?? null;
+    payment = byPaymentId ?? null;
+
+    if (!payment) {
+      const { data: byRequest } = await svc
+        .from('payments')
+        .select('id, request_id, status, amount, currency')
+        .eq('request_id', referenceId)
+        .order('attempt_no', { ascending: false })
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      payment = byRequest ?? null;
+    }
   }
 
   if (!payment) {
-    // Event untuk transaksi yang tidak dikenal — balas 200 agar Xendit tidak retry.
     console.warn('Webhook pembayaran tanpa baris payments', { event, referenceId, sessionId });
     return json({ ok: true, ignored: true });
   }
@@ -126,9 +140,6 @@ Deno.serve(async (req: Request) => {
     payload: body,
   });
 
-  // Webhook duplikat tetap diproses: percobaan sebelumnya bisa sudah mencatat
-  // event tetapi gagal saat finalize_payment. finalize_payment sendiri
-  // idempoten (langsung keluar bila payments sudah 'paid').
   const isDuplicate = eventError?.code === '23505';
   if (eventError && !isDuplicate) {
     console.error('Gagal menyimpan payment event', eventError);
@@ -144,6 +155,27 @@ Deno.serve(async (req: Request) => {
     }
 
     if (isSuccess && payment.status !== 'paid') {
+      const rawPaidAmount = data.request_amount ?? data.paid_amount ?? data.amount;
+      const paidAmount = rawPaidAmount !== undefined ? Number(rawPaidAmount) : NaN;
+      const currency = typeof data.currency === 'string' ? data.currency.toUpperCase() : null;
+
+      if (Number.isFinite(paidAmount) && Math.round(paidAmount) !== Number(payment.amount)) {
+        console.error('Webhook amount mismatch', {
+          paymentId: payment.id,
+          expected: payment.amount,
+          received: paidAmount,
+        });
+        return json({ error: 'Nominal pembayaran tidak sesuai tagihan' }, 422);
+      }
+      if (currency && currency !== payment.currency) {
+        console.error('Webhook currency mismatch', {
+          paymentId: payment.id,
+          expected: payment.currency,
+          received: currency,
+        });
+        return json({ error: 'Mata uang pembayaran tidak sesuai' }, 422);
+      }
+
       const { error } = await svc.rpc('finalize_payment', { p_payment_id: payment.id });
       if (error) throw new Error(error.message);
       return json({ ok: true, finalized: true, duplicate: isDuplicate });

@@ -31,7 +31,6 @@ import {
 import { AiAnalysisCard } from '@/features/service-request/components/ai-analysis-card';
 import { VehicleProfileCard } from '@/features/vehicles/components/vehicle-profile-card';
 import { formatDateTime, formatMonthYear } from '@/utils/format';
-import { openWhatsApp } from '@/utils/whatsapp';
 
 /**
  * Layar otorisasi montir: detail request SEBELUM diterima.
@@ -97,16 +96,6 @@ export default function MechanicRequestDetailScreen() {
       supabase.removeChannel(channel);
     };
   }, [id, load]);
-
-  const chatClient = () => {
-    if (!order) return;
-    void openWhatsApp(
-      order.contact_phone,
-      `Halo, saya montir MontirGo. Saya ingin menanyakan permintaan #${order.id
-        .slice(0, 8)
-        .toUpperCase()} sebelum berangkat.`,
-    );
-  };
 
   const openConfirm = () => {
     if (!order) return;
@@ -193,9 +182,15 @@ export default function MechanicRequestDetailScreen() {
     order.vehicle_type ||
       order.vehicle_brand ||
       order.vehicle_model ||
-      order.vehicle_plate ||
       order.vehicle_photo_url,
   );
+
+  const areaLabel = [
+    order.address_area || 'Area sekitar client',
+    order.distance_km != null ? `± ${order.distance_km.toFixed(1)} km` : null,
+  ]
+    .filter(Boolean)
+    .join(' · ');
 
   return (
     <View style={styles.screen}>
@@ -247,16 +242,6 @@ export default function MechanicRequestDetailScreen() {
                 </Text>
               ) : null}
             </View>
-            {order.contact_phone ? (
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel="Hubungi client lewat WhatsApp"
-                onPress={chatClient}
-                style={({ pressed }) => [styles.chatButton, pressed && styles.pressed]}
-              >
-                <Ionicons name="logo-whatsapp" size={19} color={Brand.volt} />
-              </Pressable>
-            ) : null}
           </View>
         </View>
 
@@ -270,7 +255,6 @@ export default function MechanicRequestDetailScreen() {
               brand={order.vehicle_brand}
               model={order.vehicle_model}
               year={order.vehicle_year}
-              plate={order.vehicle_plate}
             />
           </>
         ) : null}
@@ -280,8 +264,11 @@ export default function MechanicRequestDetailScreen() {
           <DetailRow label="Keluhan" value={order.issue_description} />
           {order.symptoms ? <DetailRow label="Gejala" value={order.symptoms} /> : null}
           {!hasVehicle ? <DetailRow label="Kendaraan" value="Tidak dicantumkan" /> : null}
-          <DetailRow label="Lokasi" value={order.address || 'Lokasi GPS terdeteksi'} />
-          <DetailRow label="WhatsApp" value={order.contact_phone} />
+          <DetailRow label="Area & jarak" value={areaLabel} />
+          <DetailRow
+            label="Kontak & titik tepat"
+            value="Tersedia otomatis setelah client menyetujui pengajuanmu."
+          />
           {order.additional_notes ? (
             <DetailRow label="Catatan" value={order.additional_notes} />
           ) : null}

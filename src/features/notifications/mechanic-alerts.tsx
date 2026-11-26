@@ -9,11 +9,12 @@ import {
   useState,
   type ReactNode,
 } from 'react';
-import { createRealtimeChannel } from '@/lib/realtime';
+import { createRealtimeChannel, subscribeWithResync } from '@/lib/realtime';
 import { readSession } from '@/lib/auth-session';
 import { useForegroundEpoch } from '@/hooks/use-foreground';
 import { supabase } from '@/lib/supabase';
 import { prepareNotifications, presentLocalAlert } from './local';
+import { registerPushToken } from './push';
 import { getUnreadNotificationCount } from './service';
 
 interface MechanicAlertsValue {
@@ -108,6 +109,7 @@ export function MechanicAlertsProvider({ children }: { children: ReactNode }) {
       const user = session?.user;
       if (!active || !user) return;
 
+      void registerPushToken();
       void refresh();
 
       channel = createRealtimeChannel(`mechanic-notifications-${user.id}`)
@@ -122,7 +124,7 @@ export function MechanicAlertsProvider({ children }: { children: ReactNode }) {
           (payload) => {
             if (!active) return;
             const row = payload.new as RawNotificationRow;
-            setUnread((count) => count + 1);
+            void refresh();
             void presentLocalAlert({
               title: row.title ?? 'Notifikasi baru',
               body: row.body ?? null,
@@ -147,7 +149,21 @@ export function MechanicAlertsProvider({ children }: { children: ReactNode }) {
             if (active) void refresh();
           },
         )
-        .subscribe();
+        .on(
+          'postgres_changes',
+          {
+            event: 'DELETE',
+            schema: 'public',
+            table: 'notifications',
+            filter: `user_id=eq.${user.id}`,
+          },
+          () => {
+            if (active) void refresh();
+          },
+        );
+      subscribeWithResync(channel, () => {
+        if (active) void refresh();
+      });
     })();
 
     return () => {

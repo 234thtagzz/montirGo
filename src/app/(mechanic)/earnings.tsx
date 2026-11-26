@@ -1,6 +1,7 @@
 import { useCallback, useMemo, useState } from 'react';
 import { Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useFocusEffect, useRouter } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ScreenHeader } from '@/components/ui/screen-header';
 import { Segmented, type SegmentedOption } from '@/components/ui/segmented';
 import { Money } from '@/components/ui/money';
@@ -58,6 +59,7 @@ function startOf(period: Period): string {
 
 export default function MechanicEarningsScreen() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const [day, setDay] = useState<EarningsSummary>(ZERO);
   const [week, setWeek] = useState<EarningsSummary>(ZERO);
   const [month, setMonth] = useState<EarningsSummary>(ZERO);
@@ -99,6 +101,7 @@ export default function MechanicEarningsScreen() {
 
   const active = period === 'day' ? day : period === 'week' ? week : month;
   const available = wallet?.available_balance ?? 0;
+  const commissionDebt = wallet?.commission_debt ?? 0;
   const netRatio = useMemo(
     () => (active.gross > 0 ? Math.max(0, Math.min(1, active.net / active.gross)) : 0),
     [active.gross, active.net],
@@ -112,7 +115,10 @@ export default function MechanicEarningsScreen() {
         <LoadingState message="Memuat pendapatan..." />
       ) : (
         <ScrollView
-          contentContainerStyle={styles.content}
+          contentContainerStyle={[
+            styles.content,
+            { paddingBottom: Space.xxxl + insets.bottom },
+          ]}
           showsVerticalScrollIndicator={false}
           refreshControl={
             <RefreshControl
@@ -134,7 +140,9 @@ export default function MechanicEarningsScreen() {
                 <View style={styles.heroTop}>
                   <View style={styles.heroLabelRow}>
                     <View style={styles.liveDot} />
-                    <Text style={styles.heroLabel}>Saldo bisa ditarik</Text>
+                    <Text style={styles.heroLabel} numberOfLines={1}>
+                      Saldo bisa ditarik
+                    </Text>
                   </View>
                   <View style={styles.heroBadge}>
                     <Ionicons name="shield-checkmark" size={12} color={Brand.volt} />
@@ -200,6 +208,17 @@ export default function MechanicEarningsScreen() {
                 </View>
               </View>
 
+              {commissionDebt > 0 ? (
+                <View style={styles.debtCard}>
+                  <Ionicons name="alert-circle-outline" size={16} color={Brand.amber} />
+                  <Text style={styles.debtCardText}>
+                    Kamu memiliki tunggakan komisi order tunai sebesar{' '}
+                    {formatIDR(commissionDebt)}. Penarikan saldo dijeda sampai tunggakan lunas
+                    otomatis dari pendapatan online.
+                  </Text>
+                </View>
+              ) : null}
+
               <SectionHeader eyebrow="PERFORMA" title="Rincian pendapatan" />
               <Segmented options={PERIODS} value={period} onChange={setPeriod} />
 
@@ -216,7 +235,9 @@ export default function MechanicEarningsScreen() {
                   </View>
                   <View style={styles.jobsPill}>
                     <Text style={styles.jobsValue}>{active.totalJobs}</Text>
-                    <Text style={styles.jobsLabel}>job</Text>
+                    <Text style={styles.jobsLabel} numberOfLines={1}>
+                      job
+                    </Text>
                   </View>
                 </View>
 
@@ -299,8 +320,7 @@ export default function MechanicEarningsScreen() {
               ) : null}
 
               <Text style={styles.note}>
-                Dihitung dari tabel earnings, diisi otomatis saat pembayaran terverifikasi (PRD
-                §18).
+                Ringkasan pendapatan diperbarui otomatis setelah setiap pembayaran terverifikasi.
               </Text>
             </>
           )}
@@ -330,10 +350,10 @@ const styles = StyleSheet.create({
     padding: Space.xl,
     ...CardShadow,
   },
-  heroTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  heroLabelRow: { flexDirection: 'row', alignItems: 'center', gap: 7 },
+  heroTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: Space.sm },
+  heroLabelRow: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 7 },
   liveDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: Brand.volt },
-  heroLabel: { ...Type.label, color: Brand.inkText },
+  heroLabel: { flexShrink: 1, ...Type.label, color: Brand.inkText },
   heroBadge: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -348,6 +368,7 @@ const styles = StyleSheet.create({
   heroMeta: {
     flexDirection: 'row',
     alignItems: 'center',
+    gap: Space.sm,
     marginTop: Space.lg,
     paddingTop: Space.md,
     borderTopWidth: 1,
@@ -394,6 +415,7 @@ const styles = StyleSheet.create({
   panelLabel: { ...Type.meta, color: Brand.textSecondary, fontWeight: '600' },
   panelAmount: { marginTop: Space.xs },
   jobsPill: {
+    minWidth: 52,
     alignItems: 'center',
     backgroundColor: Brand.background,
     borderRadius: Radius.md,
@@ -401,7 +423,7 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
   },
   jobsValue: { ...Type.title, color: Brand.text, ...Tabular },
-  jobsLabel: { ...Type.micro, color: Brand.textMuted, fontSize: 9 },
+  jobsLabel: { ...Type.micro, color: Brand.textMuted, fontSize: 9, letterSpacing: 0.2, textAlign: 'center' },
   splitTrack: {
     flexDirection: 'row',
     height: 6,
@@ -441,6 +463,16 @@ const styles = StyleSheet.create({
     marginTop: Space.md,
   },
   cashNoteText: { flex: 1, ...Type.meta, color: Brand.amber, lineHeight: 17 },
+  debtCard: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: Space.sm,
+    backgroundColor: Brand.amberSoft,
+    borderRadius: Radius.md,
+    padding: Space.md,
+    marginTop: Space.md,
+  },
+  debtCardText: { flex: 1, ...Type.meta, color: Brand.amber, lineHeight: 17 },
   historyCard: {
     backgroundColor: Brand.surface,
     borderRadius: Radius.lg,

@@ -3,7 +3,13 @@
 // Secrets: supabase secrets set AI_PROVIDER_API_KEY=... AI_PROVIDER_MODEL=openai/gpt-oss-120b [AI_PROVIDER_BASE_URL=...]
 // Arsitektur PRD §11: React Native -> Edge Function -> AI Provider. Key tidak di mobile app.
 
-import { createClient, type SupabaseClient } from 'npm:@supabase/supabase-js@2';
+import { type SupabaseClient } from 'npm:@supabase/supabase-js@2';
+import {
+  enforceAiRateLimit,
+  resolveAiProvider,
+  sanitizeContextText,
+} from '../_shared/ai.ts';
+import { authenticate, cors, getServiceClient, isValidUuid, json } from '../_shared/http.ts';
 
 type AssistantMode = 'diagnose' | 'sparepart';
 type AssistantPersona = 'client' | 'mechanic';
@@ -31,6 +37,8 @@ Penggunamu adalah ${audience}.
 Tugas utama: membantu menaksir HARGA SPAREPART kendaraan dan estimasi biaya pasang.
 
 Aturan WAJIB:
+- SELALU sesuaikan komponen dan kisaran harga dengan jenis kendaraan yang dipilih pengguna (sepeda motor vs mobil). Jika kendaraan adalah sepeda motor (mis. Honda Vario, Beat, NMAX, Supra), JANGAN pernah menyebut komponen atau kisaran harga mobil — gunakan kisaran harga suku cadang dan jasa bengkel motor di Indonesia.
+- Patokan pasar bengkel Indonesia agar estimasi realistis: untuk SEPEDA MOTOR (matic/bebek/sport), aki kering 12V 3.5-6Ah umumnya Rp150.000-Rp380.000 (aftermarket Rp150.000-Rp250.000, OEM seperti GS Astra/Yuasa Rp230.000-Rp380.000) + jasa pasang Rp15.000-Rp50.000; oli mesin motor Rp45.000-Rp95.000; busi motor Rp20.000-Rp90.000; kampas rem motor Rp35.000-Rp120.000. Harga aki Rp500.000-Rp1.500.000 HANYA berlaku untuk MOBIL, bukan sepeda motor.
 - Jika merek, model, tahun, atau tipe mesin belum jelas, ajukan satu pertanyaan singkat. Bila pengguna tidak menjawab, beri rentang umum dan sebut asumsinya.
 - Sebut nama part dengan jelas dan beri RENTANG harga dalam Rupiah, bukan satu angka pasti.
 - Bedakan harga part aftermarket dan original/OEM bila relevan.
@@ -52,6 +60,8 @@ Penggunamu adalah ${audience}.
 Tugas utama: membantu memahami INDIKASI KERUSAKAN kendaraan sebelum pemeriksaan langsung.
 
 Aturan WAJIB:
+- SELALU sesuaikan komponen dan kisaran harga dengan jenis kendaraan yang dipilih pengguna (sepeda motor vs mobil). Jika kendaraan adalah sepeda motor (mis. Honda Vario, Beat, NMAX, Supra), JANGAN pernah menyebut komponen atau kisaran harga mobil — gunakan kisaran harga suku cadang dan jasa bengkel motor di Indonesia.
+- Patokan pasar bengkel Indonesia agar estimasi realistis: untuk SEPEDA MOTOR (matic/bebek/sport), aki kering 12V 3.5-6Ah umumnya Rp150.000-Rp380.000 (aftermarket Rp150.000-Rp250.000, OEM seperti GS Astra/Yuasa Rp230.000-Rp380.000) + jasa pasang Rp15.000-Rp50.000; oli mesin motor Rp45.000-Rp95.000; busi motor Rp20.000-Rp90.000; kampas rem motor Rp35.000-Rp120.000. Harga aki Rp500.000-Rp1.500.000 HANYA berlaku untuk MOBIL, bukan sepeda motor.
 - Gunakan bahasa kemungkinan: "kemungkinan", "indikasi", "perlu pemeriksaan".
 - JANGAN menyatakan diagnosis pasti tanpa pemeriksaan langsung.
 - Beri maksimal 4 kemungkinan penyebab, langkah pemeriksaan awal, perkiraan alat yang dibutuhkan, dan tingkat risiko (rendah/sedang/tinggi).
@@ -64,15 +74,6 @@ Aturan WAJIB:
 - Jawab ringkas dan fokus.
 - Akhiri dengan tepat satu kalimat: "Catatan: ini analisis awal, tetap lakukan pemeriksaan langsung."`;
 }
-
-const cors = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-  'Access-Control-Allow-Methods': 'POST, OPTIONS',
-  'Content-Type': 'application/json',
-};
-
-const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 interface ChatMessage {
   role: 'system' | 'user' | 'assistant';
@@ -94,24 +95,7 @@ Deno.serve(async (req: Request) => {
   if (req.method !== 'POST') return json({ error: 'Metode tidak didukung' }, 405);
 
   try {
-    const supabaseUrl = Deno.env.get('SUPABASE_URL');
-    const supabaseKey = Deno.env.get('SUPABASE_ANON_KEY');
-    if (!supabaseUrl || !supabaseKey) {
-      return json({ error: 'Konfigurasi Supabase belum lengkap di server' }, 500);
-    }
-
-    const authHeader = req.headers.get('Authorization') ?? '';
-    if (!authHeader) return json({ error: 'Unauthorized' }, 401);
-
-    const sb = createClient(supabaseUrl, supabaseKey, {
-      global: { headers: { Authorization: authHeader } },
-      auth: { persistSession: false, autoRefreshToken: false },
-    });
-    const {
-      data: { user },
-      error: authError,
-    } = await sb.auth.getUser();
-    if (authError || !user) return json({ error: 'Unauthorized' }, 401);
+    const { user } = await authenticate(req);
 
     const body = (await req.json().catch(() => null)) as AssistantBody | null;
     const history = sanitizeMessages(body?.messages);
@@ -119,24 +103,50 @@ Deno.serve(async (req: Request) => {
       return json({ error: 'messages wajib diisi' }, 400);
     }
 
+    const svc = getServiceClient();
+    const rate = await enforceAiRateLimit(svc, user.id, 'ai-assistant', 30, 150);
+    if (!rate.allowed) {
+      return new Response(
+        JSON.stringify({
+          error: 'Batas penggunaan asisten AI tercapai. Coba lagi beberapa saat lagi.',
+          retryAfterSeconds: rate.retryAfterSeconds ?? 60,
+        }),
+        {
+          status: 429,
+          headers: { ...cors, 'Retry-After': String(rate.retryAfterSeconds ?? 60) },
+        },
+      );
+    }
+
+    // Persona diambil dari role DB, bukan klaim body client.
+    const { data: profileRow } = await svc
+      .from('profiles')
+      .select('role')
+      .eq('id', user.id)
+      .maybeSingle<{ role?: string }>();
+    const persona: AssistantPersona = profileRow?.role === 'mechanic' ? 'mechanic' : 'client';
+
     const requestId = typeof body?.requestId === 'string' ? body.requestId.trim() : '';
-    const vehicle = typeof body?.vehicle === 'string' ? body.vehicle.trim().slice(0, 120) : '';
+    const vehicle = sanitizeContextText(body?.vehicle, 120);
     const mode: AssistantMode = body?.mode === 'sparepart' ? 'sparepart' : 'diagnose';
-    const persona: AssistantPersona = body?.persona === 'mechanic' ? 'mechanic' : 'client';
 
-    const apiKey = Deno.env.get('AI_PROVIDER_API_KEY')?.trim();
-    if (!apiKey) return json({ error: 'AI_PROVIDER_API_KEY belum di-set di server' }, 500);
-    const { baseUrl, model } = resolveProvider(apiKey);
+    let baseUrl: string;
+    let model: string;
+    let apiKey: string;
+    try {
+      ({ baseUrl, model, apiKey } = resolveAiProvider());
+    } catch {
+      return json({ error: 'AI_PROVIDER_API_KEY belum di-set di server' }, 500);
+    }
 
+    // Konteks kendaraan dimasukkan sebagai pesan user, bukan system prompt (anti prompt injection).
     const chatMessages: ChatMessage[] = [
       { role: 'system', content: buildSystemPrompt(mode, persona) },
       ...(vehicle
         ? [
             {
-              role: 'system' as const,
-              content:
-                `Konteks kendaraan yang dipilih pengguna: ${vehicle}. ` +
-                'Utamakan konteks ini bila relevan; bila pengguna menyebut kendaraan lain, ikuti pertanyaan pengguna.',
+              role: 'user' as const,
+              content: `[Konteks kendaraan dipilih: ${vehicle}]`,
             },
           ]
         : []),
@@ -152,7 +162,7 @@ Deno.serve(async (req: Request) => {
         temperature: mode === 'sparepart' ? 0.3 : 0.4,
         max_tokens: 1200,
       }),
-      signal: AbortSignal.timeout(30_000),
+      signal: AbortSignal.timeout(25_000),
     });
     if (!aiRes.ok) {
       const t = await aiRes.text();
@@ -166,16 +176,22 @@ Deno.serve(async (req: Request) => {
     const reply = aiJson.choices?.[0]?.message?.content?.trim() ?? '';
     if (!reply) return json({ error: 'Respons AI kosong' }, 502);
 
-    // Simpan sebagai ai_diagnoses hanya untuk mode diagnosa yang terkait order
-    // (validasi partisipan dulu). Tanya harga tidak dicatat sebagai diagnosis.
-    // INSERT hanya boleh via service_role (RLS), jadi pakai client terpisah.
-    if (mode === 'diagnose' && UUID_RE.test(requestId)) {
-      await saveTranscript({ supabaseUrl, sb, userId: user.id, requestId, reply, model });
-    }
+    const lastUserMessage = [...history].reverse().find((m) => m.role === 'user')?.content ?? '';
+    await saveChatMessages({
+      svc,
+      userId: user.id,
+      requestId: isValidUuid(requestId) ? requestId : null,
+      mode,
+      persona,
+      userContent: lastUserMessage,
+      reply,
+      model,
+    });
 
     return json({ reply });
   } catch (e) {
     const message = e instanceof Error ? e.message : 'unknown error';
+    if (message === 'UNAUTHORIZED') return json({ error: 'Unauthorized' }, 401);
     const timeout = /abort|timeout|timed out/i.test(message);
     console.error('ai-assistant failed:', message);
     return json(
@@ -185,38 +201,57 @@ Deno.serve(async (req: Request) => {
   }
 });
 
-async function saveTranscript(input: {
-  supabaseUrl: string;
-  sb: SupabaseClient;
+async function saveChatMessages(input: {
+  svc: SupabaseClient;
   userId: string;
-  requestId: string;
+  requestId: string | null;
+  mode: AssistantMode;
+  persona: AssistantPersona;
+  userContent: string;
   reply: string;
   model: string;
 }): Promise<void> {
   try {
-    const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
-    if (!serviceRoleKey) return;
+    let linkedRequestId: string | null = null;
+    if (input.requestId) {
+      const { data: sr } = await input.svc
+        .from('service_requests')
+        .select('id, client_id, mechanic_id')
+        .eq('id', input.requestId)
+        .maybeSingle<{ id: string; client_id: string; mechanic_id: string | null }>();
+      if (sr && (sr.client_id === input.userId || sr.mechanic_id === input.userId)) {
+        linkedRequestId = sr.id;
+      }
+    }
 
-    const { data: sr } = await input.sb
-      .from('service_requests')
-      .select('id, client_id, mechanic_id')
-      .eq('id', input.requestId)
-      .maybeSingle<{ id: string; client_id: string; mechanic_id: string | null }>();
+    const rows = [
+      ...(input.userContent
+        ? [
+            {
+              user_id: input.userId,
+              request_id: linkedRequestId,
+              mode: input.mode,
+              persona: input.persona,
+              role: 'user' as const,
+              content: input.userContent.slice(0, 4000),
+              model_used: input.model,
+            },
+          ]
+        : []),
+      {
+        user_id: input.userId,
+        request_id: linkedRequestId,
+        mode: input.mode,
+        persona: input.persona,
+        role: 'assistant' as const,
+        content: input.reply.slice(0, 6000),
+        model_used: input.model,
+      },
+    ];
 
-    if (!sr || (sr.client_id !== input.userId && sr.mechanic_id !== input.userId)) return;
-
-    const admin = createClient(input.supabaseUrl, serviceRoleKey, {
-      auth: { persistSession: false, autoRefreshToken: false },
-    });
-    await admin.from('ai_diagnoses').insert({
-      request_id: input.requestId,
-      possible_issues: [{ summary: input.reply.slice(0, 2000) }],
-      disclaimer: 'Hasil AI adalah indikasi awal dan memerlukan pemeriksaan langsung oleh montir.',
-      raw_response: { reply: input.reply, model: input.model },
-    });
+    await input.svc.from('ai_chat_messages').insert(rows);
   } catch (e) {
-    // Penyimpanan pelengkap — chat tetap berhasil walau gagal simpan.
-    console.error('ai-assistant gagal menyimpan transkrip:', e instanceof Error ? e.message : e);
+    console.error('ai-assistant gagal menyimpan chat:', e instanceof Error ? e.message : e);
   }
 }
 
@@ -238,26 +273,4 @@ function sanitizeMessages(value: unknown): ChatMessage[] {
     .filter((item: ChatMessage | null): item is ChatMessage => item !== null);
 }
 
-/**
- * Tentukan endpoint + model AI dari secret.
- * Key Groq (`gsk_`) otomatis diarahkan ke api.groq.com/openai/v1.
- */
-function resolveProvider(apiKey: string): { baseUrl: string; model: string } {
-  const configuredBase = Deno.env.get('AI_PROVIDER_BASE_URL')?.trim();
-  const isGroq = apiKey.startsWith('gsk_') || /groq\.com/i.test(configuredBase ?? '');
-  const baseUrl = configuredBase ||
-    (isGroq ? 'https://api.groq.com/openai/v1' : 'https://api.x.ai/v1');
-
-  const configuredModel = Deno.env.get('AI_PROVIDER_MODEL')?.trim();
-  const invalidForGroq = !configuredModel ||
-    configuredModel === 'groq-ai' ||
-    configuredModel === 'grok-4.7' ||
-    configuredModel === 'gpt-4o-mini';
-  const model = isGroq && invalidForGroq ? 'openai/gpt-oss-120b' : configuredModel || 'grok-4.7';
-
-  return { baseUrl: baseUrl.replace(/\/+$/, ''), model };
-}
-
-function json(body: unknown, status = 200): Response {
-  return new Response(JSON.stringify(body), { status, headers: cors });
-}
+// Helper CORS, JSON response, dan resolver provider berada di `_shared/http.ts` & `_shared/ai.ts`.

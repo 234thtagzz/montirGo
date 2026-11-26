@@ -38,8 +38,8 @@
           "color": "#0B74E5",
           "defaultChannel": "requests",
           "sounds": [
-            "./assets/sounds/safeyable-tung-tung-wyung-244250.mp3",
-            "./assets/sounds/safeyable-tung-tung-wyung-244250.aiff"
+            "./assets/sounds/montirgo_alert.mp3",
+            "./assets/sounds/montirgo_alert_ios.aiff"
           ]
         }
       ],
@@ -63,8 +63,9 @@
         }
       },
       "eas": {
-        "projectId": "70cd9664-d7a4-48be-9cf8-60b3a6432411"
+        "projectId": "76698576-5199-4764-89f3-0527de206387"
       }
-    }
+    },
+    "owner": "elfarizi"
   }
 }

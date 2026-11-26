@@ -77,6 +77,9 @@ Deno.serve(async (req: Request) => {
         'id, request_id, status, payment_session_id, external_payment_id, paid_at',
       )
       .eq('request_id', requestId)
+      .order('attempt_no', { ascending: false })
+      .order('created_at', { ascending: false })
+      .limit(1)
       .maybeSingle();
 
     if (paymentError) return json({ error: paymentError.message }, 400);
@@ -108,7 +111,7 @@ Deno.serve(async (req: Request) => {
       }
       return json(
         {
-          error: result.message || 'Gagal memeriksa status pembayaran ke Xendit.',
+          error: result.errorMessage || 'Gagal memeriksa status pembayaran ke Xendit.',
           code: result.errorCode,
         },
         502,

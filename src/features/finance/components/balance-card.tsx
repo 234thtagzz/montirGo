@@ -21,6 +21,7 @@ export function BalanceCard({
   const available = wallet?.available_balance ?? 0;
   const pending = wallet?.pending_balance ?? 0;
   const held = wallet?.held_balance ?? 0;
+  const debt = wallet?.commission_debt ?? 0;
 
   return (
     <View style={styles.card}>
@@ -60,6 +61,16 @@ export function BalanceCard({
           />
         </View>
       </View>
+
+      {debt > 0 ? (
+        <View style={styles.debtBanner}>
+          <Ionicons name="alert-circle-outline" size={15} color={Brand.amber} />
+          <Text style={styles.debtText}>
+            Tunggakan komisi tunai: <Money value={debt} size="sm" color={Brand.amber} />.
+            Penarikan saldo dijeda sampai tunggakan lunas.
+          </Text>
+        </View>
+      ) : null}
 
       <View style={styles.actions}>
         <Pressable
@@ -140,6 +151,16 @@ const styles = StyleSheet.create({
   metaItem: { flex: 1 },
   metaDivider: { width: 1, height: 26, backgroundColor: Brand.divider },
   metaLabel: { ...Type.meta, color: Brand.textMuted, marginBottom: 3 },
+  debtBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Space.xs,
+    marginTop: Space.md,
+    padding: Space.sm,
+    borderRadius: Radius.md,
+    backgroundColor: Brand.amberSoft,
+  },
+  debtText: { ...Type.meta, flex: 1, color: Brand.amber, fontSize: 11, lineHeight: 16 },
   actions: { flexDirection: 'row', gap: Space.sm, marginTop: Space.lg },
   actionPrimary: {
     flex: 1,

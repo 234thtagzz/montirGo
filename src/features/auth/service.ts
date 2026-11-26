@@ -4,9 +4,11 @@ import {
   getCurrentUserId,
   isAuthError,
   readSession,
+  SessionUnavailableError,
 } from '@/lib/auth-session';
 import { clearSignedUrlCaches } from '@/lib/signed-url-cache';
 import { supabase } from '@/lib/supabase';
+import { unregisterPushToken } from '@/features/notifications/push';
 import type { AuthUser, DbRole, ProfileRow, UserRole } from './types';
 
 export * from './types';
@@ -31,11 +33,11 @@ export function getAuthErrorMessage(error: unknown, fallback: string): string {
   if (/email not confirmed/i.test(raw)) return 'Email belum diverifikasi. Cek inbox lalu login kembali.';
   if (/password should be at least/i.test(raw)) return 'Kata sandi minimal 6 karakter.';
   if (/invalid email/i.test(raw)) return 'Format email tidak valid.';
-  if (/profile_identities_pkey/i.test(raw))
+  if (/profile_identities_pkey|IDENTITY_ALREADY_SET/i.test(raw))
     return 'Nomor identitas sudah tersimpan dan bersifat permanen.';
-  if (/profiles_identity_number_key|profile_identities_identity_number_key|duplicate key/i.test(raw))
+  if (/profiles_identity_number_key|profile_identities_identity_number_key|IDENTITY_NUMBER_ALREADY_USED|duplicate key/i.test(raw))
     return 'Nomor identitas (KTP) sudah terdaftar. Gunakan nomor lain atau login.';
-  if (/profiles_identity_number_format|profile_identities_identity_number_check/i.test(raw))
+  if (/profiles_identity_number_format|profile_identities_identity_number_check|INVALID_IDENTITY_NUMBER/i.test(raw))
     return 'Nomor identitas (KTP) harus 16 digit angka.';
   if (/nomor identitas.*(permanen|tidak dapat diubah)/i.test(raw))
     return 'Nomor identitas (KTP) bersifat permanen dan tidak dapat diubah.';
@@ -45,16 +47,16 @@ export function getAuthErrorMessage(error: unknown, fallback: string): string {
 }
 
 /**
- * Profil bisa gagal dibaca karena RLS/jaringan tanpa berarti sesi tidak valid.
- * Kembalikan null agar pemanggil dapat memakai metadata auth sebagai cadangan
- * alih-alih menganggap pengguna sudah logout.
+ * Baca profil + NIK dari tabel database (bukan metadata client).
+ * Kegagalan jaringan/RLS melempar `SessionUnavailableError` agar layar retry tampil
+ * alih-alih mempercayai role dari `user_metadata`.
  */
 async function fetchProfile(userId: string): Promise<ProfileRow | null> {
   const run = () =>
     Promise.all([
       supabase
         .from('profiles')
-        .select('role, full_name, phone_number, identity_number')
+        .select('role, full_name, phone_number')
         .eq('id', userId)
         .maybeSingle(),
       supabase
@@ -65,21 +67,19 @@ async function fetchProfile(userId: string): Promise<ProfileRow | null> {
     ]);
 
   let [profileResult, identityResult] = await run();
-  // Token bisa kedaluwarsa tepat saat query berjalan. Operasi baca aman
-  // diulang sekali setelah sesi di-refresh.
   if (profileResult.error && isAuthError(profileResult.error)) {
     const session = await ensureFreshSession({ force: true });
     if (session) [profileResult, identityResult] = await run();
   }
-  if (profileResult.error) return null;
+  if (profileResult.error) {
+    throw new SessionUnavailableError();
+  }
   const row = profileResult.data as ProfileRow | null;
   if (!row) return null;
   return {
     ...row,
     identity_number:
-      row.identity_number ||
-      (identityResult.data as { identity_number?: string | null } | null)?.identity_number ||
-      null,
+      (identityResult.data as { identity_number?: string | null } | null)?.identity_number ?? null,
   };
 }
 
@@ -90,18 +90,21 @@ type SessionUser = {
 };
 
 /**
- * Susun AuthUser dari baris `profiles`; bila baris belum ada / gagal dibaca,
- * pakai metadata yang ditulis saat sign-up supaya riwayat & pesanan tetap
- * dapat dimuat tanpa memaksa pengguna login ulang.
+ * Susun AuthUser dari baris `profiles` (role selalu dari database).
+ * Fallback metadata hanya digunakan sesaat setelah `signUp` bila trigger DB belum selesai.
  */
-function toAuthUser(sessionUser: SessionUser, profile: ProfileRow | null): AuthUser {
+function toAuthUser(
+  sessionUser: SessionUser,
+  profile: ProfileRow | null,
+  allowSignupMetadataFallback = false,
+): AuthUser {
   const meta = (sessionUser.user_metadata ?? {}) as {
     full_name?: unknown;
     role?: unknown;
     identity_number?: unknown;
   };
   const metaRole = meta.role === 'mechanic' ? 'mechanic' : 'client';
-  const role: DbRole = profile?.role ?? metaRole;
+  const role: DbRole = profile?.role ?? (allowSignupMetadataFallback ? metaRole : 'client');
   return {
     id: sessionUser.id,
     fullName:
@@ -112,7 +115,9 @@ function toAuthUser(sessionUser: SessionUser, profile: ProfileRow | null): AuthU
     phoneNumber: profile?.phone_number ?? null,
     identityNumber:
       profile?.identity_number ??
-      (typeof meta.identity_number === 'string' ? meta.identity_number : null),
+      (allowSignupMetadataFallback && typeof meta.identity_number === 'string'
+        ? meta.identity_number
+        : null),
     role: toAppRole(role),
   };
 }
@@ -125,7 +130,7 @@ export async function signIn(data: { email: string; password: string }): Promise
   if (error) throw error;
   if (!authData.user) throw new Error('Login gagal. Coba lagi.');
   const profile = await fetchProfile(authData.user.id);
-  if (!profile && !authData.user.user_metadata?.role) {
+  if (!profile) {
     throw new Error(
       'Profil tidak ditemukan di database. Pastikan migrasi SQL sudah dijalankan (trigger handle_new_user).',
     );
@@ -163,12 +168,12 @@ export async function signUp(data: {
   if (!authData.session || !authData.user) {
     return { user: null, needsConfirmation: true };
   }
-  const profile = await fetchProfile(authData.user.id);
+  const profile = await fetchProfile(authData.user.id).catch(() => null);
   await AsyncStorage.multiRemove(['montirgo_token', 'montirgo_user', 'montirgo_user_role']).catch(
     () => {},
   );
   clearSignedUrlCaches();
-  const user = toAuthUser(authData.user, profile);
+  const user = toAuthUser(authData.user, profile, true);
   return {
     user: {
       ...user,
@@ -183,31 +188,22 @@ export async function signUp(data: {
 
 /**
  * Simpan nomor identitas untuk akun yang belum memilikinya (akun lama).
- * Hanya bisa diisi sekali; nilai yang sudah tersimpan bersifat permanen.
+ * Hanya bisa diisi sekali melalui RPC atomik; nilai bersifat permanen.
  */
 export async function setMyIdentityNumber(identityNumber: string): Promise<void> {
   const normalized = identityNumber.replace(/\D/g, '');
   if (!/^\d{16}$/.test(normalized)) {
     throw new Error('Nomor identitas (KTP) harus 16 digit angka.');
   }
-  const userId = await getCurrentUserId();
-
-  // Simpan secara dual-sync ke profile_identities dan profiles
-  const [identitiesRes, profilesRes] = await Promise.all([
-    supabase
-      .from('profile_identities')
-      .insert({ profile_id: userId, identity_number: normalized }),
-    supabase
-      .from('profiles')
-      .update({ identity_number: normalized })
-      .eq('id', userId),
-  ]);
-  if (identitiesRes.error && profilesRes.error) {
-    throw identitiesRes.error || profilesRes.error;
-  }
+  await getCurrentUserId();
+  const { error } = await supabase.rpc('set_my_identity_number', {
+    p_identity_number: normalized,
+  });
+  if (error) throw error;
 }
 
 export async function signOut(): Promise<void> {
+  await unregisterPushToken();
   await supabase.auth.signOut();
   clearSignedUrlCaches();
   await AsyncStorage.multiRemove(['montirgo_token', 'montirgo_user', 'montirgo_user_role']).catch(
@@ -217,13 +213,12 @@ export async function signOut(): Promise<void> {
 
 // Dipakai root index/_layout untuk routing berbasis sesi + role dari database.
 export async function getSessionUser(): Promise<AuthUser | null> {
-  // `readSession` me-refresh token yang hampir habis dan membedakan sesi yang
-  // benar-benar berakhir dari gangguan jaringan sementara.
   const session = await readSession();
   if (!session?.user) return null;
-  // Profil mungkin belum terbaca (RLS/jaringan). Sesi tetap dianggap valid dan
-  // metadata auth dipakai sebagai cadangan agar layar tidak kosong.
   const profile = await fetchProfile(session.user.id);
+  if (!profile) {
+    throw new SessionUnavailableError();
+  }
   return toAuthUser(session.user, profile);
 }
 

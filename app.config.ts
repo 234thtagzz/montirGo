@@ -8,11 +8,23 @@ import type { ConfigContext, ExpoConfig } from 'expo/config';
  */
 const MAPS_API_KEY = process.env.EXPO_PUBLIC_MAPS_API_KEY?.trim();
 
-const LOCATION_PLUGIN: [string, { locationWhenInUsePermission: string }] = [
+const LOCATION_PLUGIN: [
+  string,
+  {
+    locationWhenInUsePermission: string;
+    locationAlwaysAndWhenInUsePermission: string;
+    isAndroidForegroundServiceEnabled: boolean;
+    isAndroidBackgroundLocationEnabled: boolean;
+  },
+] = [
   'expo-location',
   {
     locationWhenInUsePermission:
       'MontirGo memakai lokasi kamu untuk menampilkan rute dan posisi selama menuju lokasi client.',
+    locationAlwaysAndWhenInUsePermission:
+      'MontirGo memakai lokasi latar belakang saat montir sedang dalam perjalanan menuju client (termasuk saat membuka Google Maps).',
+    isAndroidForegroundServiceEnabled: true,
+    isAndroidBackgroundLocationEnabled: true,
   },
 ];
 
@@ -21,9 +33,10 @@ export default ({ config }: ConfigContext): ExpoConfig => {
   const hasPlugin = (name: string) =>
     plugins.some((plugin) => (Array.isArray(plugin) ? plugin[0] === name : plugin === name));
   if (!hasPlugin('expo-location')) plugins.push(LOCATION_PLUGIN);
-  // SDK 58 mewajibkan plugin expo-web-browser terdaftar (dipakai untuk
-  // membuka tautan eksternal di development/production build).
+  // SDK 58 mewajibkan plugin expo-web-browser, expo-secure-store, dan expo-image terdaftar.
   if (!hasPlugin('expo-web-browser')) plugins.push('expo-web-browser');
+  if (!hasPlugin('expo-secure-store')) plugins.push('expo-secure-store');
+  if (!hasPlugin('expo-image')) plugins.push('expo-image');
 
   return {
     ...config,

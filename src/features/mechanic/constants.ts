@@ -53,6 +53,12 @@ const ACTIVITY_META: Record<string, ActivityMeta> = {
     color: Brand.amber,
     background: Brand.amberSoft,
   },
+  invoice_reopened: {
+    label: 'Tagihan direvisi',
+    icon: 'create-outline',
+    color: Brand.amber,
+    background: Brand.amberSoft,
+  },
   payment_received: {
     label: 'Pembayaran diterima',
     icon: 'cash-outline',

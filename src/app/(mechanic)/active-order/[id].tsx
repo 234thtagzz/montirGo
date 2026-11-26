@@ -28,6 +28,7 @@ import {
   getMyOrder,
   listOrderInvoiceItems,
   listOrderStatusHistory,
+  reopenOrderInvoice,
   sendOrderInvoice,
   updateOrderStatus,
   type MechanicOrderDetail,
@@ -57,6 +58,7 @@ import { formatDateTime, formatIDR } from "@/utils/format";
 import { openWhatsApp } from "@/utils/whatsapp";
 import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import {
   Alert,
   Pressable,
@@ -73,6 +75,7 @@ import {
 export default function MechanicOrderDetailScreen() {
   const { id, focus } = useLocalSearchParams<{ id: string; focus?: string }>();
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const scrollRef = useRef<ScrollViewInstance>(null);
   const billingOffset = useRef<number | null>(null);
   const scrolledToBilling = useRef(false);
@@ -95,6 +98,9 @@ export default function MechanicOrderDetailScreen() {
   const [sendingInvoice, setSendingInvoice] = useState(false);
   const [confirmingCash, setConfirmingCash] = useState(false);
   const [invoiceConfirmOpen, setInvoiceConfirmOpen] = useState(false);
+  const [reopenConfirmOpen, setReopenConfirmOpen] = useState(false);
+  const [reopeningInvoice, setReopeningInvoice] = useState(false);
+  const [checkingPayment, setCheckingPayment] = useState(false);
   const [cashConfirmOpen, setCashConfirmOpen] = useState(false);
   const [cancelOpen, setCancelOpen] = useState(false);
   const [cancelling, setCancelling] = useState(false);
@@ -178,33 +184,65 @@ export default function MechanicOrderDetailScreen() {
   // Webhook Xendit bisa telat atau belum terdaftar. Selama status order masih
   // `payment`, montir juga memeriksa langsung ke Xendit agar status "lunas"
   // ikut berubah walau notifikasi webhook tidak sampai ke server.
+  // Polling cadangan dengan exponential backoff (15s -> 30s -> 60s) saat status payment.
   useEffect(() => {
-    if (!id || order?.status !== "payment") return;
+    if (!id || order?.status !== "payment" || order?.payment_method === "cash") return;
     let active = true;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    const delays = [15_000, 30_000, 60_000];
+    let attempt = 0;
 
     const tick = async () => {
       try {
         const result = await syncPaymentStatus(id);
-        if (!active || result.status !== "paid") return;
-        const [detail, events] = await Promise.all([
-          getMyOrder(id),
-          listOrderStatusHistory(id),
-        ]);
         if (!active) return;
-        setOrder(detail);
-        setHistory(events);
+        if (result.status === "paid") {
+          const [detail, events] = await Promise.all([
+            getMyOrder(id),
+            listOrderStatusHistory(id),
+          ]);
+          if (!active) return;
+          setOrder(detail);
+          setHistory(events);
+          return;
+        }
       } catch {
-        // Gagal sementara — interval berikutnya mencoba lagi.
+        // Gagal sementara — backoff mencoba lagi.
       }
+      if (!active) return;
+      const delay = delays[Math.min(attempt, delays.length - 1)];
+      attempt += 1;
+      timer = setTimeout(() => {
+        void tick();
+      }, delay);
     };
 
     void tick();
-    const timer = setInterval(tick, 8000);
     return () => {
       active = false;
-      clearInterval(timer);
+      if (timer) clearTimeout(timer);
     };
-  }, [id, order?.status]);
+  }, [id, order?.status, order?.payment_method]);
+
+  const manualCheckPayment = async () => {
+    if (!id || checkingPayment) return;
+    setCheckingPayment(true);
+    try {
+      const result = await syncPaymentStatus(id);
+      if (result.status === "paid") {
+        await load();
+      } else {
+        Alert.alert("Belum lunas", "Client belum menyelesaikan pembayaran online.");
+      }
+    } catch (e) {
+      Alert.alert(
+        "Gagal memeriksa status",
+        e instanceof Error ? e.message : "Coba lagi beberapa saat lagi.",
+      );
+    } finally {
+      setCheckingPayment(false);
+    }
+  };
 
   useEffect(() => {
     let cancelled = false;
@@ -236,7 +274,7 @@ export default function MechanicOrderDetailScreen() {
   );
 
   // Total tagihan selalu dihitung sistem dari seluruh baris rincian.
-  const invoiceTotal = invoiceItems.reduce((sum, item) => sum + item.harga, 0);
+  const invoiceTotal = invoiceItems.reduce((sum, item) => sum + item.amount, 0);
   const minPrice = settings?.minOrderPrice ?? 10000;
   const maxPrice = settings?.maxOrderPrice ?? 10000000;
   const feePercent = settings?.feePercent ?? 10;
@@ -256,9 +294,7 @@ export default function MechanicOrderDetailScreen() {
     invoiceTotal >= minPrice &&
     invoiceTotal <= maxPrice &&
     !totalError;
-  const canEditInvoice =
-    order != null &&
-    ["arrived", "diagnosing", "repairing", "completed"].includes(order.status);
+  const canEditInvoice = order != null && order.status === "arrived";
 
   const openInvoiceConfirm = () => {
     if (!order || !canSendInvoice) return;
@@ -267,7 +303,7 @@ export default function MechanicOrderDetailScreen() {
 
   const addItem = async () => {
     if (!order || addingItem) return;
-    const harga = Number(draftHarga.replace(/[^0-9]/g, "")) || 0;
+    const amount = Number(draftHarga.replace(/[^0-9]/g, "")) || 0;
     if (!draftKeterangan.trim()) {
       Alert.alert(
         "Keterangan kosong",
@@ -275,15 +311,15 @@ export default function MechanicOrderDetailScreen() {
       );
       return;
     }
-    if (harga <= 0) {
+    if (amount <= 0) {
       Alert.alert("Harga belum valid", "Isi harga baris lebih dari 0.");
       return;
     }
     setAddingItem(true);
     try {
       const item = await addOrderInvoiceItem(order.id, {
-        keterangan: draftKeterangan,
-        harga,
+        description: draftKeterangan,
+        amount,
       });
       setInvoiceItems((prev) => [...prev, item]);
       setDraftKeterangan("");
@@ -330,6 +366,23 @@ export default function MechanicOrderDetailScreen() {
       );
     } finally {
       setSendingInvoice(false);
+    }
+  };
+
+  const submitReopenInvoice = async () => {
+    if (!order || reopeningInvoice) return;
+    setReopeningInvoice(true);
+    try {
+      await reopenOrderInvoice(order.id);
+      setReopenConfirmOpen(false);
+      await load();
+    } catch (e) {
+      Alert.alert(
+        "Gagal membuka tagihan",
+        e instanceof Error ? e.message : "Coba lagi.",
+      );
+    } finally {
+      setReopeningInvoice(false);
     }
   };
 
@@ -405,13 +458,18 @@ export default function MechanicOrderDetailScreen() {
     if (!order || cancelling) return;
     setCancelling(true);
     try {
-      await cancelOrderAsMechanic(order.id, cancelReason ?? undefined);
+      const { returnedToPool } = await cancelOrderAsMechanic(
+        order.id,
+        cancelReason ?? undefined,
+      );
       setCancelOpen(false);
       setCancelReason(null);
       await load();
       Alert.alert(
         "Pesanan dibatalkan",
-        "Client sudah menerima pembaruan bahwa pesanan dibatalkan.",
+        returnedToPool
+          ? "Pesanan dibuka kembali agar client dapat ditangani montir lain."
+          : "Client sudah menerima pembaruan bahwa pesanan dibatalkan.",
       );
     } catch (e) {
       Alert.alert(
@@ -431,7 +489,7 @@ export default function MechanicOrderDetailScreen() {
       [
         { text: "Batal", style: "cancel" },
         {
-          text: "lanjutkan",
+          text: "Lanjutkan",
           onPress: async () => {
             setUpdating(true);
             try {
@@ -494,6 +552,22 @@ export default function MechanicOrderDetailScreen() {
       order.vehicle_photo_url,
   );
 
+  const heroTitle = getMechanicProgressLabel(order.status);
+  const heroSub =
+    order.status === "paid"
+      ? order.payment_method === "cash"
+        ? "Dibayar tunai oleh pelanggan"
+        : "Pembayaran online terverifikasi"
+      : order.status === "payment"
+        ? order.payment_method === "cash"
+          ? "Pelanggan memilih pembayaran tunai"
+          : "Menunggu pembayaran dari pelanggan"
+        : order.status === "cancelled"
+          ? null
+          : meta.label.toLowerCase() !== heroTitle.toLowerCase()
+            ? meta.label
+            : null;
+
   return (
     <View style={styles.screen}>
       <ScreenHeader
@@ -502,7 +576,10 @@ export default function MechanicOrderDetailScreen() {
       />
       <ScrollView
         ref={scrollRef}
-        contentContainerStyle={styles.content}
+        contentContainerStyle={[
+          styles.content,
+          { paddingBottom: Space.xxxl + insets.bottom },
+        ]}
         showsVerticalScrollIndicator={false}
         refreshControl={
           <RefreshControl
@@ -524,10 +601,8 @@ export default function MechanicOrderDetailScreen() {
             </View>
             <Text style={styles.heroTime}>{formatDateTime(order.created_at)}</Text>
           </View>
-          <Text style={styles.heroTitle}>
-            {getMechanicProgressLabel(order.status)}
-          </Text>
-          <Text style={styles.heroSub}>{meta.label}</Text>
+          <Text style={styles.heroTitle}>{heroTitle}</Text>
+          {heroSub ? <Text style={styles.heroSub}>{heroSub}</Text> : null}
 
           {meta.step > 0 ? (
             <View style={styles.progressWrap}>
@@ -727,8 +802,9 @@ export default function MechanicOrderDetailScreen() {
             />
             <Text style={styles.billingHint}>
               Client melihat setiap baris keterangan dan harga sebelum membayar.
-              Setelah terkirim, rincian tidak bisa diubah lagi. Pembayaran bisa
-              lewat QRIS / e-wallet Xendit atau tunai langsung ke kamu.
+              Jika ada perubahan sebelum dibayar, kamu masih bisa merevisi
+              tagihan. Pembayaran bisa lewat QRIS / e-wallet Xendit atau tunai
+              langsung ke kamu.
             </Text>
           </View>
         ) : invoiceItems.length > 0 ? (
@@ -770,8 +846,9 @@ export default function MechanicOrderDetailScreen() {
                 </Text>
                 {order.payment_method === "cash" ? (
                   <Text style={styles.pendingHint}>
-                    Uang tunai tidak masuk saldo dompet, tetapi tercatat di menu
-                    Pendapatan.
+                    Uang tunai langsung kamu terima (tidak masuk saldo dompet).
+                    Komisi platform {feePercent}% dipotong dari saldo dompet
+                    atau dicatat sebagai tunggakan komisi.
                   </Text>
                 ) : null}
               </View>
@@ -787,14 +864,24 @@ export default function MechanicOrderDetailScreen() {
               />
             ) : (
               <Button
-                label="Konfirmasi Pembayaran Tunai"
-                icon="cash-outline"
+                label="Cek Status Pembayaran"
+                icon="refresh-outline"
                 variant="secondary"
-                loading={confirmingCash}
-                onPress={openCashConfirm}
+                loading={checkingPayment}
+                disabled={reopeningInvoice}
+                onPress={manualCheckPayment}
                 style={styles.cashConfirm}
               />
             )}
+            <Button
+              label="Revisi Tagihan"
+              icon="create-outline"
+              variant="secondary"
+              loading={reopeningInvoice}
+              disabled={confirmingCash}
+              onPress={() => setReopenConfirmOpen(true)}
+              style={styles.cashConfirm}
+            />
           </>
         ) : order.status === "paid" ? (
           <View style={styles.doneCard}>
@@ -806,15 +893,14 @@ export default function MechanicOrderDetailScreen() {
             <Text style={styles.doneText}>
               {order.payment_method === "cash" ? (
                 <>
-                  Pembayaran tunai Rp
-                  {(order.price_amount ?? 0).toLocaleString("id-ID")} sudah
-                  dikonfirmasi. Pendapatan tunai tercatat di menu Pendapatan dan
-                  tidak masuk saldo dompet.
+                  Pembayaran tunai {formatIDR(order.price_amount ?? 0)} sudah
+                  dikonfirmasi. Pendapatan tercatat di menu Pendapatan dan
+                  komisi platform {feePercent}% telah diperhitungkan di
+                  dompetmu.
                 </>
               ) : (
                 <>
-                  Pembayaran Rp
-                  {(order.price_amount ?? 0).toLocaleString("id-ID")} sudah lunas.
+                  Pembayaran {formatIDR(order.price_amount ?? 0)} sudah lunas.
                   Pendapatan masuk ke saldo pending.
                 </>
               )}
@@ -915,7 +1001,11 @@ export default function MechanicOrderDetailScreen() {
             onPress={advance}
             style={styles.action}
           />
-        ) : canEditInvoice || tripStatus || pendingConfirmation ? null : (
+        ) : canEditInvoice ||
+          tripStatus ||
+          pendingConfirmation ||
+          order.status === "paid" ||
+          order.status === "payment" ? null : (
           <View style={styles.doneCard}>
             <Ionicons
               name="checkmark-done-outline"
@@ -923,9 +1013,7 @@ export default function MechanicOrderDetailScreen() {
               color={Brand.green}
             />
             <Text style={styles.doneText}>
-              {order.status === "paid"
-                ? "Order selesai dan pembayaran sudah lunas."
-                : "Tidak ada aksi lanjutan untuk status ini."}
+              Tidak ada aksi lanjutan untuk status ini.
             </Text>
           </View>
         )}
@@ -962,10 +1050,10 @@ export default function MechanicOrderDetailScreen() {
           {invoiceItems.map((item) => (
             <View key={item.id} style={styles.sheetRow}>
               <Text style={styles.sheetLabel} numberOfLines={1}>
-                {item.keterangan}
+                {item.description}
               </Text>
               <Text style={[styles.sheetValue, Tabular]}>
-                {formatIDR(item.harga)}
+                {formatIDR(item.amount)}
               </Text>
             </View>
           ))}
@@ -1006,11 +1094,25 @@ export default function MechanicOrderDetailScreen() {
         <View style={styles.sheetCash}>
           <Ionicons name="cash-outline" size={18} color={Brand.green} />
           <Text style={styles.sheetCashText}>
-            Pendapatan tunai tercatat di menu Pendapatan, tetapi tidak masuk saldo dompet
-            MontirGo.
+            Uang tunai tercatat di menu Pendapatan dan tidak masuk saldo dompet.
+            Komisi platform {feePercent}% akan dipotong dari saldo atau dicatat
+            sebagai tunggakan komisi.
           </Text>
         </View>
       </ConfirmSheet>
+
+      <ConfirmSheet
+        visible={reopenConfirmOpen}
+        title="Revisi tagihan?"
+        message="Link pembayaran Xendit yang belum dibayar akan dibatalkan dan tagihan dibuka kembali agar kamu bisa mengubah rinciannya."
+        confirmLabel="Ya, revisi tagihan"
+        icon="create-outline"
+        loading={reopeningInvoice}
+        onConfirm={submitReopenInvoice}
+        onCancel={() => {
+          if (!reopeningInvoice) setReopenConfirmOpen(false);
+        }}
+      />
 
       <ConfirmSheet
         visible={cancelOpen}
@@ -1083,7 +1185,7 @@ function DetailRow({
   );
 }
 
-/** Daftar baris tagihan (keterangan + harga) milik montir. */
+/** Daftar baris tagihan (deskripsi + nominal) milik montir. */
 function InvoiceItemList({
   items,
   editable,
@@ -1100,15 +1202,15 @@ function InvoiceItemList({
       {items.map((item) => (
         <View key={item.id} style={styles.invoiceRow}>
           <Text style={styles.invoiceRowLabel} numberOfLines={2}>
-            {item.keterangan}
+            {item.description}
           </Text>
           <Text style={[styles.invoiceRowAmount, Tabular]}>
-            {formatIDR(item.harga)}
+            {formatIDR(item.amount)}
           </Text>
           {editable && onRemove ? (
             <Pressable
               accessibilityRole="button"
-              accessibilityLabel={`Hapus ${item.keterangan}`}
+              accessibilityLabel={`Hapus ${item.description}`}
               hitSlop={6}
               disabled={removingItemId === item.id}
               onPress={() => onRemove(item)}
