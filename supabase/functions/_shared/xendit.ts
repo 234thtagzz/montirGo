@@ -1,87 +1,72 @@
-// Helper bersama untuk Edge Function pembayaran Xendit.
-// Secret key HANYA ada di server (Supabase secrets), tidak pernah di aplikasi mobile.
+import {
+  authenticate,
+  clamp,
+  cors,
+  getServiceClient,
+  getUserClient,
+  isValidUuid,
+  json,
+  optionalEnv,
+  requireEnv,
+} from './http.ts';
 
-import { createClient, type SupabaseClient } from 'npm:@supabase/supabase-js@2';
-
-export const cors = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-  'Access-Control-Allow-Methods': 'POST, OPTIONS',
-  'Content-Type': 'application/json',
+export {
+  authenticate,
+  clamp,
+  cors,
+  getServiceClient,
+  getUserClient,
+  isValidUuid,
+  json,
+  optionalEnv,
+  requireEnv,
 };
 
-export function json(data: unknown, status = 200): Response {
-  return new Response(JSON.stringify(data), { status, headers: cors });
-}
-
-export function requireEnv(name: string): string {
-  const value = Deno.env.get(name);
-  if (!value) throw new Error(`Konfigurasi server belum lengkap: ${name}`);
-  return value;
-}
-
-function optionalEnv(...names: string[]): string | undefined {
-  for (const name of names) {
-    const value = Deno.env.get(name);
-    if (value) return value;
+/** Parse fee percentage safely without treating empty/null strings as 0%. */
+export function parseFeePercent(raw: unknown, fallback = 10): number {
+  if (typeof raw === 'number' && Number.isFinite(raw)) {
+    return clamp(raw, 0, 50);
   }
-  return undefined;
+  if (typeof raw === 'string') {
+    const trimmed = raw.trim();
+    if (!trimmed) return clamp(fallback, 0, 50);
+    const parsed = Number(trimmed);
+    if (Number.isFinite(parsed)) return clamp(parsed, 0, 50);
+  }
+  return clamp(fallback, 0, 50);
 }
 
-export function getServiceClient(): SupabaseClient {
-  return createClient(requireEnv('SUPABASE_URL'), requireEnv('SUPABASE_SERVICE_ROLE_KEY'), {
-    auth: { persistSession: false, autoRefreshToken: false },
-  });
-}
-
-/** Client dengan JWT user — dipakai agar auth.uid() bekerja di RPC. */
-export function getUserClient(req: Request): SupabaseClient {
-  const authHeader = req.headers.get('Authorization') ?? '';
-  if (!authHeader) throw new Error('UNAUTHORIZED');
-  return createClient(requireEnv('SUPABASE_URL'), requireEnv('SUPABASE_ANON_KEY'), {
-    global: { headers: { Authorization: authHeader } },
-    auth: { persistSession: false, autoRefreshToken: false },
-  });
-}
-
-export async function authenticate(req: Request) {
-  const sb = getUserClient(req);
-  const {
-    data: { user },
-    error,
-  } = await sb.auth.getUser();
-  if (error || !user) throw new Error('UNAUTHORIZED');
-  return { sb, user };
-}
-
-/** Apakah token webhook sudah dikonfigurasi di server? */
+/** Cek apakah minimal satu env token webhook sudah dikonfigurasi. */
 export function webhookTokenConfigured(): boolean {
-  return Boolean(
-    optionalEnv(
-      'XENDIT_WEBHOOK_TOKEN',
-      'XENDIT_WEBHOOK_SECRET',
-      'PAYMENT_GATEWAY_WEBHOOK_SECRET',
-    ),
-  );
-}
-
-/** Verifikasi header x-callback-token dari Xendit. */
-export function verifyCallbackToken(req: Request): boolean {
-  const expected = optionalEnv(
+  const candidates = [
     'XENDIT_WEBHOOK_TOKEN',
     'XENDIT_WEBHOOK_SECRET',
-    'PAYMENT_GATEWAY_WEBHOOK_SECRET',
-  );
-  if (!expected) return false;
-  const received = req.headers.get('x-callback-token') ?? '';
-  return timingSafeEqual(received, expected);
+    'XENDIT_CALLBACK_TOKEN',
+  ];
+  return candidates.some((name) => Boolean(Deno.env.get(name)?.trim()));
 }
 
-function timingSafeEqual(a: string, b: string): boolean {
-  if (a.length !== b.length) return false;
+/** Verifikasi token callback webhook Xendit (`x-callback-token`). */
+export function verifyCallbackToken(req: Request): boolean {
+  const expected = [
+    Deno.env.get('XENDIT_WEBHOOK_TOKEN'),
+    Deno.env.get('XENDIT_WEBHOOK_SECRET'),
+    Deno.env.get('XENDIT_CALLBACK_TOKEN'),
+  ]
+    .map((v) => v?.trim())
+    .find(Boolean);
+
+  if (!expected) return false;
+
+  const incoming =
+    req.headers.get('x-callback-token')?.trim() ??
+    req.headers.get('x-webhook-token')?.trim() ??
+    '';
+
+  if (incoming.length !== expected.length) return false;
   let diff = 0;
-  for (let i = 0; i < a.length; i += 1) {
-    diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  for (let i = 0; i < incoming.length; i += 1) {
+    diff |= incoming.charCodeAt(i) ^ expected.charCodeAt(i);
   }
   return diff === 0;
 }
@@ -89,22 +74,26 @@ function timingSafeEqual(a: string, b: string): boolean {
 export interface XenditResult<T> {
   ok: boolean;
   status: number;
-  data: T | null;
-  errorCode: string | null;
-  message: string | null;
+  data?: T;
+  errorCode?: string;
+  errorMessage?: string;
+  /** True for network/timeout/5xx where upstream outcome is uncertain (never auto-refund). */
+  isAmbiguous?: boolean;
+  raw?: unknown;
 }
 
-interface XenditOptions {
+export interface XenditRequestOptions {
   method?: 'GET' | 'POST';
   body?: unknown;
   idempotencyKey?: string;
   apiVersion?: string;
+  timeoutMs?: number;
 }
 
-/** Panggil Xendit API dengan Basic auth (secret key sebagai username). */
+/** Panggil Xendit API dengan Basic auth (secret key sebagai username) + 15s timeout. */
 export async function xenditRequest<T>(
   path: string,
-  options: XenditOptions = {},
+  options: XenditRequestOptions = {},
 ): Promise<XenditResult<T>> {
   const secretKey = requireEnv('XENDIT_SECRET_KEY');
   const baseUrl = optionalEnv('XENDIT_BASE_URL') ?? 'https://api.xendit.co';
@@ -112,66 +101,80 @@ export async function xenditRequest<T>(
     Authorization: `Basic ${btoa(`${secretKey}:`)}`,
     'Content-Type': 'application/json',
   };
-  if (options.idempotencyKey) headers['idempotency-key'] = options.idempotencyKey;
   if (options.apiVersion) headers['api-version'] = options.apiVersion;
+  if (options.idempotencyKey) headers['idempotency-key'] = options.idempotencyKey;
 
-  const response = await fetch(`${baseUrl}${path}`, {
-    method: options.method ?? 'POST',
-    headers,
-    body: options.body === undefined ? undefined : JSON.stringify(options.body),
-  });
-
-  const raw = await response.text();
-  let parsed: unknown = null;
+  let res: Response;
   try {
-    parsed = raw ? JSON.parse(raw) : null;
-  } catch {
-    parsed = null;
-  }
-
-  if (!response.ok) {
-    const record = (parsed ?? {}) as Record<string, unknown>;
+    res = await fetch(`${baseUrl}${path}`, {
+      method: options.method ?? (options.body ? 'POST' : 'GET'),
+      headers,
+      body: options.body ? JSON.stringify(options.body) : undefined,
+      signal: AbortSignal.timeout(options.timeoutMs ?? 15_000),
+    });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Koneksi ke Xendit terputus';
     return {
       ok: false,
-      status: response.status,
-      data: null,
-      errorCode: typeof record.error_code === 'string' ? record.error_code : null,
-      message: typeof record.message === 'string' ? record.message : raw.slice(0, 300),
+      status: 0,
+      errorCode: 'XENDIT_NETWORK_TIMEOUT',
+      errorMessage: message,
+      isAmbiguous: true,
     };
   }
 
-  return {
-    ok: true,
-    status: response.status,
-    data: parsed as T,
-    errorCode: null,
-    message: null,
-  };
+  const text = await res.text();
+  let parsed: Record<string, unknown> = {};
+  try {
+    parsed = text ? (JSON.parse(text) as Record<string, unknown>) : {};
+  } catch {
+    parsed = { message: text };
+  }
+
+  if (!res.ok) {
+    const errorCode = typeof parsed.error_code === 'string' ? parsed.error_code : undefined;
+    const errorMessage =
+      typeof parsed.message === 'string'
+        ? parsed.message
+        : `Xendit mengembalikan status ${res.status}`;
+    return {
+      ok: false,
+      status: res.status,
+      errorCode,
+      errorMessage,
+      isAmbiguous: res.status >= 500 || res.status === 429,
+      raw: parsed,
+    };
+  }
+
+  return { ok: true, status: res.status, data: parsed as T };
 }
 
-/** Pesan error yang aman ditampilkan ke pengguna. */
+/** Terjemahkan kode error Xendit ke pesan ramah Bahasa Indonesia. */
 export function friendlyXenditError(
-  errorCode: string | null,
-  message: string | null,
-  fallback: string,
+  errorCode: string | undefined,
+  fallback?: string,
 ): string {
   switch (errorCode) {
     case 'INSUFFICIENT_BALANCE':
-      return 'Saldo platform di Xendit belum cukup. Coba lagi setelah settlement berikutnya.';
+      return 'Saldo platform di Xendit sedang tidak mencukupi. Coba lagi nanti.';
+    case 'CHANNEL_UNAVAILABLE':
+      return 'Bank/e-wallet tujuan sedang gangguan. Coba lagi nanti.';
     case 'INVALID_DESTINATION':
+      return 'Nomor rekening atau e-wallet tidak valid.';
     case 'RECIPIENT_ACCOUNT_NUMBER_ERROR':
-      return 'Nomor rekening tidak valid. Periksa kembali rekening tujuan.';
-    case 'ACCOUNT_NAME_MISMATCH':
-      return 'Nama pemilik rekening tidak cocok dengan data bank.';
-    case 'MINIMUM_TRANSFER_LIMIT_ERROR':
-    case 'AMOUNT_TOO_LOW':
-      return 'Nominal pencairan di bawah batas minimum Xendit.';
-    case 'MAXIMUM_TRANSFER_LIMIT_ERROR':
-    case 'AMOUNT_TOO_HIGH':
-      return 'Nominal pencairan melebihi batas maksimum Xendit.';
+      return 'Nomor rekening tujuan tidak ditemukan di bank terkait.';
+    case 'INVALID_AMOUNT':
+    case 'MINIMUM_AMOUNT':
+      return 'Nominal berada di luar batas yang didukung.';
+    case 'MAXIMUM_AMOUNT':
+      return 'Nominal melebihi batas transaksi.';
     case 'DUPLICATE_ERROR':
-      return 'Permintaan pencairan ini sudah pernah diproses.';
+    case 'IDEMPOTENCY_ERROR':
+      return 'Permintaan duplikat terdeteksi. Memeriksa status transaksi.';
+    case 'XENDIT_NETWORK_TIMEOUT':
+      return 'Koneksi ke gateway pembayaran lambat. Periksa status transaksi.';
     default:
-      return message || fallback;
+      return fallback ?? 'Gagal terhubung ke gateway pembayaran.';
   }
 }

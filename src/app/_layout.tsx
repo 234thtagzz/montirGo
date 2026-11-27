@@ -7,6 +7,8 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { AppLoadingScreen } from '@/components/app-loading-screen';
 import { startAppLifecycle } from '@/lib/app-lifecycle';
 import { supabase } from '@/lib/supabase';
+// Daftarkan background location task di module scope sebelum navigasi berjalan.
+import '@/features/mechanic/tracking/background-location';
 
 SplashScreen.preventAutoHideAsync();
 

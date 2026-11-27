@@ -109,17 +109,31 @@ export default function MechanicDashboardScreen() {
   useRefreshOnForeground(load);
 
   useEffect(() => {
-    // Realtime: order baru / perubahan status langsung refresh dashboard.
-    const ch = createRealtimeChannel('mechanic-dashboard')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'service_requests' }, load)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'mechanic_wallets' }, load)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'withdrawals' }, load);
+    if (!sessionUser?.id) return;
+    const uid = sessionUser.id;
+    // Realtime terfilter hanya untuk data milik montir ini.
+    const ch = createRealtimeChannel(`mechanic-dashboard-${uid}`)
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'service_requests', filter: `mechanic_id=eq.${uid}` },
+        load,
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'mechanic_wallets', filter: `mechanic_id=eq.${uid}` },
+        load,
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'withdrawals', filter: `mechanic_id=eq.${uid}` },
+        load,
+      );
     // Setelah koneksi sempat putus, ambil ulang data yang terlewat.
     subscribeWithResync(ch, () => void load());
     return () => {
       supabase.removeChannel(ch);
     };
-  }, [load]);
+  }, [sessionUser?.id, load]);
 
   const toggleOnline = async (value: boolean) => {
     setOnline(value);

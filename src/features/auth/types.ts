@@ -18,5 +18,5 @@ export interface ProfileRow {
   role: DbRole;
   full_name: string | null;
   phone_number: string | null;
-  identity_number: string | null;
+  identity_number?: string | null;
 }

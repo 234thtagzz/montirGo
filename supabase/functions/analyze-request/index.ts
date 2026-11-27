@@ -4,7 +4,12 @@
 // Arsitektur PRD §11: React Native -> Edge Function -> AI Provider.
 // Hasil disimpan server-side (service_role) agar tidak bisa dipalsukan dari app.
 
-import { createClient } from 'npm:@supabase/supabase-js@2';
+import {
+  enforceAiRateLimit,
+  resolveAiProvider,
+  sanitizeContextText,
+} from '../_shared/ai.ts';
+import { authenticate, cors, getServiceClient, isValidUuid, json } from '../_shared/http.ts';
 
 const DISCLAIMER = 'Hasil AI adalah indikasi awal dan memerlukan pemeriksaan langsung oleh montir.';
 
@@ -77,46 +82,16 @@ interface ChatMessage {
   content: string;
 }
 
-const cors = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-  'Access-Control-Allow-Methods': 'POST, OPTIONS',
-  'Content-Type': 'application/json',
-};
-
-const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
 Deno.serve(async (req: Request) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: cors });
   if (req.method !== 'POST') return json({ error: 'Metode tidak didukung' }, 405);
 
   try {
-    const supabaseUrl = Deno.env.get('SUPABASE_URL');
-    const supabaseAnonKey = Deno.env.get('SUPABASE_ANON_KEY');
-    const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
-    if (!supabaseUrl || !supabaseAnonKey) {
-      return json({ error: 'Konfigurasi Supabase belum lengkap di server' }, 500);
-    }
-    if (!serviceRoleKey) {
-      return json({ error: 'SUPABASE_SERVICE_ROLE_KEY tidak tersedia di server' }, 500);
-    }
-
-    const authHeader = req.headers.get('Authorization') ?? '';
-    if (!authHeader) return json({ error: 'Unauthorized' }, 401);
-
-    const sb = createClient(supabaseUrl, supabaseAnonKey, {
-      global: { headers: { Authorization: authHeader } },
-      auth: { persistSession: false, autoRefreshToken: false },
-    });
-    const {
-      data: { user },
-      error: authError,
-    } = await sb.auth.getUser();
-    if (authError || !user) return json({ error: 'Unauthorized' }, 401);
+    const { user, sb } = await authenticate(req);
 
     const body = (await req.json().catch(() => null)) as { requestId?: unknown } | null;
     const requestId = typeof body?.requestId === 'string' ? body.requestId.trim() : '';
-    if (!UUID_RE.test(requestId)) {
+    if (!isValidUuid(requestId)) {
       return json({ error: 'requestId tidak valid' }, 400);
     }
 
@@ -141,17 +116,37 @@ Deno.serve(async (req: Request) => {
       return json({ error: 'Request sudah selesai/dibatalkan' }, 409);
     }
 
-    const apiKey = Deno.env.get('AI_PROVIDER_API_KEY')?.trim();
-    if (!apiKey) return json({ error: 'AI_PROVIDER_API_KEY belum di-set di server' }, 500);
-    const { baseUrl, model } = resolveProvider(apiKey);
+    const svc = getServiceClient();
+    const rate = await enforceAiRateLimit(svc, user.id, 'analyze-request', 15, 60);
+    if (!rate.allowed) {
+      return new Response(
+        JSON.stringify({
+          error: 'Batas analisis AI tercapai. Coba lagi beberapa saat lagi.',
+          retryAfterSeconds: rate.retryAfterSeconds ?? 60,
+        }),
+        {
+          status: 429,
+          headers: { ...cors, 'Retry-After': String(rate.retryAfterSeconds ?? 60) },
+        },
+      );
+    }
+
+    let baseUrl: string;
+    let model: string;
+    let apiKey: string;
+    try {
+      ({ baseUrl, model, apiKey } = resolveAiProvider());
+    } catch {
+      return json({ error: 'AI_PROVIDER_API_KEY belum di-set di server' }, 500);
+    }
 
     const vehicle = firstVehicle(request.vehicles);
     const userPrompt = [
       'Data permintaan client:',
-      `- Keluhan: ${request.issue_description?.trim() || 'tidak dicantumkan'}`,
-      `- Gejala: ${request.symptoms?.trim() || 'tidak dicantumkan'}`,
-      `- Catatan: ${request.additional_notes?.trim() || 'tidak dicantumkan'}`,
-      `- Kendaraan: ${formatVehicle(vehicle) || 'tidak dicantumkan'}`,
+      `- Keluhan: ${sanitizeContextText(request.issue_description, 500) || 'tidak dicantumkan'}`,
+      `- Gejala: ${sanitizeContextText(request.symptoms, 500) || 'tidak dicantumkan'}`,
+      `- Catatan: ${sanitizeContextText(request.additional_notes, 400) || 'tidak dicantumkan'}`,
+      `- Kendaraan: ${sanitizeContextText(formatVehicle(vehicle), 160) || 'tidak dicantumkan'}`,
       '',
       'Berikan analisis awal sesuai format JSON yang diminta.',
     ].join('\n');
@@ -159,13 +154,7 @@ Deno.serve(async (req: Request) => {
     const reply = await callProvider({ baseUrl, apiKey, model, userPrompt });
     const analysis = normalize(parseJson(reply), reply);
 
-    // Tulis lewat service_role: policy ai_diagnoses hanya mengizinkan SELECT
-    // untuk partisipan, INSERT hanya service_role (anti pemalsuan).
-    const admin = createClient(supabaseUrl, serviceRoleKey, {
-      auth: { persistSession: false, autoRefreshToken: false },
-    });
-
-    const { data: inserted, error: insertError } = await admin
+    const { data: inserted, error: insertError } = await svc
       .from('ai_diagnoses')
       .insert({
         request_id: requestId,
@@ -185,9 +174,8 @@ Deno.serve(async (req: Request) => {
       return json({ error: `Gagal menyimpan analisis: ${insertError.message}` }, 500);
     }
 
-    // Ringkasan singkat untuk daftar order (pelengkap, jangan gagalkan respons).
     const summary = buildSummary(analysis);
-    await admin.from('service_requests').update({ ai_summary: summary }).eq('id', requestId);
+    await svc.from('service_requests').update({ ai_summary: summary }).eq('id', requestId);
 
     return json({
       analysis: {
@@ -198,6 +186,7 @@ Deno.serve(async (req: Request) => {
     });
   } catch (e) {
     const message = e instanceof Error ? e.message : 'unknown error';
+    if (message === 'UNAUTHORIZED') return json({ error: 'Unauthorized' }, 401);
     const timeout = /abort|timeout|timed out/i.test(message);
     console.error('analyze-request failed:', message);
     return json(
@@ -206,29 +195,6 @@ Deno.serve(async (req: Request) => {
     );
   }
 });
-
-/**
- * Tentukan endpoint + model AI dari secret.
- *
- * Mendukung provider OpenAI-compatible (Groq, xAI, dll). Bila
- * AI_PROVIDER_BASE_URL tidak diisi, deteksi dari prefix key: key Groq (`gsk_`)
- * otomatis memakai api.groq.com, bukan api.x.ai.
- */
-function resolveProvider(apiKey: string): { baseUrl: string; model: string } {
-  const configuredBase = Deno.env.get('AI_PROVIDER_BASE_URL')?.trim();
-  const isGroq = apiKey.startsWith('gsk_') || /groq\.com/i.test(configuredBase ?? '');
-  const baseUrl = configuredBase ||
-    (isGroq ? 'https://api.groq.com/openai/v1' : 'https://api.x.ai/v1');
-
-  const configuredModel = Deno.env.get('AI_PROVIDER_MODEL')?.trim();
-  const invalidForGroq = !configuredModel ||
-    configuredModel === 'groq-ai' ||
-    configuredModel === 'grok-4.7' ||
-    configuredModel === 'gpt-4o-mini';
-  const model = isGroq && invalidForGroq ? 'openai/gpt-oss-120b' : configuredModel || 'grok-4.7';
-
-  return { baseUrl: baseUrl.replace(/\/+$/, ''), model };
-}
 
 async function callProvider(input: {
   baseUrl: string;
@@ -255,7 +221,7 @@ async function callProvider(input: {
         max_tokens: 1200,
         ...(jsonMode ? { response_format: { type: 'json_object' } } : {}),
       }),
-      signal: AbortSignal.timeout(30_000),
+      signal: AbortSignal.timeout(25_000),
     });
 
   let res = await request(true);
@@ -393,8 +359,4 @@ function formatVehicle(vehicle: Vehicle | null): string {
     .filter((part) => part != null && String(part).trim() !== '')
     .map((part) => String(part).trim().slice(0, 40))
     .join(' ');
-}
-
-function json(body: unknown, status = 200): Response {
-  return new Response(JSON.stringify(body), { status, headers: cors });
 }

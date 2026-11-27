@@ -3,7 +3,14 @@
 // Deploy: supabase functions deploy xendit-create-payment
 // Secrets: XENDIT_SECRET_KEY, PLATFORM_FEE_PERCENT (opsional, fallback tabel platform_settings)
 
-import { cors, getServiceClient, json, xenditRequest, authenticate } from '../_shared/xendit.ts';
+import {
+  authenticate,
+  cors,
+  getServiceClient,
+  json,
+  parseFeePercent,
+  xenditRequest,
+} from '../_shared/xendit.ts';
 
 interface Body {
   requestId?: unknown;
@@ -60,44 +67,104 @@ Deno.serve(async (req: Request) => {
       .eq('key', 'fee_percent')
       .maybeSingle();
 
-    const envFee = Number(Deno.env.get('PLATFORM_FEE_PERCENT') ?? '');
-    const feeFromDb = Number(feeSetting?.value ?? '');
-    const feePercent = clamp(
-      Number.isFinite(envFee) && envFee > 0 ? envFee : Number.isFinite(feeFromDb) ? feeFromDb : 10,
-      0,
-      50,
-    );
+    const envFeeRaw = Deno.env.get('PLATFORM_FEE_PERCENT');
+    const feePercent = parseFeePercent(envFeeRaw?.trim() ? envFeeRaw : feeSetting?.value, 10);
     const platformFee = Math.round((amount * feePercent) / 100);
     const netAmount = amount - platformFee;
 
-    const { data: existing } = await svc
+    const { data: paidRow } = await svc
       .from('payments')
-      .select('id, status, payment_url, expires_at, payment_session_id')
+      .select('id')
       .eq('request_id', requestId)
+      .eq('status', 'paid')
       .maybeSingle();
 
-    if (existing?.status === 'paid') {
+    if (paidRow) {
       return json({ alreadyPaid: true, message: 'Order sudah lunas.' });
     }
 
+    const { data: existingPending } = await svc
+      .from('payments')
+      .select('id, amount, status, payment_url, expires_at, payment_session_id')
+      .eq('request_id', requestId)
+      .eq('status', 'pending')
+      .maybeSingle();
+
     if (
-      existing?.status === 'pending' &&
-      existing.payment_url &&
-      existing.expires_at &&
-      new Date(existing.expires_at).getTime() > Date.now() + 60_000
+      existingPending &&
+      Number(existingPending.amount) === amount &&
+      existingPending.payment_url &&
+      existingPending.expires_at &&
+      new Date(existingPending.expires_at).getTime() > Date.now() + 60_000
     ) {
       return json({
-        paymentUrl: existing.payment_url,
-        sessionId: existing.payment_session_id,
-        expiresAt: existing.expires_at,
+        paymentUrl: existingPending.payment_url,
+        sessionId: existingPending.payment_session_id,
+        expiresAt: existingPending.expires_at,
         amount,
         reused: true,
       });
     }
 
+    // Jika pending sebelumnya memiliki nominal berbeda (revisi invoice) atau hampir kedaluwarsa, tutup dulu.
+    if (existingPending) {
+      await svc
+        .from('payments')
+        .update({ status: 'expired', updated_at: new Date().toISOString() })
+        .eq('id', existingPending.id)
+        .eq('status', 'pending');
+    }
+
+    const { data: lastAttempt } = await svc
+      .from('payments')
+      .select('attempt_no')
+      .eq('request_id', requestId)
+      .order('attempt_no', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    const attemptNo = Number(lastAttempt?.attempt_no ?? 0) + 1;
+    const paymentId = crypto.randomUUID();
     const expiresAt = new Date(Date.now() + 30 * 60 * 1000).toISOString();
+
+    const { error: reserveError } = await svc.from('payments').insert({
+      id: paymentId,
+      request_id: requestId,
+      attempt_no: attemptNo,
+      amount,
+      platform_fee: platformFee,
+      net_amount: netAmount,
+      fee_percent: feePercent,
+      currency: requestRow.currency ?? 'IDR',
+      method: 'other',
+      status: 'pending',
+      expires_at: expiresAt,
+    });
+
+    if (reserveError) {
+      if (reserveError.code === '23505') {
+        const { data: raced } = await svc
+          .from('payments')
+          .select('amount, payment_url, payment_session_id, expires_at')
+          .eq('request_id', requestId)
+          .eq('status', 'pending')
+          .maybeSingle();
+        if (raced?.payment_url) {
+          return json({
+            paymentUrl: raced.payment_url,
+            sessionId: raced.payment_session_id,
+            expiresAt: raced.expires_at,
+            amount: raced.amount,
+            reused: true,
+          });
+        }
+        return json({ error: 'Sesi pembayaran lain sedang dibuat. Coba lagi sebentar.' }, 409);
+      }
+      return json({ error: reserveError.message }, 500);
+    }
+
     const payload: Record<string, unknown> = {
-      reference_id: requestId,
+      reference_id: paymentId,
       session_type: 'PAY',
       mode: 'PAYMENT_LINK',
       amount,
@@ -109,24 +176,36 @@ Deno.serve(async (req: Request) => {
       description: `MontirGo order #${requestId.slice(0, 8).toUpperCase()}`,
       metadata: {
         request_id: requestId,
+        payment_id: paymentId,
+        attempt_no: attemptNo,
         mechanic_id: requestRow.mechanic_id,
         client_id: user.id,
       },
     };
 
-    // Xendit mewajibkan return URL HTTPS. Bila belum ada domain, biarkan kosong
-    // dan pengguna kembali manual dari halaman checkout.
     const returnUrl = Deno.env.get('APP_PAYMENT_RETURN_URL');
     if (returnUrl?.startsWith('https://')) {
       payload.success_return_url = returnUrl;
       payload.cancel_return_url = returnUrl;
     }
 
-    const result = await xenditRequest<XenditSession>('/sessions', { body: payload });
+    const result = await xenditRequest<XenditSession>('/sessions', {
+      body: payload,
+      idempotencyKey: paymentId,
+    });
     if (!result.ok || !result.data) {
+      await svc
+        .from('payments')
+        .update({
+          status: result.isAmbiguous ? 'expired' : 'failed',
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', paymentId)
+        .eq('status', 'pending');
+
       return json(
         {
-          error: result.message || 'Gagal membuat pembayaran Xendit.',
+          error: result.errorMessage || 'Gagal membuat pembayaran Xendit.',
           code: result.errorCode,
         },
         502,
@@ -136,31 +215,26 @@ Deno.serve(async (req: Request) => {
     const paymentUrl = result.data.payment_link_url;
     const sessionId = result.data.payment_session_id;
     if (!paymentUrl || !sessionId) {
+      await svc
+        .from('payments')
+        .update({ status: 'failed', updated_at: new Date().toISOString() })
+        .eq('id', paymentId)
+        .eq('status', 'pending');
       return json({ error: 'Xendit tidak mengembalikan link pembayaran.' }, 502);
     }
 
-    const { error: upsertError } = await svc.from('payments').upsert(
-      {
-        request_id: requestId,
-        amount,
-        platform_fee: platformFee,
-        net_amount: netAmount,
-        fee_percent: feePercent,
-        currency: requestRow.currency ?? 'IDR',
-        method: 'other',
-        status: 'pending',
+    const { error: updateError } = await svc
+      .from('payments')
+      .update({
         gateway_reference: sessionId,
         payment_session_id: sessionId,
         payment_url: paymentUrl,
-        qr_payload: null,
         expires_at: result.data.expires_at ?? expiresAt,
-        paid_at: null,
         updated_at: new Date().toISOString(),
-      },
-      { onConflict: 'request_id' },
-    );
+      })
+      .eq('id', paymentId);
 
-    if (upsertError) return json({ error: upsertError.message }, 500);
+    if (updateError) return json({ error: updateError.message }, 500);
 
     return json({
       paymentUrl,

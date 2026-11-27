@@ -40,3 +40,34 @@ export function decodePolyline(encoded: string): LatLng[] {
 
   return points;
 }
+
+/** Encoder polyline Google Directions untuk menyimpan snapshot rute secara ringkas. */
+export function encodePolyline(points: LatLng[]): string {
+  if (!points.length) return '';
+
+  const encodeValue = (value: number): string => {
+    let v = value < 0 ? ~(value << 1) : value << 1;
+    let out = '';
+    while (v >= 0x20) {
+      out += String.fromCharCode((0x20 | (v & 0x1f)) + 63);
+      v >>= 5;
+    }
+    out += String.fromCharCode(v + 63);
+    return out;
+  };
+
+  let prevLat = 0;
+  let prevLng = 0;
+  let encoded = '';
+
+  for (const pt of points) {
+    const lat = Math.round(pt.latitude * 1e5);
+    const lng = Math.round(pt.longitude * 1e5);
+    encoded += encodeValue(lat - prevLat);
+    encoded += encodeValue(lng - prevLng);
+    prevLat = lat;
+    prevLng = lng;
+  }
+
+  return encoded;
+}

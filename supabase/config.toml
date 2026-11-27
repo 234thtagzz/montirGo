@@ -3,6 +3,13 @@
 
 project_id = "montirgo"
 
+[db]
+major_version = 15
+
+[db.seed]
+enabled = true
+sql_paths = ["./seed.sql"]
+
 [functions.analyze-request]
 verify_jwt = true
 
@@ -18,9 +25,18 @@ verify_jwt = true
 [functions.xendit-request-withdrawal]
 verify_jwt = true
 
-# Webhook Xendit tidak mengirim JWT Supabase; keamanan dijaga x-callback-token.
+[functions.xendit-sync-withdrawal]
+verify_jwt = true
+
+[functions.confirm-cash-payment]
+verify_jwt = true
+
+# Webhook Xendit & DB Webhook tidak mengirim JWT Supabase; keamanan dijaga header token/secret.
 [functions.xendit-webhook]
 verify_jwt = false
 
 [functions.xendit-payout-webhook]
+verify_jwt = false
+
+[functions.send-push-notification]
 verify_jwt = false

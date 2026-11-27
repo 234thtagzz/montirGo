@@ -16,8 +16,8 @@ export const ORDERS_CHANNEL_ID = 'orders';
 // sedangkan Android mengabaikan ekstensi saat mencari resource `res/raw`.
 const ALERT_SOUND =
   Platform.OS === 'ios'
-    ? 'safeyable-tung-tung-wyung-244250.aiff'
-    : 'safeyable-tung-tung-wyung-244250.mp3';
+    ? 'montirgo_alert_ios.aiff'
+    : 'montirgo_alert.mp3';
 
 /** Menentukan layar yang dibuka saat notifikasi lokal diketuk. */
 export type LocalAlertAudience = 'client' | 'mechanic';

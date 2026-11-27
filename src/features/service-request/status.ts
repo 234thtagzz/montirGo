@@ -3,14 +3,10 @@ import type { IconName } from '@/components/ui/icon';
 
 export type OrderStatus =
   | 'requested'
-  | 'matching'
   | 'mechanic_assigned'
   | 'mechanic_accepted'
   | 'on_the_way'
   | 'arrived'
-  | 'diagnosing'
-  | 'repairing'
-  | 'completed'
   | 'payment'
   | 'paid'
   | 'cancelled';
@@ -31,14 +27,6 @@ export const TOTAL_STEPS = 6;
 const META: Record<OrderStatus, StatusMeta> = {
   requested: {
     label: 'Mencari montir',
-    shortLabel: 'Mencari montir',
-    color: Brand.amber,
-    background: Brand.amberSoft,
-    icon: 'search-outline',
-    step: 1,
-  },
-  matching: {
-    label: 'Mencocokkan montir terdekat',
     shortLabel: 'Mencari montir',
     color: Brand.amber,
     background: Brand.amberSoft,
@@ -77,30 +65,6 @@ const META: Record<OrderStatus, StatusMeta> = {
     icon: 'location-outline',
     step: 4,
   },
-  diagnosing: {
-    label: 'Montir sedang mendiagnosis',
-    shortLabel: 'Diagnosis',
-    color: Brand.primary,
-    background: Brand.blueSoft,
-    icon: 'medkit-outline',
-    step: 4,
-  },
-  repairing: {
-    label: 'Kendaraan sedang diperbaiki',
-    shortLabel: 'Diperbaiki',
-    color: Brand.primary,
-    background: Brand.blueSoft,
-    icon: 'construct-outline',
-    step: 4,
-  },
-  completed: {
-    label: 'Pekerjaan selesai',
-    shortLabel: 'Selesai',
-    color: Brand.green,
-    background: Brand.greenSoft,
-    icon: 'checkmark-done-outline',
-    step: 5,
-  },
   payment: {
     label: 'Menunggu pembayaran',
     shortLabel: 'Pembayaran',
@@ -135,11 +99,17 @@ export function isActiveStatus(status: string): boolean {
   return status !== 'paid' && status !== 'cancelled';
 }
 
+/** Client boleh membatalkan pesanan hingga sebelum montir tiba di lokasi (`arrived`). */
 export function isCancellable(status: string): boolean {
-  return status === 'requested' || status === 'matching';
+  return (
+    status === 'requested' ||
+    status === 'mechanic_assigned' ||
+    status === 'mechanic_accepted' ||
+    status === 'on_the_way'
+  );
 }
 
-/** Label progres singkat untuk kartu pesanan aktif (ala Gojek). */
+/** Label progres singkat untuk kartu pesanan aktif. */
 export function getProgressLabel(status: string): string {
   const step = getStatusMeta(status).step;
   if (step === 0) return 'Pesanan dibatalkan';

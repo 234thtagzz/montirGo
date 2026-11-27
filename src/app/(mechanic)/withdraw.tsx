@@ -12,6 +12,7 @@ import {
   View,
 } from 'react-native';
 import { useFocusEffect, useRouter } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ScreenHeader } from '@/components/ui/screen-header';
 import { Button } from '@/components/ui/button';
 import { ConfirmSheet } from '@/components/ui/confirm-sheet';
@@ -39,6 +40,7 @@ import {
   listPayoutAccounts,
   listWithdrawals,
   requestWithdrawal,
+  syncWithdrawalStatus,
   type FinanceSettings,
   type MechanicWallet,
   type PayoutAccount,
@@ -52,12 +54,14 @@ const DEFAULT_SETTINGS: FinanceSettings = {
   minWithdrawal: 50000,
   minOrderPrice: 10000,
   maxOrderPrice: 10000000,
+  maxCashCommissionDebt: 100000,
 };
 
 const QUICK_RATIOS = [0.25, 0.5, 0.75, 1];
 
 export default function WithdrawScreen() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
 
   const [wallet, setWallet] = useState<MechanicWallet | null>(null);
   const [accounts, setAccounts] = useState<PayoutAccount[]>([]);
@@ -104,6 +108,8 @@ export default function WithdrawScreen() {
   );
 
   const available = wallet?.available_balance ?? 0;
+  const commissionDebt = wallet?.commission_debt ?? 0;
+  const [syncingWithdrawalId, setSyncingWithdrawalId] = useState<string | null>(null);
   const amount = useMemo(() => Number(amountText.replace(/[^0-9]/g, '')) || 0, [amountText]);
   const selectedAccount = accounts.find((item) => item.id === selectedAccountId) ?? null;
   const hasActive = withdrawals.some(
@@ -132,9 +138,25 @@ export default function WithdrawScreen() {
   const canSubmit =
     !submitting &&
     !hasActive &&
+    commissionDebt <= 0 &&
     amount > 0 &&
     !validation &&
     Boolean(selectedAccount);
+
+  const handleSyncWithdrawal = async (withdrawalId: string) => {
+    setSyncingWithdrawalId(withdrawalId);
+    try {
+      await syncWithdrawalStatus(withdrawalId);
+      await load();
+    } catch (e) {
+      Alert.alert(
+        'Gagal sinkronisasi',
+        e instanceof Error ? e.message : 'Coba lagi beberapa saat lagi.',
+      );
+    } finally {
+      setSyncingWithdrawalId(null);
+    }
+  };
 
   const submit = async () => {
     if (!canSubmit || !selectedAccount) return;
@@ -183,7 +205,10 @@ export default function WithdrawScreen() {
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       >
         <ScrollView
-          contentContainerStyle={styles.content}
+          contentContainerStyle={[
+            styles.content,
+            { paddingBottom: Space.xxxl + insets.bottom },
+          ]}
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
           refreshControl={
@@ -225,7 +250,9 @@ export default function WithdrawScreen() {
             <View style={styles.heroTop}>
               <View style={styles.heroLabelRow}>
                 <View style={styles.liveDot} />
-                <Text style={styles.heroLabel}>Saldo bisa ditarik</Text>
+                <Text style={styles.heroLabel} numberOfLines={1}>
+                  Saldo bisa ditarik
+                </Text>
               </View>
               <View style={styles.heroBadge}>
                 <Ionicons name="shield-checkmark" size={12} color={Brand.volt} />
@@ -251,6 +278,16 @@ export default function WithdrawScreen() {
               </View>
             </View>
           </View>
+
+          {commissionDebt > 0 ? (
+            <View style={styles.debtCard}>
+              <Ionicons name="alert-circle-outline" size={16} color={Brand.amber} />
+              <Text style={styles.debtCardText}>
+                Kamu memiliki tunggakan komisi order tunai sebesar {formatIDR(commissionDebt)}.
+                Penarikan saldo dijeda sampai tunggakan lunas otomatis dari pendapatan online.
+              </Text>
+            </View>
+          ) : null}
 
           <SectionHeader eyebrow="NOMINAL" title="Mau tarik berapa?" />
           <View style={styles.amountCard}>
@@ -457,6 +494,15 @@ export default function WithdrawScreen() {
                         {item.failure_code ? (
                           <Text style={styles.historyFailure}>{item.failure_code}</Text>
                         ) : null}
+                        {item.status === 'requested' || item.status === 'processing' ? (
+                          <Button
+                            label="Cek Status Pencairan"
+                            variant="secondary"
+                            loading={syncingWithdrawalId === item.id}
+                            onPress={() => handleSyncWithdrawal(item.id)}
+                            style={styles.syncWithdrawalBtn}
+                          />
+                        ) : null}
                       </View>
                       <View style={[styles.statusChip, { backgroundColor: meta.background }]}>
                         <Text style={[styles.statusChipText, { color: meta.color }]}>
@@ -517,10 +563,10 @@ const styles = StyleSheet.create({
     padding: Space.xl,
     ...CardShadow,
   },
-  heroTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  heroLabelRow: { flexDirection: 'row', alignItems: 'center', gap: 7 },
+  heroTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: Space.sm },
+  heroLabelRow: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 7 },
   liveDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: Brand.volt },
-  heroLabel: { ...Type.label, color: Brand.inkText },
+  heroLabel: { flexShrink: 1, ...Type.label, color: Brand.inkText },
   heroBadge: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -535,6 +581,7 @@ const styles = StyleSheet.create({
   heroMeta: {
     flexDirection: 'row',
     alignItems: 'center',
+    gap: Space.md,
     marginTop: Space.lg,
     paddingTop: Space.md,
     borderTopWidth: 1,
@@ -700,6 +747,19 @@ const styles = StyleSheet.create({
   historyCopy: { flex: 1 },
   historyMeta: { ...Type.meta, color: Brand.textSecondary, marginTop: 2, fontSize: 10.5 },
   historyFailure: { ...Type.meta, color: Brand.red, marginTop: 2, fontSize: 10 },
+  syncWithdrawalBtn: { marginTop: Space.xs, alignSelf: 'flex-start' },
+  debtCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Space.xs,
+    marginTop: Space.md,
+    padding: Space.md,
+    borderRadius: Radius.lg,
+    backgroundColor: Brand.amberSoft,
+    borderWidth: 1,
+    borderColor: Brand.amber,
+  },
+  debtCardText: { ...Type.meta, flex: 1, color: Brand.amber, fontSize: 11.5, lineHeight: 16 },
   statusChip: { borderRadius: Radius.pill, paddingHorizontal: 9, paddingVertical: 4 },
   statusChipText: { ...Type.micro, fontSize: 9.5, letterSpacing: 0.2 },
   sheetSummary: {

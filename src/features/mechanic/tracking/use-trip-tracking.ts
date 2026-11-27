@@ -1,8 +1,13 @@
 import * as Location from 'expo-location';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { getLastMechanicLocation, recordMechanicLocation } from '../service';
+import {
+  startBackgroundTripTracking,
+  stopBackgroundTripTracking,
+} from './background-location';
 import { fetchTripRoute, type TripRoute } from './directions';
 import { estimateEtaSeconds, haversineMeters, type LatLng } from './geo';
+import { encodePolyline } from './polyline';
 
 /** Kirim posisi paling cepat tiap 5 detik … */
 const PUBLISH_INTERVAL_MS = 5_000;
@@ -80,6 +85,11 @@ export function useTripTracking({
   const routeRequestRef = useRef(0);
   const routeRetryAtRef = useRef(0);
   const hasRouteRef = useRef(false);
+  const routeSnapshotRef = useRef<{
+    polyline: string;
+    distanceMeters: number;
+    durationSeconds: number;
+  } | null>(null);
 
   useEffect(() => {
     destinationRef.current = destination;
@@ -94,6 +104,15 @@ export function useTripTracking({
     // Perjalanan baru dimulai: titik pertama langsung dikirim.
     if (isEnroute) lastPublishRef.current = { at: 0, coords: null };
   }, [isEnroute]);
+
+  // Kelola background location task saat perjalanan aktif (`on_the_way`).
+  useEffect(() => {
+    if (active && isEnroute && requestId && permission === 'granted') {
+      void startBackgroundTripTracking(requestId);
+    } else if (!isEnroute || !requestId) {
+      void stopBackgroundTripTracking();
+    }
+  }, [active, isEnroute, requestId, permission]);
 
   const applyPosition = useCallback((coords: Location.LocationObjectCoords) => {
     if (coords.accuracy != null && coords.accuracy > MAX_ACCURACY_METERS) return;
@@ -117,10 +136,13 @@ export function useTripTracking({
     if (now - last.at < PUBLISH_INTERVAL_MS || !moved) return;
 
     lastPublishRef.current = { at: now, coords: next };
+    const snapshotToSend = routeSnapshotRef.current;
+    routeSnapshotRef.current = null;
     void recordMechanicLocation(activeRequestId, {
       lat: next.latitude,
       lng: next.longitude,
       accuracy: coords.accuracy ?? null,
+      route: snapshotToSend,
     }).catch(() => {
       // Offline / validasi sementara: percobaan berikutnya mengirim posisi baru.
     });
@@ -250,6 +272,24 @@ export function useTripTracking({
         hasRouteRef.current = true;
         setRouteScale(Math.max(1, next.distanceMeters / straight));
         setRoute(next);
+        const encoded = encodePolyline(next.coordinates);
+        if (encoded) {
+          routeSnapshotRef.current = {
+            polyline: encoded,
+            distanceMeters: next.distanceMeters,
+            durationSeconds: next.durationSeconds,
+          };
+          const activeOrderId = requestIdRef.current;
+          if (enrouteRef.current && activeOrderId) {
+            const snap = routeSnapshotRef.current;
+            routeSnapshotRef.current = null;
+            void recordMechanicLocation(activeOrderId, {
+              lat: origin.latitude,
+              lng: origin.longitude,
+              route: snap,
+            }).catch(() => {});
+          }
+        }
       })
       .catch(() => {
         if (requestId !== routeRequestRef.current) return;

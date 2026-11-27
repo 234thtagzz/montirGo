@@ -12,6 +12,7 @@ import {
   View,
 } from 'react-native';
 import { useLocalSearchParams, useFocusEffect, useRouter } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Location from 'expo-location';
 import { ScreenHeader } from '@/components/ui/screen-header';
 import { Button } from '@/components/ui/button';
@@ -42,6 +43,7 @@ const PRESET_CATEGORIES = SERVICE_CATEGORIES.filter((category) => !category.rout
 export default function NewServiceRequestScreen() {
   const params = useLocalSearchParams<{ category?: string; vehicleId?: string }>();
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const { user, loading: sessionLoading } = useSessionUser();
 
   const initialCategory = getCategory(params.category) ?? PRESET_CATEGORIES[0];
@@ -208,36 +210,10 @@ export default function NewServiceRequestScreen() {
         additionalNotes: notes || null,
       });
 
-      // Analisis AI dijalankan setelah request tersimpan. Kegagalan AI tidak
-      // boleh menggagalkan permintaan — client bisa analisis ulang di detail.
-      let analysisFailed = false;
-      let analysisMessage = '';
-      try {
-        await analyzeRequest(id);
-      } catch (analysisError) {
-        analysisFailed = true;
-        analysisMessage =
-          analysisError instanceof Error
-            ? analysisError.message
-            : 'Analisis AI belum tersedia.';
-      }
-
-      if (analysisFailed) {
-        Alert.alert(
-          'Permintaan terkirim',
-          `${analysisMessage}\n\nKamu tetap bisa mencoba analisis ulang dari detail pesanan.`,
-          [
-            {
-              text: 'Lihat Pesanan',
-              onPress: () =>
-                router.replace({ pathname: '/(client)/orders/[id]', params: { id } }),
-            },
-          ],
-          { cancelable: false },
-        );
-      } else {
-        router.replace({ pathname: '/(client)/orders/[id]', params: { id } });
-      }
+      // Analisis AI dijalankan di latar belakang setelah request tersimpan agar
+      // client langsung masuk ke layar tracking pesanan (hasil dikirim via Realtime).
+      void analyzeRequest(id).catch(() => {});
+      router.replace({ pathname: '/(client)/orders/[id]', params: { id } });
     } catch (error) {
       Alert.alert(
         'Gagal mengirim',
@@ -261,7 +237,10 @@ export default function NewServiceRequestScreen() {
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       >
         <ScrollView
-          contentContainerStyle={styles.content}
+          contentContainerStyle={[
+            styles.content,
+            { paddingBottom: Space.xxxl + insets.bottom },
+          ]}
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >

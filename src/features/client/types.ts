@@ -37,6 +37,10 @@ export interface ClientOrder {
   assignment_requested_at: string | null;
   /** Batas waktu client mengonfirmasi montir. */
   assignment_expires_at: string | null;
+  route_polyline?: string | null;
+  route_distance_m?: number | null;
+  route_duration_s?: number | null;
+  route_updated_at?: string | null;
   vehicle_type: string | null;
   vehicle_brand: string | null;
   vehicle_model: string | null;
@@ -49,13 +53,13 @@ export interface ClientOrder {
   mechanic_avatar: string | null;
 }
 
-/** Satu baris pada tagihan terperinci (keterangan + harga). */
+/** Satu baris pada tagihan terperinci (deskripsi + nominal). */
 export interface OrderInvoiceItem {
   id: string;
   request_id: string;
   mechanic_id?: string;
-  keterangan: string;
-  harga: number;
+  description: string;
+  amount: number;
   created_at: string;
   updated_at?: string;
 }
@@ -76,6 +80,7 @@ export interface NearbyMechanic {
   vehicle_specialization: string[];
   /** Path foto utama bengkel di bucket privat `workshop-photos`. */
   workshop_photo: string | null;
+  distance_km?: number | null;
 }
 
 export interface ClientReview {

@@ -36,9 +36,7 @@ export function ScreenHeader({ title, subtitle, showBack = true, right }: Screen
           >
             <Ionicons name="arrow-back" size={20} color={Brand.text} />
           </Pressable>
-        ) : (
-          <View style={styles.backPlaceholder} />
-        )}
+        ) : null}
 
         <View style={styles.titleBox}>
           <Text style={styles.title} numberOfLines={1}>
@@ -51,7 +49,7 @@ export function ScreenHeader({ title, subtitle, showBack = true, right }: Screen
           ) : null}
         </View>
 
-        <View style={styles.right}>{right}</View>
+        {right ? <View style={styles.right}>{right}</View> : null}
       </View>
     </View>
   );
@@ -74,7 +72,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  backPlaceholder: { width: 40 },
   titleBox: { flex: 1 },
   title: { ...Type.h2, color: Brand.text },
   subtitle: { ...Type.meta, color: Brand.textSecondary, marginTop: 1 },

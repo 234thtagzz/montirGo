@@ -6,6 +6,7 @@ import { readSession } from '@/lib/auth-session';
 import { useForegroundEpoch } from '@/hooks/use-foreground';
 import { supabase } from '@/lib/supabase';
 import { prepareNotifications, presentLocalAlert } from './local';
+import { registerPushToken } from './push';
 
 interface RawNotificationRow {
   title?: string | null;
@@ -62,6 +63,8 @@ export function ClientAlertsProvider({ children }: { children: ReactNode }) {
       const session = await readSession().catch(() => null);
       const user = session?.user;
       if (!active || !user) return;
+
+      void registerPushToken();
 
       channel = createRealtimeChannel(`client-notifications-${user.id}`)
         .on(

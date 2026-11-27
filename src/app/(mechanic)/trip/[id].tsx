@@ -142,7 +142,7 @@ export default function MechanicTripScreen() {
     tracking.etaSeconds == null
       ? '—'
       : tracking.etaSeconds <= 60
-        ? 'Tiba'
+        ? '< 1 mnt'
         : formatDuration(tracking.etaSeconds);
   const distanceLabel = formatDistance(tracking.remainingDistanceM);
   const arrivalClock = isLive ? formatArrivalClock(tracking.etaSeconds) : null;

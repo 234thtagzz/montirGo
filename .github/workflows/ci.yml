@@ -1,0 +1,43 @@
+name: CI
+
+on:
+  push:
+    branches: [main, 'dapin/**']
+  pull_request:
+
+jobs:
+  static-and-unit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+      - uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+      - run: npm ci
+      - run: npx tsc --noEmit
+      - run: npm run lint
+      - run: deno check supabase/functions/analyze-request/index.ts supabase/functions/ai-assistant/index.ts supabase/functions/xendit-create-payment/index.ts supabase/functions/xendit-sync-payment/index.ts supabase/functions/xendit-request-withdrawal/index.ts supabase/functions/xendit-sync-withdrawal/index.ts supabase/functions/confirm-cash-payment/index.ts supabase/functions/xendit-webhook/index.ts supabase/functions/xendit-payout-webhook/index.ts supabase/functions/send-push-notification/index.ts
+      - run: deno test supabase/functions/tests/xendit_and_ai_test.ts
+
+  supabase-integration:
+    runs-on: ubuntu-latest
+    needs: static-and-unit
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+      - uses: supabase/setup-cli@v1
+        with:
+          version: latest
+      - run: npm ci
+      - run: npx supabase start
+      - run: npx supabase db reset
+      - run: npm run test:backend
+      - if: always()
+        run: npx supabase stop || true

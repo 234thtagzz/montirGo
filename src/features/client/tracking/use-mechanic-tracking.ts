@@ -7,9 +7,12 @@ import {
 } from '@/features/client/service';
 import { fetchTripRoute, type TripRoute } from '@/features/mechanic/tracking/directions';
 import { haversineMeters, type LatLng } from '@/features/mechanic/tracking/geo';
+import { decodePolyline } from '@/features/mechanic/tracking/polyline';
 
 /** Selang polling cadangan bila realtime terputus (mis. sinyal lemah). */
-const POLL_INTERVAL_MS = 10_000;
+const POLL_INTERVAL_MS = 15_000;
+/** Usia maksimal snapshot rute montir yang masih layak dipakai ulang client. */
+const ROUTE_SNAPSHOT_MAX_AGE_MS = 120_000;
 /** Rute dihitung ulang setelah montir bergeser sejauh ini … */
 const ROUTE_MIN_DISTANCE_M = 30;
 /** … atau setelah selang waktu ini, mana pun yang lebih dulu. */
@@ -17,12 +20,21 @@ const ROUTE_MIN_INTERVAL_MS = 30_000;
 /** Data lebih tua dari ini ditandai sebagai posisi terakhir di UI. */
 export const STALE_LOCATION_MS = 45_000;
 
+export interface MechanicRouteSnapshot {
+  polyline?: string | null;
+  distanceMeters?: number | null;
+  durationSeconds?: number | null;
+  updatedAt?: string | null;
+}
+
 interface UseMechanicTrackingOptions {
   requestId: string | null | undefined;
   /** Titik lokasi client (tujuan montir). */
   destination: LatLng | null;
   /** Matikan langganan saat order tidak lagi dalam perjalanan. */
   enabled?: boolean;
+  /** Snapshot rute yang dikirim montir agar client tidak memanggil Directions API ulang. */
+  routeSnapshot?: MechanicRouteSnapshot;
 }
 
 export interface MechanicTracking {
@@ -74,10 +86,12 @@ export function useMechanicTracking({
   requestId,
   destination,
   enabled = true,
+  routeSnapshot: incomingRouteSnapshot,
 }: UseMechanicTrackingOptions): MechanicTracking {
   const [point, setPoint] = useState<PointSnapshot | null>(null);
   const [routeSnapshot, setRouteSnapshot] = useState<RouteSnapshot | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [realtimeConnected, setRealtimeConnected] = useState(false);
 
   const mountedRef = useRef(true);
   const lastPointRef = useRef<{ requestId: string; recordedAt: number }>({
@@ -134,12 +148,18 @@ export function useMechanicTracking({
     };
 
     read();
+    if (enabled && requestId && realtimeConnected) {
+      return () => {
+        cancelled = true;
+      };
+    }
+
     const timer = setInterval(read, POLL_INTERVAL_MS);
     return () => {
       cancelled = true;
       clearInterval(timer);
     };
-  }, [enabled, requestId, applySnapshot]);
+  }, [enabled, requestId, applySnapshot, realtimeConnected]);
 
   // Realtime: setiap titik baru dari montir langsung ditampilkan.
   useEffect(() => {
@@ -164,8 +184,13 @@ export function useMechanicTracking({
           });
         },
       )
-      .subscribe();
+      .subscribe((status) => {
+        if (mountedRef.current) {
+          setRealtimeConnected(status === 'SUBSCRIBED');
+        }
+      });
     return () => {
+      setRealtimeConnected(false);
       supabase.removeChannel(channel);
     };
   }, [enabled, requestId, applySnapshot]);
@@ -175,7 +200,12 @@ export function useMechanicTracking({
   const updatedAt = point && point.requestId === requestId ? point.updatedAt : null;
   const route = routeSnapshot && routeSnapshot.requestId === requestId ? routeSnapshot.route : null;
 
-  // Hitung ulang rute bila tujuan atau posisi montir berubah cukup jauh.
+  const snapPolyline = incomingRouteSnapshot?.polyline ?? null;
+  const snapDist = incomingRouteSnapshot?.distanceMeters ?? null;
+  const snapDur = incomingRouteSnapshot?.durationSeconds ?? null;
+  const snapUpdatedAt = incomingRouteSnapshot?.updatedAt ?? null;
+
+  // Hitung ulang rute bila tidak ada snapshot segar dan posisi bergeser cukup jauh.
   useEffect(() => {
     if (!enabled || !requestId || !position || !destination) return;
     if (routeFetchingRef.current) return;
@@ -187,6 +217,35 @@ export function useMechanicTracking({
     }
 
     const now = Date.now();
+    if (snapPolyline) {
+      const snapAt = snapUpdatedAt ? Date.parse(snapUpdatedAt) : now;
+      if (Number.isFinite(snapAt) && now - snapAt <= ROUTE_SNAPSHOT_MAX_AGE_MS) {
+        const coords = decodePolyline(snapPolyline);
+        if (coords.length >= 2) {
+          const dist = snapDist != null && snapDist > 0 ? snapDist : haversineMeters(position, destination);
+          const dur =
+            snapDur != null && snapDur > 0 ? snapDur : Math.max(60, Math.round(dist / 8));
+          const forRequest = requestId;
+          lastRouteOriginRef.current = position;
+          lastRouteAtRef.current = snapAt;
+          void Promise.resolve().then(() => {
+            if (!mountedRef.current || lastRouteRequestRef.current !== forRequest) return;
+            setRouteSnapshot({
+              requestId: forRequest,
+              route: {
+                coordinates: coords,
+                distanceMeters: dist,
+                durationSeconds: dur,
+                estimated: false,
+                trafficAware: true,
+              },
+            });
+          });
+          return;
+        }
+      }
+    }
+
     const lastOrigin = lastRouteOriginRef.current;
     const moved = lastOrigin ? haversineMeters(lastOrigin, position) : Number.POSITIVE_INFINITY;
     const elapsed = lastRouteAtRef.current ? now - lastRouteAtRef.current : Number.POSITIVE_INFINITY;
@@ -205,7 +264,7 @@ export function useMechanicTracking({
       .finally(() => {
         routeFetchingRef.current = false;
       });
-  }, [enabled, requestId, position, destination, route]);
+  }, [enabled, requestId, position, destination, route, snapPolyline, snapDist, snapDur, snapUpdatedAt]);
 
   return {
     position,

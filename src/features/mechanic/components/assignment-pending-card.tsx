@@ -34,8 +34,10 @@ export function AssignmentPendingCard({ expiresAt, onPress }: AssignmentPendingC
     };
   }, [expiresAt]);
 
-  const remaining =
+  const rawRemaining =
     expiresAt == null || now === 0 ? null : Math.max(0, new Date(expiresAt).getTime() - now);
+  const remaining =
+    rawRemaining == null ? null : Math.min(5 * 60 * 1000, rawRemaining);
 
   return (
     <Pressable
