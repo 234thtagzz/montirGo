@@ -34,12 +34,24 @@ export function ClientAlertsProvider({ children }: { children: ReactNode }) {
 
     const openFromResponse = (response: Notifications.NotificationResponse | null) => {
       const data = response?.notification.request.content.data as
-        | { requestId?: unknown; audience?: unknown }
+        | {
+            requestId?: unknown;
+            audience?: unknown;
+            relatedEntityType?: unknown;
+            relatedEntityId?: unknown;
+          }
         | undefined;
-      if (!data || data.audience !== 'client' || typeof data.requestId !== 'string') return;
+      if (!data || data.audience === 'mechanic') return;
+      const requestId =
+        typeof data.requestId === 'string'
+          ? data.requestId
+          : data.relatedEntityType === 'service_request' && typeof data.relatedEntityId === 'string'
+            ? data.relatedEntityId
+            : null;
+      if (!requestId) return;
       router.push({
         pathname: '/(client)/orders/[id]',
-        params: { id: data.requestId },
+        params: { id: requestId },
       });
       // Hindari navigasi ulang bila respons yang sama dibaca lagi.
       Notifications.clearLastNotificationResponse();

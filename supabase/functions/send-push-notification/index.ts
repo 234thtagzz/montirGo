@@ -1,19 +1,14 @@
 // MontirGo Edge Function: kirim Remote Push Notification via Expo Push Service.
 // Dipanggil oleh Supabase Database Webhook (INSERT di `notifications`) atau service internal.
 import { cors, getServiceClient, isValidUuid, json } from '../_shared/http.ts';
-
-interface NotificationRecord {
-  id?: string;
-  user_id?: string;
-  title?: string;
-  body?: string;
-  type?: string;
-  related_entity_type?: string | null;
-  related_entity_id?: string | null;
-}
+import {
+  buildPushDataPayload,
+  roleToAudience,
+  type NotificationPushRecord,
+} from '../_shared/push.ts';
 
 interface PushRequestBody {
-  record?: NotificationRecord;
+  record?: NotificationPushRecord;
   userId?: string;
   title?: string;
   body?: string;
@@ -66,11 +61,18 @@ Deno.serve(async (req: Request) => {
   }
 
   const svc = getServiceClient();
-  const { data: tokens, error: tokenError } = await svc
-    .from('device_push_tokens')
-    .select('id, expo_push_token')
-    .eq('user_id', userId)
-    .eq('is_active', true);
+  const [{ data: tokens, error: tokenError }, { data: profileRow }] = await Promise.all([
+    svc
+      .from('device_push_tokens')
+      .select('id, expo_push_token')
+      .eq('user_id', userId)
+      .eq('is_active', true),
+    svc
+      .from('profiles')
+      .select('role')
+      .eq('id', userId)
+      .maybeSingle(),
+  ]);
 
   if (tokenError) {
     return json({ error: tokenError.message }, 500);
@@ -81,12 +83,12 @@ Deno.serve(async (req: Request) => {
     return json({ ok: true, sent: 0, skipped: 'no_active_tokens' });
   }
 
-  const dataPayload = body?.data ?? {
-    notificationId: record?.id ?? null,
-    type: record?.type ?? 'general',
-    relatedEntityType: record?.related_entity_type ?? null,
-    relatedEntityId: record?.related_entity_id ?? null,
-  };
+  const audience = roleToAudience((profileRow as { role?: unknown } | null)?.role);
+  const dataPayload = buildPushDataPayload({
+    record,
+    audience,
+    overrideData: body?.data ?? null,
+  });
 
   const messages = activeTokens.map((t) => ({
     to: t.expo_push_token,

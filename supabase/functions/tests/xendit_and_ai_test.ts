@@ -1,4 +1,10 @@
-import { parseFeePercent, verifyCallbackToken, friendlyXenditError } from '../_shared/xendit.ts';
+import {
+  friendlyXenditError,
+  isXenditSessionCompleted,
+  parseFeePercent,
+  verifyCallbackToken,
+} from '../_shared/xendit.ts';
+import { buildPushDataPayload, roleToAudience } from '../_shared/push.ts';
 import { sanitizeContextText } from '../_shared/ai.ts';
 
 function assertEquals<T>(actual: T, expected: T, message?: string) {
@@ -71,4 +77,39 @@ Deno.test('sanitizeContextText strips control chars and truncates', () => {
   assertEquals(sanitizeContextText(dirty, 50), 'Honda Beat 2022');
   assertEquals(sanitizeContextText('A'.repeat(200), 20).length, 20);
   assertEquals(sanitizeContextText(123, 50), '');
+});
+
+Deno.test('buildPushDataPayload aligns requestId, relatedEntityId, and audience', () => {
+  const payload = buildPushDataPayload({
+    record: {
+      id: 'notif-1',
+      type: 'quote_submitted',
+      related_entity_type: 'service_request',
+      related_entity_id: 'req-123',
+    },
+    audience: roleToAudience('client'),
+  });
+  assertEquals(payload.requestId, 'req-123');
+  assertEquals(payload.relatedEntityId, 'req-123');
+  assertEquals(payload.audience, 'client');
+  assertEquals(payload.type, 'quote_submitted');
+
+  const nonOrder = buildPushDataPayload({
+    record: {
+      id: 'notif-2',
+      type: 'withdrawal',
+      related_entity_type: 'withdrawal',
+      related_entity_id: 'wd-99',
+    },
+    audience: roleToAudience('mechanic'),
+  });
+  assertEquals(nonOrder.requestId, null);
+  assertEquals(nonOrder.audience, 'mechanic');
+});
+
+Deno.test('isXenditSessionCompleted detects COMPLETED regardless of case/whitespace', () => {
+  assertEquals(isXenditSessionCompleted('COMPLETED'), true);
+  assertEquals(isXenditSessionCompleted(' completed '), true);
+  assertEquals(isXenditSessionCompleted('PENDING'), false);
+  assertEquals(isXenditSessionCompleted(undefined), false);
 });

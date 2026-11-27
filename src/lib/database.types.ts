@@ -1,4 +1,3 @@
-
 export type Json = string | number | boolean | null | { [key: string]: Json | undefined } | Json[]
 
 export type Database = {
@@ -71,6 +70,12 @@ isOneToOne: false
       foreignKeyName: "ai_chat_messages_request_id_fkey"
       columns: ["request_id"]
 isOneToOne: false
+      referencedRelation: "assigned_order_mechanic_view"
+      referencedColumns: ["request_id"]
+    },{
+      foreignKeyName: "ai_chat_messages_request_id_fkey"
+      columns: ["request_id"]
+isOneToOne: false
       referencedRelation: "mechanic_open_request_view"
       referencedColumns: ["id"]
     },{
@@ -111,6 +116,12 @@ isOneToOne: false
 isOneToOne: false
       referencedRelation: "admin_transaction_overview"
       referencedColumns: ["id"]
+    },{
+      foreignKeyName: "ai_diagnoses_request_id_fkey"
+      columns: ["request_id"]
+isOneToOne: false
+      referencedRelation: "assigned_order_mechanic_view"
+      referencedColumns: ["request_id"]
     },{
       foreignKeyName: "ai_diagnoses_request_id_fkey"
       columns: ["request_id"]
@@ -181,6 +192,12 @@ isOneToOne: false
 isOneToOne: false
       referencedRelation: "admin_transaction_overview"
       referencedColumns: ["id"]
+    },{
+      foreignKeyName: "complaints_request_id_fkey"
+      columns: ["request_id"]
+isOneToOne: false
+      referencedRelation: "assigned_order_mechanic_view"
+      referencedColumns: ["request_id"]
     },{
       foreignKeyName: "complaints_request_id_fkey"
       columns: ["request_id"]
@@ -279,6 +296,12 @@ isOneToOne: true
       foreignKeyName: "earnings_request_id_fkey"
       columns: ["request_id"]
 isOneToOne: true
+      referencedRelation: "assigned_order_mechanic_view"
+      referencedColumns: ["request_id"]
+    },{
+      foreignKeyName: "earnings_request_id_fkey"
+      columns: ["request_id"]
+isOneToOne: true
       referencedRelation: "mechanic_open_request_view"
       referencedColumns: ["id"]
     },{
@@ -323,6 +346,12 @@ isOneToOne: false
       foreignKeyName: "mechanic_locations_request_id_fkey"
       columns: ["request_id"]
 isOneToOne: false
+      referencedRelation: "assigned_order_mechanic_view"
+      referencedColumns: ["request_id"]
+    },{
+      foreignKeyName: "mechanic_locations_request_id_fkey"
+      columns: ["request_id"]
+isOneToOne: false
       referencedRelation: "mechanic_open_request_view"
       referencedColumns: ["id"]
     },{
@@ -361,14 +390,14 @@ isOneToOne: false
                   ]
                 },"mechanic_profiles": {
                   Row: {
-                    "bio": string | null,"certifications": (string)[],"created_at": string,"current_lat": number | null,"current_lng": number | null,"experience_years": number | null,"is_available": boolean,"is_online": boolean,"is_verified": boolean,"last_location_at": string | null,"location": unknown,"profile_id": string,"rating_avg": number,"rating_count": number,"service_radius_km": number,"skills": (string)[],"total_jobs": number,"updated_at": string,"vehicle_specialization": (string)[],"verified_at": string | null,"verified_by": string | null,"workshop_address": string | null,"workshop_name": string | null,"workshop_photos": (string)[]
+                    "bio": string | null,"certifications": (string)[],"created_at": string,"current_lat": number | null,"current_lng": number | null,"experience_years": number | null,"is_available": boolean,"is_online": boolean,"is_verified": boolean,"last_location_at": string | null,"location": unknown,"profile_id": string,"rating_avg": number,"rating_count": number,"service_radius_km": number,"skills": (string)[],"total_jobs": number,"updated_at": string,"vehicle_label": string | null,"vehicle_plate": string | null,"vehicle_specialization": (string)[],"verified_at": string | null,"verified_by": string | null,"workshop_address": string | null,"workshop_name": string | null,"workshop_photos": (string)[]
                   }
                   ComputedFields: never
                   Insert: {
-                    "bio"?: string | null,"certifications"?: (string)[],"created_at"?: string,"current_lat"?: number | null,"current_lng"?: number | null,"experience_years"?: number | null,"is_available"?: boolean,"is_online"?: boolean,"is_verified"?: boolean,"last_location_at"?: string | null,"location"?: unknown,"profile_id": string,"rating_avg"?: number,"rating_count"?: number,"service_radius_km"?: number,"skills"?: (string)[],"total_jobs"?: number,"updated_at"?: string,"vehicle_specialization"?: (string)[],"verified_at"?: string | null,"verified_by"?: string | null,"workshop_address"?: string | null,"workshop_name"?: string | null,"workshop_photos"?: (string)[]
+                    "bio"?: string | null,"certifications"?: (string)[],"created_at"?: string,"current_lat"?: number | null,"current_lng"?: number | null,"experience_years"?: number | null,"is_available"?: boolean,"is_online"?: boolean,"is_verified"?: boolean,"last_location_at"?: string | null,"location"?: unknown,"profile_id": string,"rating_avg"?: number,"rating_count"?: number,"service_radius_km"?: number,"skills"?: (string)[],"total_jobs"?: number,"updated_at"?: string,"vehicle_label"?: string | null,"vehicle_plate"?: string | null,"vehicle_specialization"?: (string)[],"verified_at"?: string | null,"verified_by"?: string | null,"workshop_address"?: string | null,"workshop_name"?: string | null,"workshop_photos"?: (string)[]
                   }
                   Update: {
-                    "bio"?: string | null,"certifications"?: (string)[],"created_at"?: string,"current_lat"?: number | null,"current_lng"?: number | null,"experience_years"?: number | null,"is_available"?: boolean,"is_online"?: boolean,"is_verified"?: boolean,"last_location_at"?: string | null,"location"?: unknown,"profile_id"?: string,"rating_avg"?: number,"rating_count"?: number,"service_radius_km"?: number,"skills"?: (string)[],"total_jobs"?: number,"updated_at"?: string,"vehicle_specialization"?: (string)[],"verified_at"?: string | null,"verified_by"?: string | null,"workshop_address"?: string | null,"workshop_name"?: string | null,"workshop_photos"?: (string)[]
+                    "bio"?: string | null,"certifications"?: (string)[],"created_at"?: string,"current_lat"?: number | null,"current_lng"?: number | null,"experience_years"?: number | null,"is_available"?: boolean,"is_online"?: boolean,"is_verified"?: boolean,"last_location_at"?: string | null,"location"?: unknown,"profile_id"?: string,"rating_avg"?: number,"rating_count"?: number,"service_radius_km"?: number,"skills"?: (string)[],"total_jobs"?: number,"updated_at"?: string,"vehicle_label"?: string | null,"vehicle_plate"?: string | null,"vehicle_specialization"?: (string)[],"verified_at"?: string | null,"verified_by"?: string | null,"workshop_address"?: string | null,"workshop_name"?: string | null,"workshop_photos"?: (string)[]
                   }
                   Relationships: [
                     {
@@ -451,14 +480,14 @@ isOneToOne: false
                   ]
                 },"order_invoice_items": {
                   Row: {
-                    "amount": number,"created_at": string,"description": string,"id": string,"mechanic_id": string,"request_id": string,"updated_at": string
+                    "amount": number,"approved_at": string | null,"created_at": string,"description": string,"id": string,"is_locked": boolean,"item_type": string,"mechanic_id": string,"quote_photo_paths": (string)[],"request_id": string,"updated_at": string,"voided_at": string | null
                   }
                   ComputedFields: never
                   Insert: {
-                    "amount": number,"created_at"?: string,"description": string,"id"?: string,"mechanic_id": string,"request_id": string,"updated_at"?: string
+                    "amount": number,"approved_at"?: string | null,"created_at"?: string,"description": string,"id"?: string,"is_locked"?: boolean,"item_type"?: string,"mechanic_id": string,"quote_photo_paths"?: (string)[],"request_id": string,"updated_at"?: string,"voided_at"?: string | null
                   }
                   Update: {
-                    "amount"?: number,"created_at"?: string,"description"?: string,"id"?: string,"mechanic_id"?: string,"request_id"?: string,"updated_at"?: string
+                    "amount"?: number,"approved_at"?: string | null,"created_at"?: string,"description"?: string,"id"?: string,"is_locked"?: boolean,"item_type"?: string,"mechanic_id"?: string,"quote_photo_paths"?: (string)[],"request_id"?: string,"updated_at"?: string,"voided_at"?: string | null
                   }
                   Relationships: [
                     {
@@ -479,6 +508,12 @@ isOneToOne: false
 isOneToOne: false
       referencedRelation: "admin_transaction_overview"
       referencedColumns: ["id"]
+    },{
+      foreignKeyName: "order_invoice_items_request_id_fkey"
+      columns: ["request_id"]
+isOneToOne: false
+      referencedRelation: "assigned_order_mechanic_view"
+      referencedColumns: ["request_id"]
     },{
       foreignKeyName: "order_invoice_items_request_id_fkey"
       columns: ["request_id"]
@@ -537,6 +572,12 @@ isOneToOne: false
 isOneToOne: false
       referencedRelation: "admin_transaction_overview"
       referencedColumns: ["id"]
+    },{
+      foreignKeyName: "payments_request_id_fkey"
+      columns: ["request_id"]
+isOneToOne: false
+      referencedRelation: "assigned_order_mechanic_view"
+      referencedColumns: ["request_id"]
     },{
       foreignKeyName: "payments_request_id_fkey"
       columns: ["request_id"]
@@ -651,6 +692,12 @@ isOneToOne: true
       foreignKeyName: "reviews_request_id_fkey"
       columns: ["request_id"]
 isOneToOne: true
+      referencedRelation: "assigned_order_mechanic_view"
+      referencedColumns: ["request_id"]
+    },{
+      foreignKeyName: "reviews_request_id_fkey"
+      columns: ["request_id"]
+isOneToOne: true
       referencedRelation: "mechanic_open_request_view"
       referencedColumns: ["id"]
     },{
@@ -707,6 +754,12 @@ isOneToOne: false
       foreignKeyName: "service_request_assignment_rejections_request_id_fkey"
       columns: ["request_id"]
 isOneToOne: false
+      referencedRelation: "assigned_order_mechanic_view"
+      referencedColumns: ["request_id"]
+    },{
+      foreignKeyName: "service_request_assignment_rejections_request_id_fkey"
+      columns: ["request_id"]
+isOneToOne: false
       referencedRelation: "mechanic_open_request_view"
       referencedColumns: ["id"]
     },{
@@ -751,6 +804,12 @@ isOneToOne: false
       foreignKeyName: "service_request_status_history_request_id_fkey"
       columns: ["request_id"]
 isOneToOne: false
+      referencedRelation: "assigned_order_mechanic_view"
+      referencedColumns: ["request_id"]
+    },{
+      foreignKeyName: "service_request_status_history_request_id_fkey"
+      columns: ["request_id"]
+isOneToOne: false
       referencedRelation: "mechanic_open_request_view"
       referencedColumns: ["id"]
     },{
@@ -763,14 +822,14 @@ isOneToOne: false
                   ]
                 },"service_requests": {
                   Row: {
-                    "accepted_at": string | null,"additional_notes": string | null,"address": string | null,"ai_summary": string | null,"arrived_at": string | null,"assignment_expires_at": string | null,"assignment_requested_at": string | null,"client_id": string,"completed_at": string | null,"contact_phone": string,"created_at": string,"currency": string,"id": string,"issue_description": string,"lat": number,"lng": number,"location": unknown,"mechanic_id": string | null,"payment_method": string | null,"photo_urls": (string)[],"price_amount": number | null,"route_distance_m": number | null,"route_duration_s": number | null,"route_polyline": string | null,"route_updated_at": string | null,"status": string,"symptoms": string | null,"updated_at": string,"vehicle_id": string | null
+                    "accepted_at": string | null,"additional_notes": string | null,"address": string | null,"ai_summary": string | null,"arrived_at": string | null,"assignment_expires_at": string | null,"assignment_requested_at": string | null,"callout_fee_amount": number,"callout_fee_tier": string,"client_id": string,"completed_at": string | null,"contact_phone": string,"created_at": string,"currency": string,"id": string,"issue_description": string,"lat": number,"lng": number,"location": unknown,"mechanic_id": string | null,"payment_method": string | null,"photo_urls": (string)[],"price_amount": number | null,"quote_approved_at": string | null,"quote_expires_at": string | null,"quote_photo_paths": (string)[],"quote_revision_note": string | null,"quote_status": string,"quote_submitted_at": string | null,"rejected_quote_snapshot": Json | null,"route_distance_m": number | null,"route_duration_s": number | null,"route_polyline": string | null,"route_updated_at": string | null,"status": string,"symptoms": string | null,"updated_at": string,"vehicle_id": string | null
                   }
                   ComputedFields: never
                   Insert: {
-                    "accepted_at"?: string | null,"additional_notes"?: string | null,"address"?: string | null,"ai_summary"?: string | null,"arrived_at"?: string | null,"assignment_expires_at"?: string | null,"assignment_requested_at"?: string | null,"client_id": string,"completed_at"?: string | null,"contact_phone": string,"created_at"?: string,"currency"?: string,"id"?: string,"issue_description": string,"lat": number,"lng": number,"location"?: unknown,"mechanic_id"?: string | null,"payment_method"?: string | null,"photo_urls"?: (string)[],"price_amount"?: number | null,"route_distance_m"?: number | null,"route_duration_s"?: number | null,"route_polyline"?: string | null,"route_updated_at"?: string | null,"status"?: string,"symptoms"?: string | null,"updated_at"?: string,"vehicle_id"?: string | null
+                    "accepted_at"?: string | null,"additional_notes"?: string | null,"address"?: string | null,"ai_summary"?: string | null,"arrived_at"?: string | null,"assignment_expires_at"?: string | null,"assignment_requested_at"?: string | null,"callout_fee_amount"?: number,"callout_fee_tier"?: string,"client_id": string,"completed_at"?: string | null,"contact_phone": string,"created_at"?: string,"currency"?: string,"id"?: string,"issue_description": string,"lat": number,"lng": number,"location"?: unknown,"mechanic_id"?: string | null,"payment_method"?: string | null,"photo_urls"?: (string)[],"price_amount"?: number | null,"quote_approved_at"?: string | null,"quote_expires_at"?: string | null,"quote_photo_paths"?: (string)[],"quote_revision_note"?: string | null,"quote_status"?: string,"quote_submitted_at"?: string | null,"rejected_quote_snapshot"?: Json | null,"route_distance_m"?: number | null,"route_duration_s"?: number | null,"route_polyline"?: string | null,"route_updated_at"?: string | null,"status"?: string,"symptoms"?: string | null,"updated_at"?: string,"vehicle_id"?: string | null
                   }
                   Update: {
-                    "accepted_at"?: string | null,"additional_notes"?: string | null,"address"?: string | null,"ai_summary"?: string | null,"arrived_at"?: string | null,"assignment_expires_at"?: string | null,"assignment_requested_at"?: string | null,"client_id"?: string,"completed_at"?: string | null,"contact_phone"?: string,"created_at"?: string,"currency"?: string,"id"?: string,"issue_description"?: string,"lat"?: number,"lng"?: number,"location"?: unknown,"mechanic_id"?: string | null,"payment_method"?: string | null,"photo_urls"?: (string)[],"price_amount"?: number | null,"route_distance_m"?: number | null,"route_duration_s"?: number | null,"route_polyline"?: string | null,"route_updated_at"?: string | null,"status"?: string,"symptoms"?: string | null,"updated_at"?: string,"vehicle_id"?: string | null
+                    "accepted_at"?: string | null,"additional_notes"?: string | null,"address"?: string | null,"ai_summary"?: string | null,"arrived_at"?: string | null,"assignment_expires_at"?: string | null,"assignment_requested_at"?: string | null,"callout_fee_amount"?: number,"callout_fee_tier"?: string,"client_id"?: string,"completed_at"?: string | null,"contact_phone"?: string,"created_at"?: string,"currency"?: string,"id"?: string,"issue_description"?: string,"lat"?: number,"lng"?: number,"location"?: unknown,"mechanic_id"?: string | null,"payment_method"?: string | null,"photo_urls"?: (string)[],"price_amount"?: number | null,"quote_approved_at"?: string | null,"quote_expires_at"?: string | null,"quote_photo_paths"?: (string)[],"quote_revision_note"?: string | null,"quote_status"?: string,"quote_submitted_at"?: string | null,"rejected_quote_snapshot"?: Json | null,"route_distance_m"?: number | null,"route_duration_s"?: number | null,"route_polyline"?: string | null,"route_updated_at"?: string | null,"status"?: string,"symptoms"?: string | null,"updated_at"?: string,"vehicle_id"?: string | null
                   }
                   Relationships: [
                     {
@@ -940,6 +999,12 @@ isOneToOne: false
       foreignKeyName: "complaints_request_id_fkey"
       columns: ["request_id"]
 isOneToOne: false
+      referencedRelation: "assigned_order_mechanic_view"
+      referencedColumns: ["request_id"]
+    },{
+      foreignKeyName: "complaints_request_id_fkey"
+      columns: ["request_id"]
+isOneToOne: false
       referencedRelation: "mechanic_open_request_view"
       referencedColumns: ["id"]
     },{
@@ -964,7 +1029,7 @@ isOneToOne: false
                   ]
                 },"admin_transaction_overview": {
                   Row: {
-                    "accepted_at": string | null,"additional_notes": string | null,"address": string | null,"arrived_at": string | null,"client_email": string | null,"client_id": string,"client_name": string | null,"client_phone": string | null,"completed_at": string | null,"contact_phone": string,"created_at": string,"currency": string,"id": string,"invoice_item_count": number | null,"invoice_total": number | null,"issue_description": string,"lat": number,"license_plate": string | null,"lng": number,"mechanic_email": string | null,"mechanic_id": string | null,"mechanic_name": string | null,"mechanic_phone": string | null,"net_amount": number | null,"paid_at": string | null,"payment_amount": number | null,"payment_id": string | null,"payment_method": string | null,"payment_method_used": string | null,"payment_status": string | null,"platform_fee": number | null,"price_amount": number | null,"status": string,"symptoms": string | null,"vehicle_brand": string | null,"vehicle_id": string | null,"vehicle_model": string | null,"vehicle_type": string | null
+                    "accepted_at": string | null,"additional_notes": string | null,"address": string | null,"arrived_at": string | null,"callout_fee_amount": number,"callout_fee_tier": string,"client_email": string | null,"client_id": string,"client_name": string | null,"client_phone": string | null,"completed_at": string | null,"contact_phone": string,"created_at": string,"currency": string,"id": string,"invoice_item_count": number | null,"invoice_total": number | null,"issue_description": string,"lat": number,"license_plate": string | null,"lng": number,"mechanic_email": string | null,"mechanic_id": string | null,"mechanic_name": string | null,"mechanic_phone": string | null,"net_amount": number | null,"paid_at": string | null,"payment_amount": number | null,"payment_id": string | null,"payment_method": string | null,"payment_method_used": string | null,"payment_status": string | null,"platform_fee": number | null,"price_amount": number | null,"quote_status": string,"status": string,"symptoms": string | null,"vehicle_brand": string | null,"vehicle_id": string | null,"vehicle_model": string | null,"vehicle_type": string | null
                   }
                   ComputedFields: never
                   Relationships: [
@@ -1008,9 +1073,29 @@ isOneToOne: false
                   Relationships: [
                     
                   ]
+                },"assigned_order_mechanic_view": {
+                  Row: {
+                    "avatar_url": string | null,"full_name": string | null,"is_verified": boolean,"mechanic_id": string,"phone_number": string | null,"rating_avg": number,"rating_count": number,"request_id": string,"total_jobs": number,"vehicle_label": string | null,"vehicle_plate": string | null,"workshop_address": string | null,"workshop_name": string | null
+                  }
+                  ComputedFields: never
+                  Relationships: [
+                    {
+      foreignKeyName: "mechanic_profiles_profile_id_fkey"
+      columns: ["mechanic_id"]
+isOneToOne: true
+      referencedRelation: "admin_user_directory"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "mechanic_profiles_profile_id_fkey"
+      columns: ["mechanic_id"]
+isOneToOne: true
+      referencedRelation: "profiles"
+      referencedColumns: ["id"]
+    }
+                  ]
                 },"mechanic_assignment_profile": {
                   Row: {
-                    "avatar_url": string | null,"bio": string | null,"certifications": (string)[],"experience_years": number | null,"full_name": string | null,"is_verified": boolean,"profile_id": string,"rating_avg": number,"rating_count": number,"skills": (string)[],"total_jobs": number,"vehicle_specialization": (string)[],"verified_at": string | null,"workshop_address": string | null,"workshop_name": string | null,"workshop_photo": string | null
+                    "avatar_url": string | null,"bio": string | null,"certifications": (string)[],"experience_years": number | null,"full_name": string | null,"is_verified": boolean,"profile_id": string,"rating_avg": number,"rating_count": number,"skills": (string)[],"total_jobs": number,"vehicle_label": string | null,"vehicle_plate": string | null,"vehicle_specialization": (string)[],"verified_at": string | null,"workshop_address": string | null,"workshop_name": string | null,"workshop_photo": string | null
                   }
                   ComputedFields: never
                   Relationships: [
@@ -1103,6 +1188,8 @@ isOneToOne: false
 "arrived_at": string | null,
 "assignment_expires_at": string | null,
 "assignment_requested_at": string | null,
+"callout_fee_amount": number,
+"callout_fee_tier": string,
 "client_id": string,
 "completed_at": string | null,
 "contact_phone": string,
@@ -1117,6 +1204,13 @@ isOneToOne: false
 "payment_method": string | null,
 "photo_urls": (string)[],
 "price_amount": number | null,
+"quote_approved_at": string | null,
+"quote_expires_at": string | null,
+"quote_photo_paths": (string)[],
+"quote_revision_note": string | null,
+"quote_status": string,
+"quote_submitted_at": string | null,
+"rejected_quote_snapshot": Json | null,
 "route_distance_m": number | null,
 "route_duration_s": number | null,
 "route_polyline": string | null,
@@ -1144,6 +1238,8 @@ isOneToOne: false
 "arrived_at": string | null,
 "assignment_expires_at": string | null,
 "assignment_requested_at": string | null,
+"callout_fee_amount": number,
+"callout_fee_tier": string,
 "client_id": string,
 "completed_at": string | null,
 "contact_phone": string,
@@ -1158,6 +1254,13 @@ isOneToOne: false
 "payment_method": string | null,
 "photo_urls": (string)[],
 "price_amount": number | null,
+"quote_approved_at": string | null,
+"quote_expires_at": string | null,
+"quote_photo_paths": (string)[],
+"quote_revision_note": string | null,
+"quote_status": string,
+"quote_submitted_at": string | null,
+"rejected_quote_snapshot": Json | null,
 "route_distance_m": number | null,
 "route_duration_s": number | null,
 "route_polyline": string | null,
@@ -1205,7 +1308,7 @@ isOneToOne: false
         isSetofReturn: false
       } },
 "create_service_request":
-{ Args: { "p_additional_notes"?: string,"p_address"?: string,"p_contact_phone"?: string,"p_issue_description"?: string,"p_lat"?: number,"p_lng"?: number,"p_symptoms"?: string,"p_vehicle_id"?: string }; Returns: {
+{ Args: { "p_additional_notes"?: string,"p_address"?: string,"p_callout_fee_tier"?: string,"p_contact_phone"?: string,"p_issue_description"?: string,"p_lat"?: number,"p_lng"?: number,"p_symptoms"?: string,"p_vehicle_id"?: string }; Returns: {
               "accepted_at": string | null,
 "additional_notes": string | null,
 "address": string | null,
@@ -1213,6 +1316,8 @@ isOneToOne: false
 "arrived_at": string | null,
 "assignment_expires_at": string | null,
 "assignment_requested_at": string | null,
+"callout_fee_amount": number,
+"callout_fee_tier": string,
 "client_id": string,
 "completed_at": string | null,
 "contact_phone": string,
@@ -1227,6 +1332,13 @@ isOneToOne: false
 "payment_method": string | null,
 "photo_urls": (string)[],
 "price_amount": number | null,
+"quote_approved_at": string | null,
+"quote_expires_at": string | null,
+"quote_photo_paths": (string)[],
+"quote_revision_note": string | null,
+"quote_status": string,
+"quote_submitted_at": string | null,
+"rejected_quote_snapshot": Json | null,
 "route_distance_m": number | null,
 "route_duration_s": number | null,
 "route_polyline": string | null,
@@ -1248,6 +1360,9 @@ isOneToOne: false
 "deactivate_my_push_token":
 { Args: { "p_token": string }; Returns: undefined
                            },
+"ensure_callout_invoice_item":
+{ Args: { "p_request_id": string }; Returns: number
+                           },
 "expire_stale_assignments":
 { Args: Record<PropertyKey, never>; Returns: number
                            },
@@ -1263,6 +1378,8 @@ isOneToOne: false
 "arrived_at": string | null,
 "assignment_expires_at": string | null,
 "assignment_requested_at": string | null,
+"callout_fee_amount": number,
+"callout_fee_tier": string,
 "client_id": string,
 "completed_at": string | null,
 "contact_phone": string,
@@ -1277,6 +1394,13 @@ isOneToOne: false
 "payment_method": string | null,
 "photo_urls": (string)[],
 "price_amount": number | null,
+"quote_approved_at": string | null,
+"quote_expires_at": string | null,
+"quote_photo_paths": (string)[],
+"quote_revision_note": string | null,
+"quote_status": string,
+"quote_submitted_at": string | null,
+"rejected_quote_snapshot": Json | null,
 "route_distance_m": number | null,
 "route_duration_s": number | null,
 "route_polyline": string | null,
@@ -1319,6 +1443,9 @@ isOneToOne: false
                            },
 "notify_nearby_mechanics":
 { Args: { "p_exclude_mechanic"?: string,"p_request_id": string }; Returns: undefined
+                           },
+"quote_photo_accessible":
+{ Args: { "p_for_write"?: boolean,"p_path": string }; Returns: boolean
                            },
 "record_commission_topup":
 { Args: { "p_amount": number,"p_mechanic_id": string,"p_note"?: string,"p_ref_id"?: string }; Returns: {
@@ -1375,6 +1502,8 @@ isOneToOne: false
 "arrived_at": string | null,
 "assignment_expires_at": string | null,
 "assignment_requested_at": string | null,
+"callout_fee_amount": number,
+"callout_fee_tier": string,
 "client_id": string,
 "completed_at": string | null,
 "contact_phone": string,
@@ -1389,6 +1518,13 @@ isOneToOne: false
 "payment_method": string | null,
 "photo_urls": (string)[],
 "price_amount": number | null,
+"quote_approved_at": string | null,
+"quote_expires_at": string | null,
+"quote_photo_paths": (string)[],
+"quote_revision_note": string | null,
+"quote_status": string,
+"quote_submitted_at": string | null,
+"rejected_quote_snapshot": Json | null,
 "route_distance_m": number | null,
 "route_duration_s": number | null,
 "route_polyline": string | null,
@@ -1423,6 +1559,53 @@ isOneToOne: false
         isOneToOne: true
         isSetofReturn: false
       } },
+"request_quote_addon":
+{ Args: { "p_amount": number,"p_description": string,"p_item_type"?: string,"p_photo_paths"?: (string)[],"p_request_id": string }; Returns: {
+              "accepted_at": string | null,
+"additional_notes": string | null,
+"address": string | null,
+"ai_summary": string | null,
+"arrived_at": string | null,
+"assignment_expires_at": string | null,
+"assignment_requested_at": string | null,
+"callout_fee_amount": number,
+"callout_fee_tier": string,
+"client_id": string,
+"completed_at": string | null,
+"contact_phone": string,
+"created_at": string,
+"currency": string,
+"id": string,
+"issue_description": string,
+"lat": number,
+"lng": number,
+"location": unknown,
+"mechanic_id": string | null,
+"payment_method": string | null,
+"photo_urls": (string)[],
+"price_amount": number | null,
+"quote_approved_at": string | null,
+"quote_expires_at": string | null,
+"quote_photo_paths": (string)[],
+"quote_revision_note": string | null,
+"quote_status": string,
+"quote_submitted_at": string | null,
+"rejected_quote_snapshot": Json | null,
+"route_distance_m": number | null,
+"route_duration_s": number | null,
+"route_polyline": string | null,
+"route_updated_at": string | null,
+"status": string,
+"symptoms": string | null,
+"updated_at": string,
+"vehicle_id": string | null
+            }
+                          SetofOptions: {
+        from: "*"
+        to: "service_requests"
+        isOneToOne: true
+        isSetofReturn: false
+      } },
 "request_withdrawal":
 { Args: { "p_account_id": string,"p_amount": number,"p_mechanic_id": string }; Returns: {
               "account_snapshot": NonNullable<Json>,
@@ -1448,6 +1631,53 @@ isOneToOne: false
 "respond_to_assignment":
 { Args: { "p_action": string,"p_request_id": string }; Returns: Json
                            },
+"respond_to_quote":
+{ Args: { "p_action": string,"p_note"?: string,"p_request_id": string }; Returns: {
+              "accepted_at": string | null,
+"additional_notes": string | null,
+"address": string | null,
+"ai_summary": string | null,
+"arrived_at": string | null,
+"assignment_expires_at": string | null,
+"assignment_requested_at": string | null,
+"callout_fee_amount": number,
+"callout_fee_tier": string,
+"client_id": string,
+"completed_at": string | null,
+"contact_phone": string,
+"created_at": string,
+"currency": string,
+"id": string,
+"issue_description": string,
+"lat": number,
+"lng": number,
+"location": unknown,
+"mechanic_id": string | null,
+"payment_method": string | null,
+"photo_urls": (string)[],
+"price_amount": number | null,
+"quote_approved_at": string | null,
+"quote_expires_at": string | null,
+"quote_photo_paths": (string)[],
+"quote_revision_note": string | null,
+"quote_status": string,
+"quote_submitted_at": string | null,
+"rejected_quote_snapshot": Json | null,
+"route_distance_m": number | null,
+"route_duration_s": number | null,
+"route_polyline": string | null,
+"route_updated_at": string | null,
+"status": string,
+"symptoms": string | null,
+"updated_at": string,
+"vehicle_id": string | null
+            }
+                          SetofOptions: {
+        from: "*"
+        to: "service_requests"
+        isOneToOne: true
+        isSetofReturn: false
+      } },
 "set_mechanic_online_status":
 { Args: { "p_is_online": boolean,"p_lat"?: number,"p_lng"?: number }; Returns: {
               "bio": string | null,
@@ -1468,6 +1698,8 @@ isOneToOne: false
 "skills": (string)[],
 "total_jobs": number,
 "updated_at": string,
+"vehicle_label": string | null,
+"vehicle_plate": string | null,
 "vehicle_specialization": (string)[],
 "verified_at": string | null,
 "verified_by": string | null,
@@ -1507,8 +1739,8 @@ isOneToOne: false
 "settle_withdrawal":
 { Args: { "p_failure_code"?: string,"p_status": string,"p_withdrawal_id": string }; Returns: undefined
                            },
-"transition_order_status":
-{ Args: { "p_request_id": string,"p_to_status": string }; Returns: {
+"submit_order_quote":
+{ Args: { "p_photo_paths"?: (string)[],"p_request_id": string }; Returns: {
               "accepted_at": string | null,
 "additional_notes": string | null,
 "address": string | null,
@@ -1516,6 +1748,8 @@ isOneToOne: false
 "arrived_at": string | null,
 "assignment_expires_at": string | null,
 "assignment_requested_at": string | null,
+"callout_fee_amount": number,
+"callout_fee_tier": string,
 "client_id": string,
 "completed_at": string | null,
 "contact_phone": string,
@@ -1530,6 +1764,60 @@ isOneToOne: false
 "payment_method": string | null,
 "photo_urls": (string)[],
 "price_amount": number | null,
+"quote_approved_at": string | null,
+"quote_expires_at": string | null,
+"quote_photo_paths": (string)[],
+"quote_revision_note": string | null,
+"quote_status": string,
+"quote_submitted_at": string | null,
+"rejected_quote_snapshot": Json | null,
+"route_distance_m": number | null,
+"route_duration_s": number | null,
+"route_polyline": string | null,
+"route_updated_at": string | null,
+"status": string,
+"symptoms": string | null,
+"updated_at": string,
+"vehicle_id": string | null
+            }
+                          SetofOptions: {
+        from: "*"
+        to: "service_requests"
+        isOneToOne: true
+        isSetofReturn: false
+      } },
+"transition_order_status":
+{ Args: { "p_request_id": string,"p_to_status": string }; Returns: {
+              "accepted_at": string | null,
+"additional_notes": string | null,
+"address": string | null,
+"ai_summary": string | null,
+"arrived_at": string | null,
+"assignment_expires_at": string | null,
+"assignment_requested_at": string | null,
+"callout_fee_amount": number,
+"callout_fee_tier": string,
+"client_id": string,
+"completed_at": string | null,
+"contact_phone": string,
+"created_at": string,
+"currency": string,
+"id": string,
+"issue_description": string,
+"lat": number,
+"lng": number,
+"location": unknown,
+"mechanic_id": string | null,
+"payment_method": string | null,
+"photo_urls": (string)[],
+"price_amount": number | null,
+"quote_approved_at": string | null,
+"quote_expires_at": string | null,
+"quote_photo_paths": (string)[],
+"quote_revision_note": string | null,
+"quote_status": string,
+"quote_submitted_at": string | null,
+"rejected_quote_snapshot": Json | null,
 "route_distance_m": number | null,
 "route_duration_s": number | null,
 "route_polyline": string | null,
@@ -1566,6 +1854,53 @@ isOneToOne: false
 "vehicle_photo_visible":
 { Args: { "p_path": string }; Returns: boolean
                            },
+"withdraw_order_quote":
+{ Args: { "p_request_id": string }; Returns: {
+              "accepted_at": string | null,
+"additional_notes": string | null,
+"address": string | null,
+"ai_summary": string | null,
+"arrived_at": string | null,
+"assignment_expires_at": string | null,
+"assignment_requested_at": string | null,
+"callout_fee_amount": number,
+"callout_fee_tier": string,
+"client_id": string,
+"completed_at": string | null,
+"contact_phone": string,
+"created_at": string,
+"currency": string,
+"id": string,
+"issue_description": string,
+"lat": number,
+"lng": number,
+"location": unknown,
+"mechanic_id": string | null,
+"payment_method": string | null,
+"photo_urls": (string)[],
+"price_amount": number | null,
+"quote_approved_at": string | null,
+"quote_expires_at": string | null,
+"quote_photo_paths": (string)[],
+"quote_revision_note": string | null,
+"quote_status": string,
+"quote_submitted_at": string | null,
+"rejected_quote_snapshot": Json | null,
+"route_distance_m": number | null,
+"route_duration_s": number | null,
+"route_polyline": string | null,
+"route_updated_at": string | null,
+"status": string,
+"symptoms": string | null,
+"updated_at": string,
+"vehicle_id": string | null
+            }
+                          SetofOptions: {
+        from: "*"
+        to: "service_requests"
+        isOneToOne: true
+        isSetofReturn: false
+      } },
 "workshop_photo_visible":
 { Args: { "p_path": string }; Returns: boolean
                            }

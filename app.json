@@ -47,7 +47,7 @@
         "expo-image-picker",
         {
           "photosPermission": "MontirGo memakai foto galeri untuk menambahkan foto kendaraan agar montir bisa menganalisis kondisinya.",
-          "cameraPermission": false,
+          "cameraPermission": "MontirGo memakai kamera agar montir dapat memotret bukti kerusakan kendaraan saat mengirim estimasi biaya.",
           "microphonePermission": false
         }
       ]

@@ -1,17 +1,30 @@
-# Sistem Pembayaran, Komisi Cash & Dompet Montir
+# Sistem Pembayaran, Biaya Panggil, Komisi Cash & Dompet Montir
 
 Dokumen ini menjelaskan seluruh alur uang di **MontirGo** agar konsisten, tahan race condition, dan dapat diaudit (*auditable ledger*).
 
 ---
 
-## 1. Alur Tagihan & Revisi
+## 1. Biaya Panggil Pasti & Persetujuan Estimasi Digital (`arrived`)
 
-1. Setelah tiba di lokasi (`status = 'arrived'`), montir mengisi baris rincian pada `order_invoice_items` (`description`, `amount`).
-2. Montir memanggil RPC `finalize_order_invoice(p_request_id)` yang menghitung total `SUM(amount)` di server, memvalidasi rentang `[min_order_price, max_order_price]`, dan mengubah status order menjadi `payment`.
-3. Jika montir salah menginput tagihan sebelum dibayar, montir dapat memanggil RPC `reopen_order_invoice(p_request_id)` yang:
-   - Memastikan belum ada pembayaran `paid`.
-   - Membatalkan baris `payments` yang masih `pending`.
-   - Mengembalikan order ke `arrived` agar rincian dapat diubah lalu dikirim ulang.
+1. **Snapshot Biaya Panggil saat Request Dibuat**:
+   - Client memilih tier `Motor` (`callout_fee_motor`, default `Rp25.000`), `Mobil` (`callout_fee_mobil`, default `Rp45.000`), atau `Derek` (`callout_fee_derek`, default `Rp100.000`) saat memanggil `create_service_request`.
+   - Seluruh tarif biaya panggil wajib `>= min_order_price` (`Rp10.000`) dan di-snapshot ke kolom `service_requests.callout_fee_tier` dan `service_requests.callout_fee_amount` di server.
+2. **Baris `callout_fee` Terkunci**:
+   - Saat montir tiba (`transition_order_status('arrived')`), server otomatis membuat 1 baris `order_invoice_items` bertipe `callout_fee` (`is_locked = true`).
+   - Baris ini selalu ditambahkan di atas rincian jasa/suku cadang dalam **1x pembayaran akhir** dan tidak dapat diubah atau dihapus montir (dilindungi RLS + trigger `trg_protect_order_invoice_items`).
+3. **Persetujuan Estimasi & Biaya Tambahan**:
+   - Montir mengirim estimasi via `submit_order_quote` (`quote_status: 'draft' -> 'pending_approval'`), opsional melampirkan maks 3 foto kerusakan di bucket privat `quote-photos`.
+   - Client memilih:
+     - **Setujui Estimasi** (`respond_to_quote('approve')`): menandai item aktif `approved_at = now()`, membuka pengerjaan. Jika ditemukan kerusakan tambahan di tengah perbaikan, montir mengajukan via `request_quote_addon` untuk persetujuan ulang client.
+     - **Minta Revisi** (`respond_to_quote('request_revision', note)`): mengembalikan `quote_status = 'draft'`.
+     - **Tolak & Bayar Biaya Panggil Saja** (`respond_to_quote('callout_only', note)`): menyimpan item ditolak ke `rejected_quote_snapshot`, melakukan soft-void (`voided_at = now()`) pada item non-`callout_fee`, mengunci tagihan ke `callout_fee_amount`, dan langsung memindahkan order ke `status = 'payment'`.
+4. **Finalisasi & Buka Ulang Tagihan**:
+   - `finalize_order_invoice` hanya boleh dipanggil jika `quote_status in ('approved', 'callout_only')` dan semua item aktif sudah ber-`approved_at`. Total `SUM(amount)` item aktif divalidasi dalam `[min_order_price, max_order_price]`.
+   - `reopen_order_invoice` membatalkan `payments` `pending`, mereset status ke `arrived` dengan `quote_status = 'draft'`, dan mengosongkan `approved_at` item non-callout agar persetujuan client wajib diulang. `reopen_order_invoice` diblokir pada `quote_status = 'callout_only'` (`CALLOUT_ONLY_LOCKED`).
+5. **Akuntansi `callout_only`**:
+   - Memakai komisi platform standar (`fee_percent = 10%`) dan jalur pembayaran Xendit / tunai yang sama.
+   - `complaints` dan `reviews` tetap terbuka untuk kedua pihak.
+   - Dikecualikan dari increment `mechanic_profiles.total_jobs` di `refresh_mechanic_jobs` karena perbaikan tidak dilakukan.
 
 ---
 
@@ -32,7 +45,7 @@ Dokumen ini menjelaskan seluruh alur uang di **MontirGo** agar konsisten, tahan 
 
 1. Client memilih tunai (`choose_payment_method(request_id, 'cash')`).
 2. Setelah menerima uang tunai, montir menekan konfirmasi → memanggil Edge Function **`confirm-cash-payment`** (bukan RPC langsung):
-   - **Anti-Double-Charge Guard**: Jika ada `payments` berstatus `pending` dengan `payment_session_id`, server memeriksa `GET /sessions/{id}` ke Xendit terlebih dahulu. Jika ternyata client sudah membayar online (`COMPLETED`), server menuntaskan order sebagai **online (`finalize_payment`)** dan menolak pencatatan cash ganda.
+   - **Anti-Double-Charge Guard**: Jika ada `payments` berstatus `pending` dengan `payment_session_id`, server memeriksa `GET /sessions/{id}` ke Xendit terlebih dahulu. Jika ternyata client sudah membayar online (`COMPLETED`), server menuntaskan order sebagai **online (`finalize_payment`)** dan menolak pencatatan cash ganda (`HTTP 409 ALREADY_PAID_ONLINE`).
    - Jika belum dibayar online, server memanggil RPC `confirm_cash_payment(request_id, mechanic_id)` (`service_role` only).
 3. **Pemotongan Komisi 10% pada Pembayaran Tunai**:
    - Pendapatan dicatat di `earnings` dengan `status = 'settled_cash'`, `payment_method = 'cash'`.
@@ -40,7 +53,6 @@ Dokumen ini menjelaskan seluruh alur uang di **MontirGo** agar konsisten, tahan 
      - Sebanyak mungkin dari `mechanic_wallets.available_balance`.
      - Sisa yang belum tertutupi masuk ke `mechanic_wallets.commission_debt`.
    - Jika `commission_debt >= max_cash_commission_debt` (default `Rp100.000`), montir **diblokir menerima order baru** (`accept_service_request` melempar `COMMISSION_DEBT_LIMIT_EXCEEDED`) sampai utang komisi berkurang lewat order online berikutnya atau top-up admin (`record_commission_topup`).
-   - Layar detail order montir (`active-order/[id]`) menjelaskan persentase komisi platform dan pencatatan tunggakan pada pembayaran tunai, sedangkan layar **Pendapatan** (`earnings.tsx`) dan **Tarik Saldo** (`withdraw.tsx`) menampilkan banner peringatan aktif saat `commission_debt > 0` dan menjeda pencairan dana hingga tunggakan lunas.
 
 ---
 
@@ -64,7 +76,7 @@ Invariant audit: untuk setiap `(mechanic_id, bucket)`, `SUM(amount) == mechanic_
 ## 5. Settlement & Payout (Xendit v3)
 
 1. **Pelepasan Saldo Matang (`release_matured_earnings`)**:
-   - Dijalankan terjadwal setiap 15 menit via `pg_cron` (batch maks 500 baris dengan `FOR UPDATE SKIP LOCKED`), dan secara spesifik per montir saat montir memanggil `refresh_my_wallet` atau mengajukan penarikan.
+   - Dijalankan terjadwal setiap 15 menit via `pg_cron` (batch maks 200 baris dengan `FOR UPDATE SKIP LOCKED`), dan secara spesifik per montir saat montir memanggil `refresh_my_wallet` atau mengajukan penarikan.
    - Saat saldo matang keluar dari `pending_balance`, sistem **otomatis melunasi `commission_debt` terlebih dahulu** (`commission_debt_offset`) sebelum mengkredit sisanya ke `available_balance`.
 2. **Penarikan Saldo (`xendit-request-withdrawal`)**:
    - Montir dengan `commission_debt > 0` wajib melunasi utang komisinya sebelum menarik dana.

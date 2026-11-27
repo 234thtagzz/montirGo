@@ -178,3 +178,8 @@ export function friendlyXenditError(
       return fallback ?? 'Gagal terhubung ke gateway pembayaran.';
   }
 }
+
+/** Kembalikan true jika sesi Xendit sudah berstatus COMPLETED dan pembayaran tunai harus diblokir. */
+export function isXenditSessionCompleted(status: unknown): boolean {
+  return typeof status === 'string' && status.trim().toUpperCase() === 'COMPLETED';
+}

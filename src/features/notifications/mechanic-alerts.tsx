@@ -68,22 +68,33 @@ export function MechanicAlertsProvider({ children }: { children: ReactNode }) {
 
     const openFromResponse = (response: Notifications.NotificationResponse | null) => {
       const data = response?.notification.request.content.data as
-        | { requestId?: unknown; audience?: unknown; type?: unknown }
+        | {
+            requestId?: unknown;
+            audience?: unknown;
+            type?: unknown;
+            relatedEntityType?: unknown;
+            relatedEntityId?: unknown;
+          }
         | undefined;
-      if (!data || typeof data.requestId !== 'string') return;
-      // Notifikasi untuk client memakai data dengan audience 'client'.
-      if (data.audience === 'client') return;
+      if (!data || data.audience === 'client') return;
+      const requestId =
+        typeof data.requestId === 'string'
+          ? data.requestId
+          : data.relatedEntityType === 'service_request' && typeof data.relatedEntityId === 'string'
+            ? data.relatedEntityId
+            : null;
+      if (!requestId) return;
       const isOpenRequest =
         typeof data.type !== 'string' || data.type === 'new_request';
       router.push(
         isOpenRequest
           ? {
               pathname: '/(mechanic)/request/[id]',
-              params: { id: data.requestId },
+              params: { id: requestId },
             }
           : {
               pathname: '/(mechanic)/active-order/[id]',
-              params: { id: data.requestId },
+              params: { id: requestId },
             },
       );
       // Hindari navigasi ulang bila respons yang sama dibaca lagi.
