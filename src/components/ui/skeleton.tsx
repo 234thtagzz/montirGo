@@ -1,6 +1,14 @@
-import { useEffect, useState } from 'react';
-import { Animated, StyleSheet, type DimensionValue, type StyleProp, type ViewStyle } from 'react-native';
-import { Radius } from '@/constants/brand';
+import { useEffect } from 'react';
+import { type DimensionValue, type StyleProp, type ViewStyle } from 'react-native';
+import Animated, {
+  useAnimatedStyle,
+  useReducedMotion,
+  useSharedValue,
+  withRepeat,
+  withSequence,
+  withTiming,
+} from 'react-native-reanimated';
+import { useAppTheme } from '@/theme';
 
 interface SkeletonProps {
   width?: DimensionValue;
@@ -9,28 +17,50 @@ interface SkeletonProps {
   style?: StyleProp<ViewStyle>;
 }
 
-/** Blok abu-abu berdenyut untuk loading state. */
-export function Skeleton({ width = '100%', height = 14, radius = Radius.sm, style }: SkeletonProps) {
-  const [opacity] = useState(() => new Animated.Value(0.5));
+/** Blok placeholder berdenyut (Reanimated) yang menghormati Reduce Motion. */
+export function Skeleton({
+  width = '100%',
+  height = 14,
+  radius,
+  style,
+}: SkeletonProps) {
+  const { theme } = useAppTheme();
+  const reduceMotion = useReducedMotion();
+  const opacity = useSharedValue(reduceMotion ? 0.72 : 0.45);
+  const resolvedRadius = radius ?? theme.radii.sm;
 
   useEffect(() => {
-    const loop = Animated.loop(
-      Animated.sequence([
-        Animated.timing(opacity, { toValue: 1, duration: 720, useNativeDriver: true }),
-        Animated.timing(opacity, { toValue: 0.5, duration: 720, useNativeDriver: true }),
-      ]),
+    if (reduceMotion) {
+      opacity.value = 0.72;
+      return;
+    }
+
+    opacity.value = withRepeat(
+      withSequence(
+        withTiming(0.95, { duration: 720 }),
+        withTiming(0.45, { duration: 720 }),
+      ),
+      -1,
     );
-    loop.start();
-    return () => loop.stop();
-  }, [opacity]);
+  }, [opacity, reduceMotion]);
+
+  const animatedStyle = useAnimatedStyle(() => ({
+    opacity: opacity.value,
+  }));
 
   return (
     <Animated.View
-      style={[styles.base, { width, height, borderRadius: radius, opacity }, style]}
+      style={[
+        {
+          width,
+          height,
+          borderRadius: resolvedRadius,
+          borderCurve: 'continuous',
+          backgroundColor: theme.colors.skeletonBase,
+        },
+        animatedStyle,
+        style,
+      ]}
     />
   );
 }
-
-const styles = StyleSheet.create({
-  base: { backgroundColor: '#E2E7EF' },
-});

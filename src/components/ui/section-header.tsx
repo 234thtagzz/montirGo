@@ -1,6 +1,7 @@
-import { Pressable, StyleSheet, Text, View } from 'react-native';
-import { Brand, Space, Type } from '@/constants/brand';
+import { Pressable, View } from 'react-native';
 import { Ionicons } from '@/components/ui/icon';
+import { AppText } from '@/components/ui/text';
+import { useAppTheme, useThemedStyles, type AppTheme } from '@/theme';
 
 interface SectionHeaderProps {
   title: string;
@@ -16,40 +17,63 @@ export function SectionHeader({
   actionLabel,
   onPressAction,
 }: SectionHeaderProps) {
+  const { theme } = useAppTheme();
+  const styles = useThemedStyles(createStyles);
+
   return (
     <View style={styles.row}>
       <View style={styles.copy}>
-        {eyebrow ? <Text style={styles.eyebrow}>{eyebrow}</Text> : null}
-        <Text style={styles.title}>{title}</Text>
+        {eyebrow ? (
+          <AppText variant="overline" tone="muted" style={styles.eyebrow}>
+            {eyebrow}
+          </AppText>
+        ) : null}
+        <AppText variant="h2" tone="primary">
+          {title}
+        </AppText>
       </View>
       {actionLabel && onPressAction ? (
         <Pressable
           accessibilityRole="button"
+          accessibilityLabel={actionLabel}
           hitSlop={8}
           onPress={onPressAction}
           style={({ pressed }) => [styles.action, pressed && styles.pressed]}
         >
-          <Text style={styles.actionText}>{actionLabel}</Text>
-          <Ionicons name="arrow-forward" size={14} color={Brand.primary} />
+          <AppText variant="label" tone="info">
+            {actionLabel}
+          </AppText>
+          <Ionicons name="arrow-forward" size={14} color={theme.colors.statusInfoFg} />
         </Pressable>
       ) : null}
     </View>
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (theme: AppTheme) => ({
   row: {
-    flexDirection: 'row',
-    alignItems: 'flex-end',
-    justifyContent: 'space-between',
-    gap: Space.md,
-    marginTop: Space.xxl,
-    marginBottom: Space.md,
+    flexDirection: 'row' as const,
+    alignItems: 'flex-end' as const,
+    justifyContent: 'space-between' as const,
+    gap: theme.spacing.md,
+    marginTop: theme.spacing.xxl,
+    marginBottom: theme.spacing.md,
   },
-  copy: { flex: 1 },
-  eyebrow: { ...Type.micro, color: Brand.textMuted, marginBottom: 3 },
-  title: { ...Type.h2, color: Brand.text },
-  action: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingBottom: 2 },
-  actionText: { ...Type.label, color: Brand.primary, fontWeight: '700' },
-  pressed: { opacity: 0.6 },
+  copy: {
+    flex: 1,
+  },
+  eyebrow: {
+    marginBottom: theme.spacing.xxs,
+  },
+  action: {
+    minHeight: theme.touchTarget.min,
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    justifyContent: 'flex-end' as const,
+    gap: theme.spacing.xs,
+    paddingHorizontal: theme.spacing.xs,
+  },
+  pressed: {
+    opacity: 0.65,
+  },
 });

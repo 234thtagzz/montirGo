@@ -17,7 +17,7 @@ import Animated, {
 } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@/components/ui/icon';
-import { Brand, Gradient, Space } from '@/constants/brand';
+import { BootTokens, FontFamily, Radii, Spacing } from '@/theme';
 
 const STAGE_SIZE = 168;
 const LOGO_SIZE = 92;
@@ -36,10 +36,7 @@ interface AppLoadingScreenProps {
 
 /**
  * Layar tunggu aplikasi.
- *
- * Palet mengikuti Beranda: permukaan ink "Night Garage" dengan glow biru
- * elektrik, aksen volt hanya sebagai sinyal live, dan teks inkText/inkMuted.
- * Tidak ada permukaan terang besar agar transisi ke Beranda terasa menyatu.
+ * Menggunakan token `BootTokens` agar transisi splash konsisten tanpa kedipan.
  */
 export function AppLoadingScreen({
   status = 'Menyiapkan layanan…',
@@ -153,56 +150,52 @@ export function AppLoadingScreen({
     >
       <StatusBar style="light" />
 
-      {/* Dasar gelap yang sama dengan header Beranda. */}
       <LinearGradient
-        colors={Gradient.header}
+        colors={[BootTokens.surface, BootTokens.bg]}
         start={{ x: 0.1, y: 0 }}
         end={{ x: 0.9, y: 1 }}
         style={StyleSheet.absoluteFill}
       />
 
       <View pointerEvents="none" style={StyleSheet.absoluteFill}>
-        {/* Cahaya biru dari kiri atas. */}
         <LinearGradient
-          colors={['rgba(11,107,255,0.30)', 'rgba(11,18,32,0)']}
+          colors={[BootTokens.glowBlueStart, BootTokens.glowBlueEnd]}
           locations={[0, 0.62]}
           start={{ x: 0.15, y: 0 }}
           end={{ x: 0.9, y: 0.8 }}
           style={StyleSheet.absoluteFill}
         />
-        {/* Pantulan volt tipis dari kanan bawah. */}
         <LinearGradient
-          colors={['rgba(201,241,88,0.13)', 'rgba(201,241,88,0)']}
+          colors={[BootTokens.glowOrangeStart, BootTokens.glowOrangeEnd]}
           locations={[0, 0.6]}
           start={{ x: 0.9, y: 1 }}
           end={{ x: 0.2, y: 0.3 }}
           style={StyleSheet.absoluteFill}
         />
-        {/* Vignette agar fokus ke tengah dan footer menyatu. */}
         <LinearGradient
-          colors={['rgba(11,18,32,0)', 'rgba(11,18,32,0.88)']}
+          colors={[BootTokens.vignetteStart, BootTokens.vignetteEnd]}
           locations={[0.45, 1]}
           style={StyleSheet.absoluteFill}
         />
 
         <LinearGradient
-          colors={['rgba(11,107,255,0.26)', 'rgba(11,107,255,0)']}
+          colors={[BootTokens.glowBlueStart, BootTokens.glowBlueEnd]}
           start={{ x: 0.3, y: 0.2 }}
           end={{ x: 0.9, y: 0.9 }}
           style={styles.glowTop}
         />
         <LinearGradient
-          colors={['rgba(201,241,88,0.16)', 'rgba(201,241,88,0)']}
+          colors={[BootTokens.glowOrangeStart, BootTokens.glowOrangeEnd]}
           start={{ x: 0.2, y: 0.8 }}
           end={{ x: 0.9, y: 0.1 }}
           style={styles.glowBottom}
         />
 
         <View style={styles.sparkTop}>
-          <Ionicons name="add" size={16} color="rgba(220,228,245,0.22)" />
+          <Ionicons name="add" size={16} color={BootTokens.surfaceBorder} />
         </View>
         <View style={styles.sparkBottom}>
-          <Ionicons name="add" size={12} color="rgba(220,228,245,0.18)" />
+          <Ionicons name="add" size={12} color={BootTokens.surfaceBorder} />
         </View>
       </View>
 
@@ -225,10 +218,10 @@ export function AppLoadingScreen({
           </Animated.View>
 
           <Animated.View style={[styles.chip, styles.chipTop, chipTopStyle]}>
-            <Ionicons name="construct-outline" size={16} color={Brand.volt} />
+            <Ionicons name="construct-outline" size={16} color={BootTokens.emergency} />
           </Animated.View>
           <Animated.View style={[styles.chip, styles.chipBottom, chipBottomStyle]}>
-            <Ionicons name="flash-outline" size={15} color={Brand.inkText} />
+            <Ionicons name="flash-outline" size={15} color={BootTokens.accent} />
           </Animated.View>
         </View>
 
@@ -251,7 +244,7 @@ export function AppLoadingScreen({
         >
           <Animated.View style={[styles.thumb, progressStyle]}>
             <LinearGradient
-              colors={['rgba(201,241,88,0)', Brand.volt, 'rgba(201,241,88,0)']}
+              colors={[BootTokens.glowOrangeEnd, BootTokens.emergency, BootTokens.glowOrangeEnd]}
               start={{ x: 0, y: 0.5 }}
               end={{ x: 1, y: 0.5 }}
               style={StyleSheet.absoluteFill}
@@ -276,7 +269,7 @@ const styles = StyleSheet.create({
     right: 0,
     bottom: 0,
     left: 0,
-    backgroundColor: Brand.ink,
+    backgroundColor: BootTokens.bg,
     overflow: 'hidden',
   },
   screenExiting: { pointerEvents: 'none' },
@@ -302,7 +295,7 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: Space.xxl,
+    paddingHorizontal: Spacing.xxl,
   },
   stage: {
     width: STAGE_SIZE,
@@ -316,7 +309,7 @@ const styles = StyleSheet.create({
     height: STAGE_SIZE,
     borderRadius: STAGE_SIZE / 2,
     borderWidth: 1,
-    borderColor: 'rgba(220,228,245,0.07)',
+    borderColor: BootTokens.surfaceOverlay,
   },
   baseRing: {
     position: 'absolute',
@@ -324,7 +317,7 @@ const styles = StyleSheet.create({
     height: 136,
     borderRadius: 68,
     borderWidth: 1,
-    borderColor: 'rgba(220,228,245,0.12)',
+    borderColor: BootTokens.surfaceBorder,
   },
   halo: {
     position: 'absolute',
@@ -332,7 +325,7 @@ const styles = StyleSheet.create({
     height: STAGE_SIZE,
     borderRadius: STAGE_SIZE / 2,
     borderWidth: 1.5,
-    borderColor: 'rgba(201,241,88,0.55)',
+    borderColor: BootTokens.emergency,
   },
   arc: {
     position: 'absolute',
@@ -341,25 +334,26 @@ const styles = StyleSheet.create({
     borderRadius: 80,
     borderWidth: 2,
     borderColor: 'transparent',
-    borderTopColor: Brand.volt,
-    borderRightColor: 'rgba(201,241,88,0.16)',
+    borderTopColor: BootTokens.accent,
+    borderRightColor: BootTokens.surfaceBorder,
   },
   logoTile: {
     width: LOGO_SIZE,
     height: LOGO_SIZE,
-    borderRadius: 24,
-    backgroundColor: '#F7FAFF',
+    borderRadius: Radii.sheet,
+    borderCurve: 'continuous',
+    backgroundColor: BootTokens.logoTileBg,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.18)',
-    shadowColor: '#000000',
+    borderColor: BootTokens.surfaceBorder,
+    shadowColor: BootTokens.shadow,
     shadowOffset: { width: 0, height: 14 },
-    shadowOpacity: 0.5,
-    shadowRadius: 26,
-    elevation: 16,
+    shadowOpacity: 0.45,
+    shadowRadius: 24,
+    elevation: 14,
   },
   logoClip: {
     flex: 1,
-    borderRadius: 24,
+    borderRadius: Radii.sheet,
     overflow: 'hidden',
   },
   logoImage: { width: '100%', height: '100%' },
@@ -370,26 +364,29 @@ const styles = StyleSheet.create({
     borderRadius: 17,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: 'rgba(220,228,245,0.08)',
+    backgroundColor: BootTokens.surfaceOverlay,
     borderWidth: 1,
-    borderColor: 'rgba(220,228,245,0.16)',
+    borderColor: BootTokens.surfaceBorder,
   },
   chipTop: { top: 12, right: -4 },
   chipBottom: { bottom: 16, left: -6 },
   wordmark: {
-    marginTop: Space.xxl,
+    marginTop: Spacing.xxl,
+    fontFamily: FontFamily.extrabold,
     fontSize: 31,
-    fontWeight: '800',
     letterSpacing: -0.6,
-    color: Brand.white,
+    color: BootTokens.text,
   },
-  wordmarkAccent: { color: Brand.volt, fontWeight: '700' },
+  wordmarkAccent: {
+    fontFamily: FontFamily.bold,
+    color: BootTokens.accent,
+  },
   tagline: {
-    marginTop: Space.sm,
-    fontSize: 10,
-    fontWeight: '700',
-    letterSpacing: 1.8,
-    color: Brand.inkMuted,
+    marginTop: Spacing.sm,
+    fontFamily: FontFamily.bold,
+    fontSize: 11,
+    letterSpacing: 1.6,
+    color: BootTokens.textMuted,
   },
   footer: {
     position: 'absolute',
@@ -403,7 +400,7 @@ const styles = StyleSheet.create({
     height: 3,
     borderRadius: 2,
     overflow: 'hidden',
-    backgroundColor: 'rgba(220,228,245,0.12)',
+    backgroundColor: BootTokens.track,
   },
   thumb: {
     width: THUMB_WIDTH,
@@ -415,17 +412,18 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 7,
-    marginTop: Space.md,
+    marginTop: Spacing.md,
   },
   statusDot: {
-    width: 5,
-    height: 5,
+    width: 6,
+    height: 6,
     borderRadius: 3,
-    backgroundColor: Brand.volt,
+    backgroundColor: BootTokens.emergency,
   },
   status: {
-    fontSize: 11.5,
-    letterSpacing: 0.3,
-    color: Brand.inkMuted,
+    fontFamily: FontFamily.medium,
+    fontSize: 12,
+    letterSpacing: 0.2,
+    color: BootTokens.textMuted,
   },
 });

@@ -1,12 +1,19 @@
-import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
-import { Brand, Radius, Space, Type } from '@/constants/brand';
+import { ActivityIndicator, View } from 'react-native';
+import { Button } from '@/components/ui/button';
 import { Ionicons, type IconName } from '@/components/ui/icon';
+import { AppText } from '@/components/ui/text';
+import { useAppTheme, useThemedStyles, type AppTheme } from '@/theme';
 
 export function LoadingState({ message = 'Memuat...' }: { message?: string }) {
+  const { theme } = useAppTheme();
+  const styles = useThemedStyles(createStyles);
+
   return (
     <View style={styles.center}>
-      <ActivityIndicator color={Brand.primary} />
-      <Text style={styles.text}>{message}</Text>
+      <ActivityIndicator color={theme.colors.actionPrimaryAltBg} />
+      <AppText variant="body" tone="secondary" align="center" style={styles.text}>
+        {message}
+      </AppText>
     </View>
   );
 }
@@ -19,25 +26,39 @@ interface EmptyStateProps {
   onPressAction?: () => void;
 }
 
-export function EmptyState({ message, hint, icon, actionLabel, onPressAction }: EmptyStateProps) {
+export function EmptyState({
+  message,
+  hint,
+  icon,
+  actionLabel,
+  onPressAction,
+}: EmptyStateProps) {
+  const { theme } = useAppTheme();
+  const styles = useThemedStyles(createStyles);
+
   return (
     <View style={styles.emptyBox}>
       {icon ? (
         <View style={styles.iconTile}>
-          <Ionicons name={icon} size={24} color={Brand.primary} />
+          <Ionicons name={icon} size={24} color={theme.colors.statusInfoFg} />
         </View>
       ) : null}
-      <Text style={styles.emptyTitle}>{message}</Text>
-      {hint ? <Text style={styles.text}>{hint}</Text> : null}
+      <AppText variant="title" tone="primary" align="center">
+        {message}
+      </AppText>
+      {hint ? (
+        <AppText variant="body" tone="secondary" align="center" style={styles.text}>
+          {hint}
+        </AppText>
+      ) : null}
       {actionLabel && onPressAction ? (
-        <Pressable
-          accessibilityRole="button"
+        <Button
+          label={actionLabel}
+          icon="arrow-forward"
+          compact
           onPress={onPressAction}
-          style={({ pressed }) => [styles.action, pressed && styles.pressed]}
-        >
-          <Text style={styles.actionText}>{actionLabel}</Text>
-          <Ionicons name="arrow-forward" size={14} color={Brand.volt} />
-        </Pressable>
+          style={styles.action}
+        />
       ) : null}
     </View>
   );
@@ -52,68 +73,63 @@ export function ErrorState({
   message = 'Data gagal dimuat. Periksa koneksi lalu coba lagi.',
   onRetry,
 }: ErrorStateProps) {
+  const { theme } = useAppTheme();
+  const styles = useThemedStyles(createStyles);
+
   return (
     <View style={styles.emptyBox}>
       <View style={[styles.iconTile, styles.errorTile]}>
-        <Ionicons name="cloud-offline-outline" size={24} color={Brand.red} />
+        <Ionicons name="cloud-offline-outline" size={24} color={theme.colors.statusDangerFg} />
       </View>
-      <Text style={styles.emptyTitle}>Gagal memuat</Text>
-      <Text style={styles.text}>{message}</Text>
-      <Pressable
-        accessibilityRole="button"
+      <AppText variant="title" tone="primary" align="center">
+        Gagal memuat
+      </AppText>
+      <AppText variant="body" tone="secondary" align="center" style={styles.text}>
+        {message}
+      </AppText>
+      <Button
+        label="Coba lagi"
+        icon="refresh-outline"
+        compact
         onPress={onRetry}
-        style={({ pressed }) => [styles.action, pressed && styles.pressed]}
-      >
-        <Ionicons name="refresh-outline" size={15} color={Brand.white} />
-        <Text style={styles.actionText}>Coba lagi</Text>
-      </Pressable>
+        style={styles.action}
+      />
     </View>
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (theme: AppTheme) => ({
   center: {
     flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: Brand.background,
-    paddingHorizontal: Space.xxl,
+    justifyContent: 'center' as const,
+    alignItems: 'center' as const,
+    backgroundColor: theme.colors.bgCanvas,
+    paddingHorizontal: theme.spacing.xxl,
   },
   text: {
-    ...Type.body,
-    color: Brand.textSecondary,
-    marginTop: Space.sm,
-    textAlign: 'center',
-    lineHeight: 20,
+    marginTop: theme.spacing.sm,
   },
   emptyBox: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: Space.xxl,
-    paddingHorizontal: Space.lg,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+    paddingVertical: theme.spacing.xxl,
+    paddingHorizontal: theme.spacing.lg,
   },
   iconTile: {
-    width: 56,
-    height: 56,
-    borderRadius: Radius.lg,
-    backgroundColor: Brand.primarySoft,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: Space.lg,
+    width: theme.touchTarget.cta,
+    height: theme.touchTarget.cta,
+    borderRadius: theme.radii.lg,
+    borderCurve: theme.components.card.borderCurve,
+    backgroundColor: theme.colors.statusInfoBg,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+    marginBottom: theme.spacing.lg,
   },
-  errorTile: { backgroundColor: Brand.redSoft },
-  emptyTitle: { ...Type.title, color: Brand.text, textAlign: 'center' },
+  errorTile: {
+    backgroundColor: theme.colors.statusDangerBg,
+  },
   action: {
-    marginTop: Space.lg,
-    minHeight: 42,
-    paddingHorizontal: Space.xl,
-    borderRadius: Radius.pill,
-    backgroundColor: Brand.ink,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 6,
+    marginTop: theme.spacing.lg,
+    borderRadius: theme.radii.pill,
   },
-  actionText: { ...Type.label, color: Brand.white, fontWeight: '700' },
-  pressed: { opacity: 0.75 },
 });

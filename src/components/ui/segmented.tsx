@@ -1,6 +1,6 @@
 import type { ComponentProps } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
-import { Brand, Radius, Tabular, Type } from '@/constants/brand';
+import { Pressable, Text, View } from 'react-native';
+import { useThemedStyles, type AppTheme } from '@/theme';
 
 export interface SegmentedOption<T extends string> {
   value: T;
@@ -11,7 +11,7 @@ interface SegmentedProps<T extends string> {
   options: SegmentedOption<T>[];
   value: T;
   onChange: (value: T) => void;
-  /** `ink` untuk dipakai di atas permukaan gelap. */
+  /** `ink` untuk dipakai di atas permukaan gelap terbalik. */
   tone?: 'light' | 'ink';
   style?: ComponentProps<typeof View>['style'];
 }
@@ -23,10 +23,11 @@ export function Segmented<T extends string>({
   tone = 'light',
   style,
 }: SegmentedProps<T>) {
-  const dark = tone === 'ink';
+  const styles = useThemedStyles(createStyles);
+  const darkSurface = tone === 'ink';
 
   return (
-    <View style={[styles.wrap, dark ? styles.wrapInk : styles.wrapLight, style]}>
+    <View style={[styles.wrap, darkSurface ? styles.wrapInk : styles.wrapLight, style]}>
       {options.map((option) => {
         const active = option.value === value;
         return (
@@ -38,16 +39,16 @@ export function Segmented<T extends string>({
             onPress={() => onChange(option.value)}
             style={({ pressed }) => [
               styles.item,
-              active && (dark ? styles.itemActiveInk : styles.itemActiveLight),
+              active && (darkSurface ? styles.itemActiveInk : styles.itemActiveLight),
               pressed && styles.pressed,
             ]}
           >
             <Text
+              numberOfLines={1}
               style={[
                 styles.label,
-                Tabular,
-                dark && styles.labelInk,
-                active && (dark ? styles.labelActiveInk : styles.labelActiveLight),
+                darkSurface && styles.labelInk,
+                active && (darkSurface ? styles.labelActiveInk : styles.labelActiveLight),
               ]}
             >
               {option.label}
@@ -59,29 +60,57 @@ export function Segmented<T extends string>({
   );
 }
 
-const styles = StyleSheet.create({
-  wrap: { flexDirection: 'row', borderRadius: Radius.md, padding: 4, gap: 4 },
-  wrapLight: { backgroundColor: '#E8ECF3' },
-  wrapInk: { backgroundColor: 'rgba(255,255,255,0.09)' },
+const createStyles = (theme: AppTheme) => ({
+  wrap: {
+    flexDirection: 'row' as const,
+    borderRadius: theme.radii.md,
+    borderCurve: theme.components.card.borderCurve,
+    padding: theme.spacing.xs,
+    gap: theme.spacing.xs,
+  },
+  wrapLight: {
+    backgroundColor: theme.colors.bgSurfaceSubtle,
+    borderWidth: 1,
+    borderColor: theme.colors.borderSubtle,
+  },
+  wrapInk: {
+    backgroundColor: theme.colors.bgInverse,
+    borderWidth: 1,
+    borderColor: theme.colors.borderDefault,
+  },
   item: {
     flex: 1,
-    minHeight: 38,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderRadius: Radius.sm,
+    minHeight: theme.touchTarget.min,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+    paddingHorizontal: theme.spacing.sm,
+    borderRadius: theme.radii.sm,
+    borderCurve: theme.components.card.borderCurve,
   },
   itemActiveLight: {
-    backgroundColor: Brand.surface,
-    shadowColor: '#0B1B33',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 6,
-    elevation: 2,
+    backgroundColor: theme.colors.bgSurface,
+    ...theme.elevation.card,
   },
-  itemActiveInk: { backgroundColor: 'rgba(255,255,255,0.16)' },
-  label: { ...Type.label, color: Brand.textSecondary },
-  labelInk: { color: Brand.inkMuted },
-  labelActiveLight: { color: Brand.text, fontWeight: '700' },
-  labelActiveInk: { color: Brand.white, fontWeight: '700' },
-  pressed: { opacity: 0.7 },
+  itemActiveInk: {
+    backgroundColor: theme.colors.actionPrimaryBg,
+  },
+  label: {
+    ...theme.typography.label,
+    ...theme.tabularNums,
+    color: theme.colors.textSecondary,
+  },
+  labelInk: {
+    color: theme.colors.textInverseMuted,
+  },
+  labelActiveLight: {
+    fontFamily: theme.fontFamily.bold,
+    color: theme.colors.textPrimary,
+  },
+  labelActiveInk: {
+    fontFamily: theme.fontFamily.bold,
+    color: theme.colors.actionPrimaryFg,
+  },
+  pressed: {
+    opacity: 0.72,
+  },
 });

@@ -2,7 +2,7 @@ name: CI
 
 on:
   push:
-    branches: [main, 'dapin/**']
+    branches: [main, 'dapin/**', 'feat/**']
   pull_request:
 
 jobs:

@@ -1,6 +1,6 @@
-import { StyleSheet, View } from 'react-native';
+import { View } from 'react-native';
 import { Ionicons, type IconName } from '@/components/ui/icon';
-import { Brand, Radius } from '@/constants/brand';
+import { useThemedStyles, type AppTheme } from '@/theme';
 
 interface TabIconProps {
   focused: boolean;
@@ -11,9 +11,10 @@ interface TabIconProps {
 
 /**
  * Ikon tab dengan indikator aktif berbentuk kapsul.
- * Memberi umpan balik posisi tanpa perlu tab bar kustom.
  */
 export function TabIcon({ focused, color, name, focusedName }: TabIconProps) {
+  const styles = useThemedStyles(createStyles);
+
   return (
     <View style={[styles.wrap, focused && styles.wrapActive]}>
       <Ionicons name={focused ? focusedName : name} size={20} color={color} />
@@ -21,13 +22,16 @@ export function TabIcon({ focused, color, name, focusedName }: TabIconProps) {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (theme: AppTheme) => ({
   wrap: {
     width: 44,
     height: 28,
-    borderRadius: Radius.sm,
-    alignItems: 'center',
-    justifyContent: 'center',
+    borderRadius: theme.radii.sm,
+    borderCurve: theme.components.card.borderCurve,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
   },
-  wrapActive: { backgroundColor: Brand.primarySoft },
+  wrapActive: {
+    backgroundColor: theme.colors.tabActiveBg,
+  },
 });

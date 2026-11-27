@@ -66,7 +66,7 @@ export function BalanceCard({
         <View style={styles.debtBanner}>
           <Ionicons name="alert-circle-outline" size={15} color={Brand.amber} />
           <Text style={styles.debtText}>
-            Tunggakan komisi tunai: <Money value={debt} size="sm" color={Brand.amber} />.
+            Tunggakan komisi tunai: <Money value={debt} size="sm" color={Brand.amber} inline />.
             Penarikan saldo dijeda sampai tunggakan lunas.
           </Text>
         </View>

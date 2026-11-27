@@ -39,3 +39,13 @@ Docs: https://docs.expo.dev/eas/index.md
 - If `ios/` and `android/` directories do not exist, they are generated (Continuous Native Generation). Never create or edit them by hand — configure native behavior in `app.json` and config plugins.
 - Expo Go only includes its bundled native modules. After adding a library with native code, the app needs a development build: `npx expo run:ios|android` locally, or `eas build --profile development`.
 - Prefer recommended Expo modules over third-party libraries, and check your available skills before adding dependencies. Docs: https://docs.expo.dev/versions/latest/index.md
+
+## Design System & UI Rules ("Calm Utility & High-Trust")
+
+- Always use semantic tokens from `src/theme/` (`useAppTheme()`, `useThemedStyles()`), `Plus Jakarta Sans` mapped per weight (never mix `fontWeight` with custom `fontFamily`), and primitives from `src/components/ui/`.
+- Do not hardcode CSS colors (`#HEX`, `rgba(...)`), `fontSize < 11`, or `Alert.alert()` outside `src/theme/` (enforced by ESLint AST rules + `scripts/design-token-ratchet.json`).
+- Design documentation:
+  - [`docs/design/tokens.md`](./docs/design/tokens.md) — 3-layer tokens, Light/Dark WCAG AA palette, typography, spacing & radii
+  - [`docs/design/components.md`](./docs/design/components.md) — UI primitives catalog (`Surface`, `Text`, `Button`, `TextField`, `Badge`, `Chip`, `Toast`, `BottomSheet`, `SwipeAction`, etc.)
+  - [`docs/design/patterns.md`](./docs/design/patterns.md) — Action-First Home, 3-Tap request, weak-signal fallback, Digital Approval, feedback hierarchy
+  - [`docs/design/guardrails.md`](./docs/design/guardrails.md) — ESLint AST zero-hardcode rules, ratchet lifecycle, and PR checklist

@@ -1,7 +1,6 @@
-import { Image, StyleSheet, Text, View } from 'react-native';
-import { Brand } from '@/constants/brand';
-
-const PALETTE = ['#0B74E5', '#00A651', '#F59E0B', '#8B5CF6', '#EC4899', '#0891B2'];
+import { Image } from 'expo-image';
+import { StyleSheet, Text, View } from 'react-native';
+import { FontFamily, useAppTheme } from '@/theme';
 
 function initials(name: string): string {
   const clean = name.trim();
@@ -11,9 +10,9 @@ function initials(name: string): string {
   return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
 }
 
-function colorFor(name: string): string {
+function colorFor(name: string, palette: readonly string[]): string {
   const code = name.trim().charCodeAt(0) || 0;
-  return PALETTE[code % PALETTE.length];
+  return palette[code % palette.length];
 }
 
 interface AvatarProps {
@@ -23,15 +22,44 @@ interface AvatarProps {
 }
 
 export function Avatar({ name, uri, size = 40 }: AvatarProps) {
+  const { theme } = useAppTheme();
   const dimension = { width: size, height: size, borderRadius: size / 2 };
 
   if (uri) {
-    return <Image source={{ uri }} style={[styles.image, dimension]} />;
+    return (
+      <Image
+        source={{ uri }}
+        contentFit="cover"
+        transition={150}
+        cachePolicy="memory-disk"
+        accessibilityLabel={`Foto profil ${name}`}
+        style={[
+          styles.image,
+          { backgroundColor: theme.colors.bgSurfaceSubtle },
+          dimension,
+        ]}
+      />
+    );
   }
 
   return (
-    <View style={[styles.fallback, dimension, { backgroundColor: colorFor(name) }]}>
-      <Text style={[styles.text, { fontSize: Math.max(11, size * 0.36) }]}>
+    <View
+      accessibilityLabel={`Inisial ${name}`}
+      style={[
+        styles.fallback,
+        dimension,
+        { backgroundColor: colorFor(name, theme.avatar.palette) },
+      ]}
+    >
+      <Text
+        style={[
+          styles.text,
+          {
+            color: theme.avatar.textColor,
+            fontSize: Math.max(11, Math.round(size * 0.36)),
+          },
+        ]}
+      >
         {initials(name)}
       </Text>
     </View>
@@ -39,7 +67,7 @@ export function Avatar({ name, uri, size = 40 }: AvatarProps) {
 }
 
 const styles = StyleSheet.create({
-  image: { backgroundColor: Brand.divider },
+  image: { overflow: 'hidden' },
   fallback: { alignItems: 'center', justifyContent: 'center' },
-  text: { color: Brand.white, fontWeight: '700' },
+  text: { fontFamily: FontFamily.bold },
 });

@@ -1,12 +1,21 @@
-import { DarkTheme, DefaultTheme, ThemeProvider } from 'expo-router/react-navigation';
+import {
+  PlusJakartaSans_400Regular,
+  PlusJakartaSans_500Medium,
+  PlusJakartaSans_600SemiBold,
+  PlusJakartaSans_700Bold,
+  PlusJakartaSans_800ExtraBold,
+} from '@expo-google-fonts/plus-jakarta-sans';
+import * as Font from 'expo-font';
 import { Stack } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
-import { Platform, StyleSheet, useColorScheme } from 'react-native';
 import { useCallback, useEffect, useState } from 'react';
+import { Platform, StyleSheet } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { AppLoadingScreen } from '@/components/app-loading-screen';
+import { ToastProvider } from '@/components/ui/toast';
 import { startAppLifecycle } from '@/lib/app-lifecycle';
 import { supabase } from '@/lib/supabase';
+import { AppThemeProvider } from '@/theme';
 // Daftarkan background location task di module scope sebelum navigasi berjalan.
 import '@/features/mechanic/tracking/background-location';
 
@@ -25,7 +34,6 @@ if (Platform.OS !== 'web') {
 export default function RootLayout() {
   const [isBooting, setIsBooting] = useState(true);
   const [isExiting, setIsExiting] = useState(false);
-  const colorScheme = useColorScheme();
 
   // Splash native baru dilepas setelah splash animasi benar-benar tergambar,
   // sehingga tidak ada kedipan layar kosong di antaranya.
@@ -43,16 +51,21 @@ export default function RootLayout() {
 
     const boot = async () => {
       try {
-        // Pulihkan sesi Supabase (persisted di AsyncStorage oleh supabase-js).
-        // Redirect otomatis per-role ditangani di src/app/index.tsx.
-        // Jangan tahan splash terlalu lama bila jaringan lambat: index.tsx
-        // tetap menunggu sesi dan menampilkan status yang sesuai.
-        await Promise.race([
-          supabase.auth.getSession(),
-          new Promise((resolve) => setTimeout(resolve, 1500)),
+        await Promise.all([
+          Font.loadAsync({
+            PlusJakartaSans_400Regular,
+            PlusJakartaSans_500Medium,
+            PlusJakartaSans_600SemiBold,
+            PlusJakartaSans_700Bold,
+            PlusJakartaSans_800ExtraBold,
+          }).catch(() => {}),
+          Promise.race([
+            supabase.auth.getSession(),
+            new Promise((resolve) => setTimeout(resolve, 1500)),
+          ]).catch(() => {}),
         ]);
       } catch {
-        // Gagal restore sesi tidak boleh menahan aplikasi; index.tsx akan redirect ke login.
+        // Gagal restore sesi atau font tidak boleh menahan aplikasi.
       }
 
       const remaining = MIN_BOOT_MS - (Date.now() - startedAt);
@@ -67,7 +80,7 @@ export default function RootLayout() {
       }, EXIT_MS);
     };
 
-    boot();
+    void boot();
 
     return () => {
       cancelled = true;
@@ -75,24 +88,22 @@ export default function RootLayout() {
     };
   }, []);
 
-  if (isBooting) {
-    return (
-      <GestureHandlerRootView style={styles.root}>
-        <AppLoadingScreen exiting={isExiting} onLayout={hideNativeSplash} />
-      </GestureHandlerRootView>
-    );
-  }
-
   return (
     <GestureHandlerRootView style={styles.root}>
-      <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
-        <Stack screenOptions={{ headerShown: false }}>
-          <Stack.Screen name="index" />
-          <Stack.Screen name="(auth)" />
-          <Stack.Screen name="(client)" />
-          <Stack.Screen name="(mechanic)" />
-        </Stack>
-      </ThemeProvider>
+      <AppThemeProvider>
+        <ToastProvider>
+          {isBooting ? (
+            <AppLoadingScreen exiting={isExiting} onLayout={hideNativeSplash} />
+          ) : (
+            <Stack screenOptions={{ headerShown: false }}>
+              <Stack.Screen name="index" />
+              <Stack.Screen name="(auth)" />
+              <Stack.Screen name="(client)" />
+              <Stack.Screen name="(mechanic)" />
+            </Stack>
+          )}
+        </ToastProvider>
+      </AppThemeProvider>
     </GestureHandlerRootView>
   );
 }

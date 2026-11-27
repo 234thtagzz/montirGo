@@ -1,20 +1,25 @@
+import { Tabs } from 'expo-router';
 import { iconColor } from '@/components/ui/icon';
 import { TabIcon } from '@/components/ui/tab-icon';
-import { Brand } from '@/constants/brand';
 import { useTabBarStyle } from '@/hooks/use-tab-bar-style';
-import { Tabs } from 'expo-router';
+import { useAppTheme } from '@/theme';
 
 export default function ClientTabsLayout() {
   const tabBarStyle = useTabBarStyle();
+  const { theme } = useAppTheme();
 
   return (
     <Tabs
       screenOptions={{
         headerShown: false,
-        tabBarActiveTintColor: Brand.primary,
-        tabBarInactiveTintColor: Brand.textMuted,
+        tabBarActiveTintColor: theme.colors.tabActive,
+        tabBarInactiveTintColor: theme.colors.tabInactive,
         tabBarStyle,
-        tabBarLabelStyle: { fontSize: 10.5, fontWeight: '600', marginTop: 1 },
+        tabBarLabelStyle: {
+          fontFamily: theme.fontFamily.semibold,
+          fontSize: 11,
+          marginTop: 1,
+        },
         tabBarItemStyle: { paddingTop: 2 },
         tabBarHideOnKeyboard: true,
       }}
@@ -26,7 +31,7 @@ export default function ClientTabsLayout() {
           tabBarIcon: ({ color, focused }) => (
             <TabIcon
               focused={focused}
-              color={iconColor(color, Brand.textMuted)}
+              color={iconColor(color, theme.colors.tabInactive)}
               name="grid-outline"
               focusedName="grid"
             />
@@ -40,7 +45,7 @@ export default function ClientTabsLayout() {
           tabBarIcon: ({ color, focused }) => (
             <TabIcon
               focused={focused}
-              color={iconColor(color, Brand.textMuted)}
+              color={iconColor(color, theme.colors.tabInactive)}
               name="receipt-outline"
               focusedName="receipt"
             />
@@ -54,7 +59,7 @@ export default function ClientTabsLayout() {
           tabBarIcon: ({ color, focused }) => (
             <TabIcon
               focused={focused}
-              color={iconColor(color, Brand.textMuted)}
+              color={iconColor(color, theme.colors.tabInactive)}
               name="car-sport-outline"
               focusedName="car-sport"
             />
@@ -68,7 +73,7 @@ export default function ClientTabsLayout() {
           tabBarIcon: ({ color, focused }) => (
             <TabIcon
               focused={focused}
-              color={iconColor(color, Brand.textMuted)}
+              color={iconColor(color, theme.colors.tabInactive)}
               name="sparkles-outline"
               focusedName="sparkles"
             />
@@ -82,7 +87,7 @@ export default function ClientTabsLayout() {
           tabBarIcon: ({ color, focused }) => (
             <TabIcon
               focused={focused}
-              color={iconColor(color, Brand.textMuted)}
+              color={iconColor(color, theme.colors.tabInactive)}
               name="person-outline"
               focusedName="person"
             />

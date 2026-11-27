@@ -92,6 +92,10 @@ supabase/
 - [`docs/database-and-rls.md`](./docs/database-and-rls.md) — Skema database, views, trigger, & matriks RLS
 - [`docs/payments-and-wallet.md`](./docs/payments-and-wallet.md) — Tagihan, Xendit checkout/payout, cash & `commission_debt`
 - [`docs/development-and-deploy.md`](./docs/development-and-deploy.md) — Pemisahan environment, migrasi CLI, EAS build & ADB
+- [`docs/design/tokens.md`](./docs/design/tokens.md) — Token desain 3 lapis, palet Light/Dark WCAG AA, & tipografi
+- [`docs/design/components.md`](./docs/design/components.md) — Katalog primitif UI (`src/components/ui/`)
+- [`docs/design/patterns.md`](./docs/design/patterns.md) — Pola UX Action-First, 3-Tap, sinyal lemah, & Dark Mode peta
+- [`docs/design/guardrails.md`](./docs/design/guardrails.md) — Guardrail ESLint Zero Hardcode & ratchet migrasi
 - [`AGENTS.md`](./AGENTS.md) — Aturan pengembangan Expo / React Native
 
 ## Catatan
