@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ComponentRef } from 'react';
-import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Platform, StyleSheet, View } from 'react-native';
 import { WebView, type WebViewMessageEvent } from 'react-native-webview';
-import { Brand, Space } from '@/constants/brand';
+import { AppText } from '@/components/ui/text';
+import { useAppTheme, useThemedStyles, type AppTheme } from '@/theme';
 import { TripMapFallback } from './trip-map-fallback';
-import { buildTripMapHtml } from './trip-map-html';
+import { buildTripMapHtml, getMapThemeTokens } from './trip-map-html';
 import type { TripMapProps } from './trip-map-props';
 
 interface BridgeMessage {
@@ -13,11 +14,7 @@ interface BridgeMessage {
 }
 
 /**
- * Peta berbasis WebView (Leaflet + tile raster).
- *
- * Dipilih sebagai renderer default karena tetap menampilkan rute perjalanan di
- * Expo Go — `react-native-maps` di Expo Go Android hanya menghasilkan petak
- * kosong/hitam sejak SDK 52.
+ * Peta berbasis WebView (Leaflet terbundel lokal + tile raster + Dark Mode live).
  */
 export function TripMapWebView({
   mechanic,
@@ -31,17 +28,22 @@ export function TripMapWebView({
   recenterToken,
   onFollowChange,
 }: TripMapProps) {
+  const { theme } = useAppTheme();
+  const styles = useThemedStyles(createStyles);
   const webRef = useRef<ComponentRef<typeof WebView>>(null);
   const [ready, setReady] = useState(false);
   const [failed, setFailed] = useState(false);
   const lastRecenterRef = useRef(recenterToken);
 
-  const html = useMemo(() => buildTripMapHtml(), []);
+  const mapTokens = useMemo(() => getMapThemeTokens(theme), [theme]);
+  // Simpan token awal agar HTML dibangun sekali saja; perubahan tema berikutnya
+  // disuntikkan via `window.TripMap.setTheme` tanpa memuat ulang WebView.
+  const [initialTokens] = useState(() => mapTokens);
+  const html = useMemo(() => buildTripMapHtml(initialTokens), [initialTokens]);
 
   const run = useCallback(
     (script: string) => {
       if (!ready) return;
-      // `true;` menutup evaluasi agar WebView iOS tidak menganggap hasilnya kosong.
       webRef.current?.injectJavaScript(`${script} true;`);
     },
     [ready],
@@ -66,10 +68,13 @@ export function TripMapWebView({
   );
 
   useEffect(() => {
+    run(`window.TripMap.setTheme(${JSON.stringify(mapTokens)});`);
+  }, [run, mapTokens]);
+
+  useEffect(() => {
     run(`window.TripMap.setInsets(${Math.round(topInset)}, ${Math.round(bottomInset)});`);
   }, [run, topInset, bottomInset]);
 
-  // Mode "client": kamera membingkai rute, bukan mengikuti montir.
   useEffect(() => {
     run(`window.TripMap.setMode(${JSON.stringify(mode)});`);
   }, [run, mode]);
@@ -93,7 +98,6 @@ export function TripMapWebView({
       point.latitude,
       point.longitude,
     ]);
-    // `fit` diserahkan ke halaman web: hanya bingkai rute pada rute pertama.
     run(
       `window.TripMap.setRoute(${JSON.stringify(points)}, ${
         estimated ? 'true' : 'false'
@@ -108,7 +112,7 @@ export function TripMapWebView({
     run('window.TripMap.recenter();');
   }, [run, recenterToken, onFollowChange]);
 
-  if (failed) {
+  if (Platform.OS === 'web' || failed) {
     return (
       <TripMapFallback
         destination={destination}
@@ -116,8 +120,12 @@ export function TripMapWebView({
         estimated={estimated}
         topInset={topInset}
         bottomInset={bottomInset}
-        title="Peta tidak bisa dimuat"
-        hint="Periksa koneksi internet, lalu buka ulang layar ini. Peta memakai WebView + tile OpenStreetMap."
+        title={Platform.OS === 'web' ? 'Pratinjau peta tersedia di perangkat mobile' : 'Peta tidak bisa dimuat'}
+        hint={
+          Platform.OS === 'web'
+            ? 'Gunakan aplikasi Android / iOS untuk navigasi peta interaktif.'
+            : 'Periksa koneksi internet untuk memuat petak peta. Leaflet sudah terpasang lokal.'
+        }
       />
     );
   }
@@ -143,30 +151,30 @@ export function TripMapWebView({
 
       {!ready ? (
         <View pointerEvents="none" style={styles.loading}>
-          <ActivityIndicator color={Brand.primary} />
-          <Text style={styles.loadingText}>Memuat peta…</Text>
+          <ActivityIndicator color={theme.colors.actionPrimaryAltBg} />
+          <AppText variant="caption" tone="muted">
+            Memuat peta…
+          </AppText>
         </View>
       ) : null}
     </View>
   );
 }
 
-const styles = StyleSheet.create({
-  web: { flex: 1, backgroundColor: '#EEF2F7' },
+const createStyles = (theme: AppTheme) => ({
+  web: {
+    flex: 1,
+    backgroundColor: theme.colors.bgCanvas,
+  },
   loading: {
-    position: 'absolute',
+    position: 'absolute' as const,
     top: 0,
     left: 0,
     right: 0,
     bottom: 0,
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: Space.sm,
-    backgroundColor: '#EEF2F7',
-  },
-  loadingText: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: Brand.textMuted,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+    gap: theme.spacing.sm,
+    backgroundColor: theme.colors.bgCanvas,
   },
 });

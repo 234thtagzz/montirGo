@@ -1,39 +1,51 @@
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Pressable, ScrollView, View } from 'react-native';
 import { useRouter } from 'expo-router';
-import { ScreenHeader } from '@/components/ui/screen-header';
 import { Ionicons, type IconName } from '@/components/ui/icon';
-import { Brand, Radius, ScreenPadding, Space, Type } from '@/constants/brand';
+import { ScreenHeader } from '@/components/ui/screen-header';
+import { Surface } from '@/components/ui/surface';
+import { AppText } from '@/components/ui/text';
 import { SERVICE_CATEGORIES, type ServiceCategory } from '@/features/service-request/categories';
+import { useAppTheme, useThemedStyles, type AppTheme } from '@/theme';
 
 const URGENT_KEYS = ['montir', 'aki', 'ban', 'derek', 'bensin'];
 
 function CategoryRow({
   category,
+  isLast,
   onPress,
 }: {
   category: ServiceCategory;
+  isLast?: boolean;
   onPress: () => void;
 }) {
+  const { theme } = useAppTheme();
+  const styles = useThemedStyles(createStyles);
+  const tonePalette = theme.tones[category.tone];
+
   return (
     <Pressable
       accessibilityRole="button"
       accessibilityLabel={category.label}
       onPress={onPress}
-      style={({ pressed }) => [styles.row, pressed && styles.pressed]}
+      style={({ pressed }) => [styles.row, isLast && styles.rowLast, pressed && styles.pressed]}
     >
-      <View style={[styles.iconBox, { backgroundColor: category.background }]}>
-        <Ionicons name={category.icon} size={21} color={category.color} />
+      <View style={[styles.iconBox, { backgroundColor: tonePalette.bg }]}>
+        <Ionicons name={category.icon} size={21} color={tonePalette.fg} />
       </View>
       <View style={styles.copy}>
-        <Text style={styles.label}>{category.label}</Text>
-        <Text style={styles.description}>{category.description}</Text>
+        <AppText variant="label">{category.label}</AppText>
+        <AppText variant="caption" tone="secondary">
+          {category.description}
+        </AppText>
       </View>
-      <Ionicons name="chevron-forward" size={17} color={Brand.textMuted} />
+      <Ionicons name="chevron-forward" size={18} color={theme.colors.textMuted} />
     </Pressable>
   );
 }
 
 export default function ServicesScreen() {
+  const { theme } = useAppTheme();
+  const styles = useThemedStyles(createStyles);
   const router = useRouter();
 
   const open = (category: ServiceCategory) => {
@@ -58,120 +70,127 @@ export default function ServicesScreen() {
       <ScreenHeader title="Layanan" subtitle="Pilih bantuan yang kamu butuhkan" />
 
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-        <View style={styles.note}>
+        <Surface variant="default" padding="md" style={styles.note}>
           <View style={styles.noteIcon}>
-            <Ionicons name="information-circle-outline" size={16} color={Brand.primary} />
+            <Ionicons name="information-circle-outline" size={18} color={theme.colors.statusInfoFg} />
           </View>
-          <Text style={styles.noteText}>
-            Setiap layanan membuka form permintaan dengan deskripsi awal yang bisa kamu ubah.
-          </Text>
-        </View>
+          <AppText variant="caption" tone="secondary" style={styles.flexCopy}>
+            Setiap layanan membuka form permintaan 3 ketukan dengan Biaya Panggil Pasti yang transparan.
+          </AppText>
+        </Surface>
 
         <SectionLabel icon="alert-circle-outline" label="DARURAT DI LOKASI" />
-        <View style={styles.group}>
-          {urgent.map((category) => (
+        <Surface variant="default" padding="none" style={styles.group}>
+          {urgent.map((category, index) => (
             <CategoryRow
               key={category.key}
               category={category}
+              isLast={index === urgent.length - 1}
               onPress={() => open(category)}
             />
           ))}
-        </View>
+        </Surface>
 
         <SectionLabel icon="build-outline" label="PERAWATAN & LAINNYA" />
-        <View style={styles.group}>
-          {others.map((category) => (
+        <Surface variant="default" padding="none" style={styles.group}>
+          {others.map((category, index) => (
             <CategoryRow
               key={category.key}
               category={category}
+              isLast={index === others.length - 1}
               onPress={() => open(category)}
             />
           ))}
-        </View>
+        </Surface>
 
-        <Text style={styles.footnote}>
-          Butuh bantuan di luar daftar ini? Pilih “Butuh Montir” dan jelaskan keluhanmu.
-        </Text>
+        <AppText variant="caption" tone="muted" style={styles.footnote}>
+          Butuh bantuan di luar daftar ini? Pilih “Mogok / Mesin” dan jelaskan keluhanmu.
+        </AppText>
       </ScrollView>
     </View>
   );
 }
 
 function SectionLabel({ icon, label }: { icon: IconName; label: string }) {
+  const { theme } = useAppTheme();
+  const styles = useThemedStyles(createStyles);
   return (
     <View style={styles.sectionRow}>
-      <Ionicons name={icon} size={12} color={Brand.textMuted} />
-      <Text style={styles.sectionLabel}>{label}</Text>
+      <Ionicons name={icon} size={13} color={theme.colors.textMuted} />
+      <AppText variant="overline" tone="muted">
+        {label}
+      </AppText>
       <View style={styles.sectionLine} />
     </View>
   );
 }
 
-const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: Brand.background },
-  content: { paddingHorizontal: ScreenPadding, paddingBottom: Space.xxxl },
+const createStyles = (theme: AppTheme) => ({
+  screen: {
+    flex: 1,
+    backgroundColor: theme.colors.bgCanvas,
+  },
+  content: {
+    paddingHorizontal: theme.spacing.screenPadding,
+    paddingBottom: theme.spacing.xxxl,
+  },
   note: {
-    flexDirection: 'row',
-    gap: Space.sm,
-    alignItems: 'center',
-    backgroundColor: Brand.surface,
-    borderRadius: Radius.lg,
-    borderWidth: 1,
-    borderColor: Brand.border,
-    padding: Space.md,
-    marginTop: Space.xs,
+    flexDirection: 'row' as const,
+    gap: theme.spacing.sm,
+    alignItems: 'center' as const,
+    marginTop: theme.spacing.xs,
   },
   noteIcon: {
-    width: 26,
-    height: 26,
-    borderRadius: Radius.xs,
-    backgroundColor: Brand.primarySoft,
-    alignItems: 'center',
-    justifyContent: 'center',
+    width: 32,
+    height: 32,
+    borderRadius: theme.radii.sm,
+    backgroundColor: theme.colors.statusInfoBg,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
   },
-  noteText: { flex: 1, fontSize: 11.5, color: Brand.textSecondary, lineHeight: 16 },
+  flexCopy: { flex: 1 },
   sectionRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    marginTop: Space.xl,
-    marginBottom: Space.md,
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: theme.spacing.xs,
+    marginTop: theme.spacing.xl,
+    marginBottom: theme.spacing.sm,
   },
-  sectionLabel: { ...Type.micro, color: Brand.textMuted, letterSpacing: 0.9 },
-  sectionLine: { flex: 1, height: StyleSheet.hairlineWidth, backgroundColor: Brand.border },
+  sectionLine: {
+    flex: 1,
+    height: 1,
+    backgroundColor: theme.colors.borderSubtle,
+  },
   group: {
-    backgroundColor: Brand.surface,
-    borderRadius: Radius.lg,
-    borderWidth: 1,
-    borderColor: Brand.border,
-    overflow: 'hidden',
+    overflow: 'hidden' as const,
   },
   row: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Space.md,
-    padding: Space.md,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: Brand.divider,
-    minHeight: 66,
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: theme.spacing.md,
+    padding: theme.spacing.md,
+    borderBottomWidth: 1,
+    borderBottomColor: theme.colors.borderSubtle,
+    minHeight: 68,
   },
-  pressed: { opacity: 0.7 },
+  rowLast: {
+    borderBottomWidth: 0,
+  },
+  pressed: { opacity: 0.78 },
   iconBox: {
-    width: 42,
-    height: 42,
-    borderRadius: Radius.sm,
-    alignItems: 'center',
-    justifyContent: 'center',
+    width: 44,
+    height: 44,
+    borderRadius: theme.radii.sm,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
   },
-  copy: { flex: 1 },
-  label: { ...Type.bodyStrong, color: Brand.text },
-  description: { fontSize: 11.5, color: Brand.textSecondary, marginTop: 2, lineHeight: 16 },
+  copy: {
+    flex: 1,
+    gap: theme.spacing.xxs,
+  },
   footnote: {
-    ...Type.meta,
-    color: Brand.textMuted,
-    lineHeight: 17,
-    marginTop: Space.xl,
-    textAlign: 'center',
-    paddingHorizontal: Space.lg,
+    marginTop: theme.spacing.xl,
+    textAlign: 'center' as const,
+    paddingHorizontal: theme.spacing.lg,
   },
 });

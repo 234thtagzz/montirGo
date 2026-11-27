@@ -1,38 +1,94 @@
-import { Brand } from '@/constants/brand';
+import type { AppTheme } from '@/theme';
+import { LEAFLET_CSS, LEAFLET_JS } from './leaflet-bundle';
 
-/**
- * Tile peta untuk renderer WebView. Default OpenStreetMap (gratis, tanpa key).
- * Untuk produksi ganti ke penyedia ber-SLA (MapTiler, Carto, dsb.) lewat env:
- * `EXPO_PUBLIC_MAP_TILE_URL` + `EXPO_PUBLIC_MAP_TILE_ATTRIBUTION`.
- */
 const DEFAULT_TILE_URL = 'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
 const DEFAULT_TILE_ATTRIBUTION = '&copy; OpenStreetMap contributors';
-const LEAFLET_VERSION = '1.9.4';
 
 export interface TripMapTiles {
   url: string;
+  darkUrl: string | null;
   attribution: string;
+}
+
+export interface MapThemeTokens {
+  isDark: boolean;
+  canvas: string;
+  surface: string;
+  border: string;
+  text: string;
+  textMuted: string;
+  accent: string;
+  accentFg: string;
+  routeCasing: string;
+  pinBg: string;
+  pinBorder: string;
+  halo: string;
+  scrim: string;
 }
 
 export function getTripMapTiles(): TripMapTiles {
   return {
     url: process.env.EXPO_PUBLIC_MAP_TILE_URL?.trim() || DEFAULT_TILE_URL,
+    darkUrl: process.env.EXPO_PUBLIC_MAP_TILE_URL_DARK?.trim() || null,
     attribution:
       process.env.EXPO_PUBLIC_MAP_TILE_ATTRIBUTION?.trim() || DEFAULT_TILE_ATTRIBUTION,
   };
 }
 
+export function getMapThemeTokens(theme: AppTheme): MapThemeTokens {
+  return {
+    isDark: theme.isDark,
+    canvas: theme.colors.bgCanvas,
+    surface: theme.colors.bgSurface,
+    border: theme.colors.borderDefault,
+    text: theme.colors.textPrimary,
+    textMuted: theme.colors.textSecondary,
+    accent: theme.colors.actionPrimaryAltBg,
+    accentFg: theme.colors.actionPrimaryFg,
+    routeCasing: theme.colors.bgSurface,
+    pinBg: theme.colors.bgSurface,
+    pinBorder: theme.colors.actionPrimaryAltBg,
+    halo: theme.colors.statusInfoBg,
+    scrim: theme.colors.shadowColor,
+  };
+}
+
+function sharedMapStyles(tokens: MapThemeTokens): string {
+  return `
+  :root {
+    --map-bg: ${tokens.canvas};
+    --map-surface: ${tokens.surface};
+    --map-border: ${tokens.border};
+    --map-text: ${tokens.text};
+    --map-text-muted: ${tokens.textMuted};
+    --map-accent: ${tokens.accent};
+    --map-accent-fg: ${tokens.accentFg};
+    --map-pin-bg: ${tokens.pinBg};
+    --map-pin-border: ${tokens.pinBorder};
+    --map-halo: ${tokens.halo};
+  }
+  html, body { margin: 0; padding: 0; height: 100%; background: var(--map-bg); overflow: hidden; }
+  #map { position: absolute; inset: 0; background: var(--map-bg); }
+  .leaflet-container { background: var(--map-bg); font-family: -apple-system, Roboto, sans-serif; }
+  #map.map-dark-tiles .leaflet-tile-pane {
+    filter: invert(100%) hue-rotate(180deg) brightness(92%) contrast(88%);
+  }
+  .leaflet-control-attribution {
+    font-size: 10px;
+    padding: 2px 6px;
+    background: var(--map-surface);
+    color: var(--map-text-muted);
+    opacity: 0.88;
+  }
+  .leaflet-control-attribution a { color: var(--map-accent); }
+`;
+}
+
 /**
- * HTML peta yang dirender di WebView: Leaflet + tile raster.
- *
- * Dipakai karena bisa jalan di Expo Go maupun development build (tidak butuh
- * Google Maps SDK / key), sementara `react-native-maps` tidak lagi menampilkan
- * petak peta di Expo Go Android.
- *
- * Jembatan RN → web: `window.TripMap.setMechanic/setDestination/setRoute/...`
- * Jembatan web → RN: `window.ReactNativeWebView.postMessage(JSON.stringify(...))`
+ * HTML peta perjalanan berbasis Leaflet 1.9.4 terbundel lokal + dukungan Dark Mode dinamis
+ * melalui `window.TripMap.setTheme(tokens)` tanpa memuat ulang WebView.
  */
-export function buildTripMapHtml(): string {
+export function buildTripMapHtml(initialTokens: MapThemeTokens): string {
   const tiles = getTripMapTiles();
 
   return `<!DOCTYPE html>
@@ -40,47 +96,40 @@ export function buildTripMapHtml(): string {
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
-<link rel="stylesheet" href="https://unpkg.com/leaflet@${LEAFLET_VERSION}/dist/leaflet.css" />
+<style>${LEAFLET_CSS}</style>
 <style>
-  html, body { margin: 0; padding: 0; height: 100%; background: #EEF2F7; }
-  #map { position: absolute; inset: 0; }
-  .leaflet-container { background: #EEF2F7; font-family: -apple-system, Roboto, sans-serif; }
-  .leaflet-control-attribution {
-    font-size: 9px;
-    padding: 1px 5px;
-    background: rgba(255, 255, 255, 0.82);
-    color: #6B7280;
-  }
-  .leaflet-control-attribution a { color: ${Brand.primary}; }
+${sharedMapStyles(initialTokens)}
   .pin-client {
     width: 36px; height: 36px; border-radius: 18px;
-    background: #FFFFFF; border: 2px solid ${Brand.primary};
+    background: var(--map-pin-bg); border: 2px solid var(--map-pin-border);
     display: flex; align-items: center; justify-content: center;
-    box-shadow: 0 2px 6px rgba(11, 27, 51, 0.25);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
     box-sizing: border-box;
   }
+  .pin-client svg { stroke: var(--map-accent); }
   .pin-me {
-    width: 42px; height: 42px; border-radius: 21px;
-    background: rgba(11, 116, 229, 0.18);
+    width: 44px; height: 44px; border-radius: 22px;
+    background: var(--map-halo);
     display: flex; align-items: center; justify-content: center;
+    opacity: 0.96;
   }
   .pin-me-dot {
     width: 28px; height: 28px; border-radius: 14px;
-    background: ${Brand.primary}; border: 2px solid #FFFFFF;
+    background: var(--map-accent); border: 2px solid var(--map-pin-bg);
     display: flex; align-items: center; justify-content: center;
-    box-shadow: 0 2px 6px rgba(11, 27, 51, 0.3);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.28);
     box-sizing: border-box;
   }
-  .pin-me-arrow { display: block; transition: transform 0.25s linear; }
+  .pin-me-arrow { display: block; transition: transform 0.25s linear; fill: var(--map-accent-fg); }
 </style>
 </head>
 <body>
 <div id="map"></div>
-<script src="https://unpkg.com/leaflet@${LEAFLET_VERSION}/dist/leaflet.js"></script>
+<script>${LEAFLET_JS}</script>
 <script>
 (function () {
   var TILES = ${JSON.stringify(tiles)};
-  var ACCENT = '${Brand.primary}';
+  var tokens = ${JSON.stringify(initialTokens)};
   var FOLLOW_ZOOM = 16;
   var TOP_INSET = 120;
   var BOTTOM_INSET = 300;
@@ -96,13 +145,12 @@ export function buildTripMapHtml(): string {
     return;
   }
 
+  var mapEl = document.getElementById('map');
   var follow = true;
   var hasFitted = false;
   var hasCentered = false;
   var arrowEl = null;
-  // 'mechanic' = kamera mengikuti montir; 'client' = kamera membingkai rute.
   var MODE = 'mechanic';
-  // Tampilan client: berhenti membingkai otomatis setelah pengguna menggeser peta.
   var viewerPanned = false;
 
   var map = L.map('map', {
@@ -112,27 +160,63 @@ export function buildTripMapHtml(): string {
     zoomSnap: 0.5,
     fadeAnimation: true,
   });
-  L.tileLayer(TILES.url, {
+
+  function tileUrlFor(isDark) {
+    return isDark && TILES.darkUrl ? TILES.darkUrl : TILES.url;
+  }
+
+  var activeTileUrl = tileUrlFor(tokens.isDark);
+  var tileLayer = L.tileLayer(activeTileUrl, {
     maxZoom: 19,
     attribution: TILES.attribution,
     crossOrigin: true,
   }).addTo(map);
+
   map.setView([-6.2, 106.816666], 12, { animate: false });
 
   var casing = L.polyline([], {
-    color: '#FFFFFF', weight: 9, opacity: 0.95,
+    color: tokens.routeCasing, weight: 9, opacity: 0.95,
     lineCap: 'round', lineJoin: 'round', interactive: false,
   }).addTo(map);
   var line = L.polyline([], {
-    color: ACCENT, weight: 5, opacity: 1,
+    color: tokens.accent, weight: 5, opacity: 1,
     lineCap: 'round', lineJoin: 'round', interactive: false,
   }).addTo(map);
+
+  function applyTheme(next) {
+    tokens = next || tokens;
+    var root = document.documentElement.style;
+    root.setProperty('--map-bg', tokens.canvas);
+    root.setProperty('--map-surface', tokens.surface);
+    root.setProperty('--map-border', tokens.border);
+    root.setProperty('--map-text', tokens.text);
+    root.setProperty('--map-text-muted', tokens.textMuted);
+    root.setProperty('--map-accent', tokens.accent);
+    root.setProperty('--map-accent-fg', tokens.accentFg);
+    root.setProperty('--map-pin-bg', tokens.pinBg);
+    root.setProperty('--map-pin-border', tokens.pinBorder);
+    root.setProperty('--map-halo', tokens.halo);
+
+    var useDarkFilter = Boolean(tokens.isDark && !TILES.darkUrl);
+    mapEl.classList.toggle('map-dark-tiles', useDarkFilter);
+
+    var desiredUrl = tileUrlFor(Boolean(tokens.isDark));
+    if (desiredUrl !== activeTileUrl) {
+      activeTileUrl = desiredUrl;
+      tileLayer.setUrl(desiredUrl);
+    }
+
+    casing.setStyle({ color: tokens.routeCasing });
+    line.setStyle({ color: tokens.accent });
+  }
+
+  applyTheme(tokens);
 
   var clientIcon = L.divIcon({
     className: '',
     html: '<div class="pin-client">' +
-      '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="' + ACCENT +
-      '" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' +
+      '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor"' +
+      ' stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' +
       '<path d="M3 10.5 12 3l9 7.5"/><path d="M5 9.8V21h14V9.8"/><path d="M10 21v-6h4v6"/></svg>' +
       '</div>',
     iconSize: [36, 36],
@@ -142,11 +226,11 @@ export function buildTripMapHtml(): string {
   var meIcon = L.divIcon({
     className: '',
     html: '<div class="pin-me"><div class="pin-me-dot">' +
-      '<svg class="pin-me-arrow" viewBox="0 0 24 24" width="14" height="14" fill="#FFFFFF">' +
+      '<svg class="pin-me-arrow" viewBox="0 0 24 24" width="14" height="14">' +
       '<path d="M12 2 21 22l-9-5-9 5z"/></svg>' +
       '</div></div>',
-    iconSize: [42, 42],
-    iconAnchor: [21, 21],
+    iconSize: [44, 44],
+    iconAnchor: [22, 22],
   });
 
   var meMarker = null;
@@ -160,8 +244,6 @@ export function buildTripMapHtml(): string {
     }
   });
 
-  // Pusatkan kamera ke montir, digeser agar titiknya berada di tengah area yang
-  // tidak tertutup kartu atas/bawah.
   function centerOn(lat, lng, animate) {
     var offset = (TOP_INSET - BOTTOM_INSET) / 2;
     var point = map.project([lat, lng], FOLLOW_ZOOM);
@@ -169,8 +251,6 @@ export function buildTripMapHtml(): string {
     map.setView(center, FOLLOW_ZOOM, { animate: !!animate, duration: 0.6 });
   }
 
-  // Tampilan client: bingkai seluruh rute (atau montir + tujuan) agar keduanya
-  // terlihat dalam satu layar.
   function fitViewer(animate) {
     var bounds = null;
     var points = line.getLatLngs();
@@ -192,11 +272,12 @@ export function buildTripMapHtml(): string {
   }
 
   window.TripMap = {
+    setTheme: function (nextTokens) {
+      applyTheme(nextTokens);
+    },
     setInsets: function (top, bottom) {
       TOP_INSET = top;
       BOTTOM_INSET = bottom;
-      // Kartu atas/bawah berubah tinggi (mis. sheet dilipat): jaga montir tetap
-      // di tengah area yang terlihat.
       if (MODE === 'mechanic' && follow && meMarker) {
         var p = meMarker.getLatLng();
         centerOn(p.lat, p.lng, true);
@@ -257,7 +338,6 @@ export function buildTripMapHtml(): string {
       line.setLatLngs(points);
       line.setStyle({ dashArray: estimated ? '10 8' : null });
       if (MODE === 'client') {
-        // Bingkai rute selama pengguna belum menggeser peta sendiri.
         if (!viewerPanned) {
           fitViewer(hasFitted);
           hasFitted = true;
@@ -281,6 +361,103 @@ export function buildTripMapHtml(): string {
         var p = meMarker.getLatLng();
         centerOn(p.lat, p.lng, true);
       }
+    },
+  };
+
+  post({ type: 'ready' });
+})();
+</script>
+</body>
+</html>`;
+}
+
+/** HTML pemilih titik lokasi (pin-picker) lazy untuk layar `request/new`. */
+export function buildPinPickerMapHtml(
+  initialTokens: MapThemeTokens,
+  initialCoords: { lat: number; lng: number },
+): string {
+  const tiles = getTripMapTiles();
+
+  return `<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+<style>${LEAFLET_CSS}</style>
+<style>${sharedMapStyles(initialTokens)}</style>
+</head>
+<body>
+<div id="map"></div>
+<script>${LEAFLET_JS}</script>
+<script>
+(function () {
+  var TILES = ${JSON.stringify(tiles)};
+  var tokens = ${JSON.stringify(initialTokens)};
+  var start = ${JSON.stringify(initialCoords)};
+
+  function post(payload) {
+    if (window.ReactNativeWebView) {
+      window.ReactNativeWebView.postMessage(JSON.stringify(payload));
+    }
+  }
+
+  if (typeof L === 'undefined') {
+    post({ type: 'error', code: 'leaflet' });
+    return;
+  }
+
+  var mapEl = document.getElementById('map');
+  var map = L.map('map', {
+    zoomControl: false,
+    attributionControl: true,
+    preferCanvas: true,
+    zoomSnap: 0.5,
+  }).setView([start.lat, start.lng], 16, { animate: false });
+
+  function tileUrlFor(isDark) {
+    return isDark && TILES.darkUrl ? TILES.darkUrl : TILES.url;
+  }
+
+  var activeTileUrl = tileUrlFor(tokens.isDark);
+  var tileLayer = L.tileLayer(activeTileUrl, {
+    maxZoom: 19,
+    attribution: TILES.attribution,
+    crossOrigin: true,
+  }).addTo(map);
+
+  function applyTheme(next) {
+    tokens = next || tokens;
+    var root = document.documentElement.style;
+    root.setProperty('--map-bg', tokens.canvas);
+    root.setProperty('--map-surface', tokens.surface);
+    root.setProperty('--map-border', tokens.border);
+    root.setProperty('--map-text', tokens.text);
+    root.setProperty('--map-text-muted', tokens.textMuted);
+    root.setProperty('--map-accent', tokens.accent);
+
+    var useDarkFilter = Boolean(tokens.isDark && !TILES.darkUrl);
+    mapEl.classList.toggle('map-dark-tiles', useDarkFilter);
+
+    var desiredUrl = tileUrlFor(Boolean(tokens.isDark));
+    if (desiredUrl !== activeTileUrl) {
+      activeTileUrl = desiredUrl;
+      tileLayer.setUrl(desiredUrl);
+    }
+  }
+
+  applyTheme(tokens);
+
+  map.on('moveend', function () {
+    var center = map.getCenter();
+    post({ type: 'center', lat: center.lat, lng: center.lng });
+  });
+
+  window.PinMap = {
+    setTheme: function (nextTokens) {
+      applyTheme(nextTokens);
+    },
+    setCenter: function (lat, lng) {
+      map.setView([lat, lng], Math.max(map.getZoom(), 16), { animate: true, duration: 0.4 });
     },
   };
 

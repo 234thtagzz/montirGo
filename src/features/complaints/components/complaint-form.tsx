@@ -1,11 +1,15 @@
-// Form Ajukan Keluhan (client & montir): kategori, transaksi, judul, deskripsi, foto.
 import { useState } from 'react';
-import { ActivityIndicator, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, Pressable, View } from 'react-native';
 import { Image } from 'expo-image';
-import { Ionicons } from '@/components/ui/icon';
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Brand, Radius, Space, Type } from '@/constants/brand';
+import { Chip } from '@/components/ui/chip';
+import { Ionicons } from '@/components/ui/icon';
+import { Surface } from '@/components/ui/surface';
+import { AppText } from '@/components/ui/text';
+import { TextField } from '@/components/ui/text-field';
 import { getStatusMeta } from '@/features/service-request/status';
+import { useAppTheme, useThemedStyles, type AppTheme } from '@/theme';
 import { formatDateTime } from '@/utils/format';
 import { MAX_COMPLAINT_PHOTOS, pickComplaintPhotos } from '../photo';
 import {
@@ -16,18 +20,17 @@ import {
 } from '../types';
 
 const CATEGORIES = Object.keys(COMPLAINT_CATEGORY_META) as ComplaintCategory[];
-
 const MAX_SUBJECT = 120;
 const MAX_DESCRIPTION = 4000;
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 interface ComplaintFormProps {
   draft: ComplaintFormDraft;
   onDraftChange: (draft: ComplaintFormDraft) => void;
   onSubmit: (draft: ComplaintFormDraft) => void;
   submitting: boolean;
-  /** Ringkasan transaksi yang sedang dilaporkan. */
+  submitted?: boolean;
   transaction?: TransactionSummary | null;
-  /** `true` saat layar dibuka dari detail transaksi — ID tidak bisa diubah. */
   transactionLocked?: boolean;
   transactionLoading?: boolean;
 }
@@ -37,10 +40,13 @@ export function ComplaintForm({
   onDraftChange,
   onSubmit,
   submitting,
+  submitted = false,
   transaction,
   transactionLocked = false,
   transactionLoading = false,
 }: ComplaintFormProps) {
+  const { theme } = useAppTheme();
+  const styles = useThemedStyles(createStyles);
   const [pickingPhotos, setPickingPhotos] = useState(false);
 
   const addPhotos = async () => {
@@ -63,118 +69,113 @@ export function ComplaintForm({
     onDraftChange({ ...draft, photos: draft.photos.filter((p) => p.uri !== uri) });
   };
 
+  const requestIdError = !draft.requestId.trim()
+    ? 'Pilih transaksi yang ingin dilaporkan.'
+    : !UUID_PATTERN.test(draft.requestId.trim())
+      ? 'ID transaksi tidak valid.'
+      : null;
+  const subjectError =
+    draft.subject.trim().length < 5 ? 'Judul keluhan minimal 5 karakter.' : null;
+  const descriptionError =
+    draft.description.trim().length < 10 ? 'Deskripsi keluhan minimal 10 karakter.' : null;
+
   return (
     <View style={styles.form}>
-      <View>
-        <FieldLabel label="Kategori keluhan" />
+      <View style={styles.block}>
+        <AppText variant="label">Kategori keluhan</AppText>
         <View style={styles.chipWrap}>
           {CATEGORIES.map((value) => {
             const meta = COMPLAINT_CATEGORY_META[value];
-            const active = draft.category === value;
             return (
-              <Pressable
+              <Chip
                 key={value}
-                accessibilityRole="button"
-                accessibilityState={{ selected: active }}
+                label={meta.label}
+                icon={meta.icon}
+                selected={draft.category === value}
                 onPress={() => onDraftChange({ ...draft, category: value })}
-                style={({ pressed }) => [
-                  styles.chip,
-                  active && styles.chipActive,
-                  pressed && styles.pressed,
-                ]}
-              >
-                <Ionicons
-                  name={meta.icon}
-                  size={14}
-                  color={active ? Brand.volt : Brand.textSecondary}
-                />
-                <Text style={[styles.chipText, active && styles.chipTextActive]}>{meta.label}</Text>
-              </Pressable>
+              />
             );
           })}
         </View>
       </View>
 
-      <View>
-        <FieldLabel label="Transaksi" required />
+      <View style={styles.block}>
+        <AppText variant="label">Transaksi *</AppText>
         {transactionLocked ? (
-          <LockedTransaction
-            transaction={transaction ?? null}
-            loading={transactionLoading}
-          />
+          <LockedTransaction transaction={transaction ?? null} loading={transactionLoading} />
         ) : (
           <>
-            <TextInput
+            <TextField
               placeholder="Tempel ID transaksi"
-              placeholderTextColor={Brand.textMuted}
-              selectionColor={Brand.primary}
               value={draft.requestId}
               onChangeText={(requestId) => onDraftChange({ ...draft, requestId })}
               autoCapitalize="none"
               autoCorrect={false}
-              style={styles.input}
+              error={requestIdError}
+              showError={submitted}
             />
             {transactionLoading ? (
               <View style={styles.lookupRow}>
-                <ActivityIndicator size="small" color={Brand.primary} />
-                <Text style={styles.helper}>Mencari transaksi…</Text>
+                <ActivityIndicator size="small" color={theme.colors.actionPrimaryAltBg} />
+                <AppText variant="caption" tone="muted">
+                  Mencari transaksi…
+                </AppText>
               </View>
             ) : transaction ? (
-              <Text style={styles.helper} numberOfLines={2}>
+              <AppText variant="caption" tone="secondary" numberOfLines={2}>
                 {transaction.issue_description}
-              </Text>
+              </AppText>
             ) : draft.requestId.trim() ? (
-              <Text style={[styles.helper, styles.helperDanger]}>
+              <AppText variant="caption" tone="danger">
                 Transaksi tidak ditemukan. Periksa kembali ID-nya.
-              </Text>
+              </AppText>
             ) : (
-              <Text style={styles.helper}>
+              <AppText variant="caption" tone="muted">
                 ID transaksi bisa disalin dari detail pesanan, bagian paling atas.
-              </Text>
+              </AppText>
             )}
           </>
         )}
       </View>
 
-      <View>
-        <FieldLabel label="Judul keluhan" required />
-        <TextInput
-          placeholder="Ringkas masalahnya dalam satu baris"
-          placeholderTextColor={Brand.textMuted}
-          selectionColor={Brand.primary}
-          value={draft.subject}
-          onChangeText={(subject) => onDraftChange({ ...draft, subject })}
-          maxLength={MAX_SUBJECT}
-          style={styles.input}
-        />
-      </View>
+      <TextField
+        label="Judul keluhan"
+        required
+        placeholder="Ringkas masalahnya dalam satu baris"
+        value={draft.subject}
+        onChangeText={(subject) => onDraftChange({ ...draft, subject })}
+        maxLength={MAX_SUBJECT}
+        error={subjectError}
+        showError={submitted}
+      />
 
-      <View>
-        <FieldLabel label="Deskripsi" required />
-        <TextInput
+      <View style={styles.block}>
+        <TextField
+          label="Deskripsi"
+          required
           multiline
           placeholder="Ceritakan kronologinya: apa yang terjadi, kapan, dan apa yang kamu harapkan."
-          placeholderTextColor={Brand.textMuted}
-          selectionColor={Brand.primary}
           value={draft.description}
           onChangeText={(description) => onDraftChange({ ...draft, description })}
           maxLength={MAX_DESCRIPTION}
-          style={styles.textarea}
+          error={descriptionError}
+          showError={submitted}
         />
         <View style={styles.counterRow}>
-          <Text style={styles.helper}>Minimal 10 karakter.</Text>
-          <Text style={styles.counter}>
+          <AppText variant="caption" tone="muted">
+            Minimal 10 karakter.
+          </AppText>
+          <AppText variant="caption" tone="muted" style={theme.tabularNums}>
             {draft.description.length}/{MAX_DESCRIPTION}
-          </Text>
+          </AppText>
         </View>
       </View>
 
-      <View>
-        <FieldLabel label="Foto lampiran" optional />
-        <Text style={styles.helper}>
-          Opsional, maksimal {MAX_COMPLAINT_PHOTOS} foto. Bukti visual mempercepat admin memeriksa
-          laporanmu.
-        </Text>
+      <View style={styles.block}>
+        <AppText variant="label">Foto lampiran (opsional)</AppText>
+        <AppText variant="caption" tone="muted">
+          Maksimal {MAX_COMPLAINT_PHOTOS} foto. Bukti visual mempercepat admin memeriksa laporanmu.
+        </AppText>
         <View style={styles.photoRow}>
           {draft.photos.map((photo) => (
             <View key={photo.uri} style={styles.photoItem}>
@@ -186,7 +187,7 @@ export function ComplaintForm({
                 onPress={() => removePhoto(photo.uri)}
                 style={({ pressed }) => [styles.photoRemove, pressed && styles.pressed]}
               >
-                <Ionicons name="close" size={13} color={Brand.white} />
+                <Ionicons name="close" size={14} color={theme.colors.textInverse} />
               </Pressable>
             </View>
           ))}
@@ -194,15 +195,17 @@ export function ComplaintForm({
             <Pressable
               accessibilityRole="button"
               accessibilityLabel="Tambah foto lampiran"
-              onPress={addPhotos}
+              onPress={() => void addPhotos()}
               style={({ pressed }) => [styles.photoAdd, pressed && styles.pressed]}
             >
               {pickingPhotos ? (
-                <ActivityIndicator size="small" color={Brand.primary} />
+                <ActivityIndicator size="small" color={theme.colors.statusInfoFg} />
               ) : (
                 <>
-                  <Ionicons name="camera-outline" size={20} color={Brand.primary} />
-                  <Text style={styles.photoAddText}>Tambah</Text>
+                  <Ionicons name="camera-outline" size={22} color={theme.colors.statusInfoFg} />
+                  <AppText variant="caption" tone="info">
+                    Tambah
+                  </AppText>
                 </>
               )}
             </Pressable>
@@ -211,38 +214,19 @@ export function ComplaintForm({
       </View>
 
       <View style={styles.note}>
-        <Ionicons name="information-circle-outline" size={16} color={Brand.primary} />
-        <Text style={styles.noteText}>
-          Laporan diteruskan ke admin MontirGo, bukan ke montir atau client lain. Kamu bisa memantau
-          status dan balasannya di tab Riwayat.
-        </Text>
+        <Ionicons name="information-circle-outline" size={18} color={theme.colors.statusInfoFg} />
+        <AppText variant="caption" tone="info" style={styles.flexCopy}>
+          Laporan diteruskan ke admin MontirGo, bukan ke montir atau client lain. Pantau status & balasannya di tab Riwayat.
+        </AppText>
       </View>
 
       <Button
         label="Kirim Keluhan ke Admin"
         icon="send-outline"
+        size="cta"
         loading={submitting}
         onPress={() => onSubmit(draft)}
-        style={styles.submit}
       />
-    </View>
-  );
-}
-
-function FieldLabel({
-  label,
-  required = false,
-  optional = false,
-}: {
-  label: string;
-  required?: boolean;
-  optional?: boolean;
-}) {
-  return (
-    <View style={styles.labelRow}>
-      <Text style={styles.label}>{label}</Text>
-      {required ? <Text style={styles.required}>WAJIB</Text> : null}
-      {optional ? <Text style={styles.optional}>OPSIONAL</Text> : null}
     </View>
   );
 }
@@ -254,22 +238,27 @@ function LockedTransaction({
   transaction: TransactionSummary | null;
   loading: boolean;
 }) {
+  const { theme } = useAppTheme();
+  const styles = useThemedStyles(createStyles);
+
   if (loading && !transaction) {
     return (
-      <View style={styles.lockedCard}>
-        <ActivityIndicator size="small" color={Brand.inkMuted} />
-        <Text style={styles.lockedLoading}>Memuat transaksi…</Text>
-      </View>
+      <Surface variant="subtle" padding="md" style={styles.lockedRow}>
+        <ActivityIndicator size="small" color={theme.colors.textMuted} />
+        <AppText variant="caption" tone="muted">
+          Memuat transaksi…
+        </AppText>
+      </Surface>
     );
   }
 
   if (!transaction) {
     return (
-      <View style={[styles.lockedCard, styles.lockedCardDanger]}>
-        <Ionicons name="alert-circle-outline" size={16} color={Brand.red} />
-        <Text style={[styles.lockedLoading, { color: Brand.red }]}>
+      <View style={styles.lockedDanger}>
+        <Ionicons name="alert-circle-outline" size={16} color={theme.colors.statusDangerFg} />
+        <AppText variant="caption" tone="danger">
           Transaksi tidak ditemukan.
-        </Text>
+        </AppText>
       </View>
     );
   }
@@ -277,178 +266,124 @@ function LockedTransaction({
   const status = getStatusMeta(transaction.status);
 
   return (
-    <View style={styles.lockedCard}>
+    <Surface variant="default" padding="lg" style={styles.lockedCard}>
       <View style={styles.lockedTop}>
-        <Text style={styles.lockedEyebrow}>TERKUNCI KE TRANSAKSI INI</Text>
-        <Ionicons name="lock-closed" size={12} color={Brand.inkMuted} />
+        <AppText variant="overline" tone="muted">
+          TERKUNCI KE TRANSAKSI INI
+        </AppText>
+        <Ionicons name="lock-closed" size={14} color={theme.colors.textMuted} />
       </View>
-      <Text style={styles.lockedIssue} numberOfLines={2}>
+      <AppText variant="title" numberOfLines={2}>
         {transaction.issue_description}
-      </Text>
+      </AppText>
       <View style={styles.lockedFoot}>
-        <Text style={styles.lockedId}>#{transaction.id.slice(0, 8).toUpperCase()}</Text>
-        <View style={[styles.statusChip, { backgroundColor: status.background }]}>
-          <Ionicons name={status.icon} size={11} color={status.color} />
-          <Text style={[styles.statusChipText, { color: status.color }]}>{status.shortLabel}</Text>
-        </View>
+        <AppText variant="caption" tone="muted" style={theme.tabularNums}>
+          #{transaction.id.slice(0, 8).toUpperCase()}
+        </AppText>
+        <Badge label={status.shortLabel} tone={status.tone} icon={status.icon} size="sm" />
       </View>
-      <Text style={styles.lockedDate}>{formatDateTime(transaction.created_at)}</Text>
-    </View>
+      <AppText variant="caption" tone="muted">
+        {formatDateTime(transaction.created_at)}
+      </AppText>
+    </Surface>
   );
 }
 
-const styles = StyleSheet.create({
-  form: { gap: Space.xl, paddingBottom: Space.xxxl },
-  labelRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: Space.sm },
-  label: { ...Type.label, fontSize: 12.5, fontWeight: '700', color: Brand.text },
-  required: {
-    ...Type.micro,
-    fontSize: 8.5,
-    color: Brand.primary,
-    backgroundColor: Brand.primarySoft,
-    paddingHorizontal: 5,
-    paddingVertical: 1,
-    borderRadius: 4,
-    overflow: 'hidden',
+const createStyles = (theme: AppTheme) => ({
+  form: {
+    gap: theme.spacing.xl,
+    paddingBottom: theme.spacing.xxxl,
   },
-  optional: {
-    ...Type.micro,
-    fontSize: 8.5,
-    color: Brand.textMuted,
-    backgroundColor: Brand.background,
-    paddingHorizontal: 5,
-    paddingVertical: 1,
-    borderRadius: 4,
-    overflow: 'hidden',
+  block: {
+    gap: theme.spacing.xs,
   },
-
-  chipWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: Space.sm },
-  chip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    paddingHorizontal: Space.md,
-    paddingVertical: 10,
-    borderRadius: Radius.md,
-    borderWidth: 1,
-    borderColor: Brand.border,
-    backgroundColor: Brand.surface,
-  },
-  chipActive: { backgroundColor: Brand.ink, borderColor: Brand.ink },
-  chipText: { ...Type.label, color: Brand.textSecondary },
-  chipTextActive: { color: Brand.white, fontWeight: '700' },
-
-  input: {
-    backgroundColor: Brand.surface,
-    borderWidth: 1,
-    borderColor: Brand.border,
-    borderRadius: Radius.md,
-    paddingHorizontal: Space.md,
-    minHeight: 48,
-    fontSize: 13.5,
-    color: Brand.text,
-  },
-  textarea: {
-    backgroundColor: Brand.surface,
-    borderWidth: 1,
-    borderColor: Brand.border,
-    borderRadius: Radius.md,
-    paddingHorizontal: Space.md,
-    paddingVertical: Space.md,
-    minHeight: 124,
-    fontSize: 13.5,
-    lineHeight: 20,
-    color: Brand.text,
-    textAlignVertical: 'top',
+  chipWrap: {
+    flexDirection: 'row' as const,
+    flexWrap: 'wrap' as const,
+    gap: theme.spacing.sm,
   },
   counterRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: Space.sm,
-    marginTop: 6,
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    justifyContent: 'space-between' as const,
+    gap: theme.spacing.sm,
   },
-  counter: { ...Type.meta, fontSize: 10, color: Brand.textMuted },
-  helper: { ...Type.meta, color: Brand.textMuted, lineHeight: 16, marginTop: 6 },
-  helperDanger: { color: Brand.red },
-  lookupRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-
+  lookupRow: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: theme.spacing.xs,
+  },
+  lockedRow: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: theme.spacing.sm,
+  },
+  lockedDanger: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: theme.spacing.sm,
+    padding: theme.spacing.md,
+    borderRadius: theme.radii.md,
+    backgroundColor: theme.colors.statusDangerBg,
+  },
   lockedCard: {
-    backgroundColor: Brand.ink,
-    borderRadius: Radius.lg,
-    padding: Space.lg,
+    gap: theme.spacing.xs,
   },
-  lockedCardDanger: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Space.sm,
-    backgroundColor: Brand.redSoft,
-  },
-  lockedLoading: { ...Type.meta, color: Brand.inkMuted, marginTop: 6 },
-  lockedTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  lockedEyebrow: { ...Type.micro, fontSize: 9, color: Brand.inkMuted },
-  lockedIssue: {
-    ...Type.bodyStrong,
-    fontWeight: '700',
-    color: Brand.white,
-    marginTop: 6,
-    lineHeight: 20,
+  lockedTop: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    justifyContent: 'space-between' as const,
   },
   lockedFoot: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: Space.sm,
-    marginTop: Space.md,
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    justifyContent: 'space-between' as const,
+    gap: theme.spacing.sm,
+    marginTop: theme.spacing.xs,
   },
-  lockedId: { ...Type.meta, color: Brand.inkMuted, letterSpacing: 0.4 },
-  statusChip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: Radius.pill,
+  photoRow: {
+    flexDirection: 'row' as const,
+    flexWrap: 'wrap' as const,
+    gap: theme.spacing.sm,
+    marginTop: theme.spacing.xs,
   },
-  statusChipText: { ...Type.micro, fontSize: 9 },
-  lockedDate: { ...Type.meta, fontSize: 10, color: Brand.inkMuted, marginTop: 4 },
-
-  photoRow: { flexDirection: 'row', flexWrap: 'wrap', gap: Space.sm, marginTop: Space.md },
-  photoItem: { position: 'relative' },
-  photoImage: { width: 88, height: 88, borderRadius: Radius.md, backgroundColor: Brand.border },
+  photoItem: { position: 'relative' as const },
+  photoImage: {
+    width: 88,
+    height: 88,
+    borderRadius: theme.radii.md,
+    backgroundColor: theme.colors.bgSurfaceSubtle,
+  },
   photoRemove: {
-    position: 'absolute',
+    position: 'absolute' as const,
     top: 4,
     right: 4,
-    width: 22,
-    height: 22,
-    borderRadius: 11,
-    backgroundColor: 'rgba(11, 18, 32, 0.72)',
-    alignItems: 'center',
-    justifyContent: 'center',
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: theme.colors.bgInverse,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
   },
   photoAdd: {
     width: 88,
     height: 88,
-    borderRadius: Radius.md,
-    borderWidth: 1,
-    borderStyle: 'dashed',
-    borderColor: Brand.primaryBorder,
-    backgroundColor: Brand.primarySoft,
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 4,
+    borderRadius: theme.radii.md,
+    borderWidth: 1.5,
+    borderStyle: 'dashed' as const,
+    borderColor: theme.colors.statusInfoBorder,
+    backgroundColor: theme.colors.statusInfoBg,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+    gap: theme.spacing.xxs,
   },
-  photoAddText: { ...Type.meta, fontSize: 10, fontWeight: '700', color: Brand.primary },
-
   note: {
-    flexDirection: 'row',
-    gap: Space.sm,
-    backgroundColor: Brand.primarySoft,
-    borderRadius: Radius.md,
-    padding: Space.md,
+    flexDirection: 'row' as const,
+    gap: theme.spacing.sm,
+    backgroundColor: theme.colors.statusInfoBg,
+    borderRadius: theme.radii.md,
+    padding: theme.spacing.md,
   },
-  noteText: { ...Type.meta, color: Brand.primaryDark, lineHeight: 17, flex: 1 },
-  submit: { marginTop: Space.xs },
-  pressed: { opacity: 0.72 },
+  flexCopy: { flex: 1 },
+  pressed: { opacity: 0.78 },
 });

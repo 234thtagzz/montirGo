@@ -1,48 +1,40 @@
-import { Button } from "@/components/ui/button";
-import { ConfirmSheet } from "@/components/ui/confirm-sheet";
-import { Ionicons, type IconName } from "@/components/ui/icon";
-import { ScreenHeader } from "@/components/ui/screen-header";
-import { EmptyState, ErrorState, LoadingState } from "@/components/ui/state";
-import { Brand, Radius, ScreenPadding, Space, Type } from "@/constants/brand";
+import { useCallback, useState } from 'react';
+import { Pressable, RefreshControl, ScrollView, View } from 'react-native';
+import { useFocusEffect, useRouter } from 'expo-router';
+import { Button } from '@/components/ui/button';
+import { ConfirmSheet } from '@/components/ui/confirm-sheet';
+import { Ionicons, type IconName } from '@/components/ui/icon';
+import { ScreenHeader } from '@/components/ui/screen-header';
+import { EmptyState, ErrorState, LoadingState } from '@/components/ui/state';
+import { Surface } from '@/components/ui/surface';
+import { AppText } from '@/components/ui/text';
+import { useToast } from '@/components/ui/toast';
 import {
   deleteVehicle,
   listMyVehicles,
   type ClientVehicle,
-} from "@/features/client/service";
-import { VehiclePhoto } from "@/features/vehicles/components/vehicle-photo";
-import { useFocusEffect, useRouter } from "expo-router";
-import { useCallback, useState } from "react";
-import {
-  Alert,
-  Pressable,
-  RefreshControl,
-  ScrollView,
-  StyleSheet,
-  Text,
-  View,
-} from "react-native";
+} from '@/features/client/service';
+import { VehiclePhoto } from '@/features/vehicles/components/vehicle-photo';
+import { getVehicleTypeMeta } from '@/features/vehicles/constants';
+import { useAppTheme, useThemedStyles, type AppTheme } from '@/theme';
 
-const VEHICLE_LABEL: Record<ClientVehicle["type"], string> = {
-  motor: "Motor",
-  mobil: "Mobil",
-  lainnya: "Lainnya",
-};
-
-const VEHICLE_ICON: Record<ClientVehicle["type"], IconName> = {
-  motor: "bicycle-outline",
-  mobil: "car-outline",
-  lainnya: "cube-outline",
+const VEHICLE_ICON: Record<ClientVehicle['type'], IconName> = {
+  motor: 'bicycle-outline',
+  mobil: 'car-outline',
+  lainnya: 'cube-outline',
 };
 
 export default function MyVehiclesScreen() {
+  const { theme } = useAppTheme();
+  const styles = useThemedStyles(createStyles);
+  const { showToast } = useToast();
   const router = useRouter();
+
   const [vehicles, setVehicles] = useState<ClientVehicle[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState(false);
-  const [pendingDelete, setPendingDelete] = useState<ClientVehicle | null>(
-    null,
-  );
+  const [pendingDelete, setPendingDelete] = useState<ClientVehicle | null>(null);
   const [deleting, setDeleting] = useState(false);
 
   const load = useCallback(async () => {
@@ -57,10 +49,9 @@ export default function MyVehiclesScreen() {
     }
   }, []);
 
-  // Muat ulang setiap layar difokuskan agar perubahan dari form langsung terlihat.
   useFocusEffect(
     useCallback(() => {
-      load();
+      void load();
     }, [load]),
   );
 
@@ -71,11 +62,17 @@ export default function MyVehiclesScreen() {
       await deleteVehicle(pendingDelete.id);
       setPendingDelete(null);
       await load();
+      showToast({
+        tone: 'success',
+        title: 'Kendaraan dihapus',
+        message: 'Data kendaraan telah dihapus dari garasi.',
+      });
     } catch (deleteError) {
-      Alert.alert(
-        "Gagal menghapus",
-        deleteError instanceof Error ? deleteError.message : "Coba lagi.",
-      );
+      showToast({
+        tone: 'danger',
+        title: 'Gagal menghapus',
+        message: deleteError instanceof Error ? deleteError.message : 'Coba lagi.',
+      });
     } finally {
       setDeleting(false);
     }
@@ -100,10 +97,10 @@ export default function MyVehiclesScreen() {
               refreshing={refreshing}
               onRefresh={() => {
                 setRefreshing(true);
-                load();
+                void load();
               }}
-              tintColor={Brand.primary}
-              colors={[Brand.primary]}
+              tintColor={theme.colors.actionPrimaryAltBg}
+              colors={[theme.colors.actionPrimaryAltBg]}
             />
           }
         >
@@ -113,112 +110,111 @@ export default function MyVehiclesScreen() {
             <EmptyState
               icon="car-outline"
               message="Garasi masih kosong"
-              hint="Simpan kendaraanmu agar pembuatan permintaan berikutnya lebih cepat."
+              hint="Simpan kendaraanmu agar kategori motor/mobil terisi otomatis saat memanggil montir."
               actionLabel="Tambah Kendaraan"
-              onPressAction={() => router.push("/(client)/vehicles/new")}
+              onPressAction={() => router.push('/(client)/vehicles/new')}
             />
           ) : (
             <>
-              <View style={styles.summary}>
+              <Surface variant="default" padding="md" style={styles.summary}>
                 <View style={styles.summaryIcon}>
                   <Ionicons
                     name="car-sport-outline"
-                    size={17}
-                    color={Brand.primary}
+                    size={18}
+                    color={theme.colors.statusInfoFg}
                   />
                 </View>
-                <View style={styles.summaryCopy}>
-                  <Text style={styles.summaryTitle}>
+                <View style={styles.flexCopy}>
+                  <AppText variant="label">
                     {vehicles.length} kendaraan tersimpan
-                  </Text>
-                  <Text style={styles.summaryText}>
-                    Pilih kendaraan saat membuat permintaan agar montir lebih
-                    siap.
-                  </Text>
+                  </AppText>
+                  <AppText variant="caption" tone="secondary">
+                    Pilih kendaraan saat membuat permintaan agar montir lebih siap.
+                  </AppText>
                 </View>
-              </View>
+              </Surface>
 
               <View style={styles.sectionRow}>
-                <Text style={styles.sectionLabel}>Daftar kendaraan</Text>
+                <AppText variant="overline" tone="muted">
+                  Daftar kendaraan
+                </AppText>
                 <View style={styles.sectionLine} />
               </View>
 
-              {vehicles.map((vehicle) => (
-                <View key={vehicle.id} style={styles.card}>
-                  <Pressable
-                    accessibilityRole="button"
-                    accessibilityLabel={`Ubah ${vehicle.brand} ${vehicle.model}`}
-                    onPress={() =>
-                      router.push({
-                        pathname: "/(client)/vehicles/new",
-                        params: { id: vehicle.id },
-                      })
-                    }
-                    style={({ pressed }) => [
-                      styles.cardMain,
-                      pressed && styles.pressed,
-                    ]}
-                  >
-                    {vehicle.photo_url ? (
-                      <VehiclePhoto
-                        value={vehicle.photo_url}
-                        height={58}
-                        style={styles.vehicleThumb}
-                        emptyLabel={null}
-                      />
-                    ) : (
-                      <View style={styles.iconBox}>
-                        <Ionicons
-                          name={VEHICLE_ICON[vehicle.type] ?? "car-outline"}
-                          size={22}
-                          color={Brand.primary}
+              {vehicles.map((vehicle) => {
+                const meta = getVehicleTypeMeta(vehicle.type);
+                const tonePalette = theme.tones[meta.tone];
+                return (
+                  <Surface key={vehicle.id} variant="default" padding="md" style={styles.card}>
+                    <Pressable
+                      accessibilityRole="button"
+                      accessibilityLabel={`Ubah ${vehicle.brand} ${vehicle.model}`}
+                      onPress={() =>
+                        router.push({
+                          pathname: '/(client)/vehicles/new',
+                          params: { id: vehicle.id },
+                        })
+                      }
+                      style={({ pressed }) => [styles.cardMain, pressed && styles.pressed]}
+                    >
+                      {vehicle.photo_url ? (
+                        <VehiclePhoto
+                          value={vehicle.photo_url}
+                          height={60}
+                          style={styles.vehicleThumb}
+                          emptyLabel={null}
                         />
+                      ) : (
+                        <View style={[styles.iconBox, { backgroundColor: tonePalette.bg }]}>
+                          <Ionicons
+                            name={VEHICLE_ICON[vehicle.type] ?? 'car-outline'}
+                            size={22}
+                            color={tonePalette.fg}
+                          />
+                        </View>
+                      )}
+                      <View style={styles.copy}>
+                        <AppText variant="title" numberOfLines={1}>
+                          {vehicle.brand} {vehicle.model}
+                        </AppText>
+                        <AppText variant="caption" tone="secondary">
+                          {meta.label}
+                          {vehicle.year ? ` · ${vehicle.year}` : ''}
+                        </AppText>
+                        <View style={styles.plate}>
+                          <AppText variant="caption" tone="secondary" style={styles.plateText}>
+                            {vehicle.license_plate}
+                          </AppText>
+                        </View>
                       </View>
-                    )}
-                    <View style={styles.copy}>
-                      <Text style={styles.name} numberOfLines={1}>
-                        {vehicle.brand} {vehicle.model}
-                      </Text>
-                      <Text style={styles.meta}>
-                        {VEHICLE_LABEL[vehicle.type]}
-                        {vehicle.year ? ` · ${vehicle.year}` : ""}
-                      </Text>
-                      <View style={styles.plate}>
-                        <Text style={styles.plateText}>
-                          {vehicle.license_plate}
-                        </Text>
-                      </View>
-                    </View>
-                    <Ionicons
-                      name="create-outline"
-                      size={17}
-                      color={Brand.textMuted}
-                    />
-                  </Pressable>
+                      <Ionicons
+                        name="create-outline"
+                        size={18}
+                        color={theme.colors.textMuted}
+                      />
+                    </Pressable>
 
-                  <Pressable
-                    accessibilityRole="button"
-                    accessibilityLabel={`Hapus ${vehicle.brand} ${vehicle.model}`}
-                    hitSlop={8}
-                    onPress={() => setPendingDelete(vehicle)}
-                    style={({ pressed }) => [
-                      styles.deleteButton,
-                      pressed && styles.pressed,
-                    ]}
-                  >
-                    <Ionicons
-                      name="trash-outline"
-                      size={16}
-                      color={Brand.red}
-                    />
-                  </Pressable>
-                </View>
-              ))}
+                    <Pressable
+                      accessibilityRole="button"
+                      accessibilityLabel={`Hapus ${vehicle.brand} ${vehicle.model}`}
+                      hitSlop={8}
+                      onPress={() => setPendingDelete(vehicle)}
+                      style={({ pressed }) => [styles.deleteButton, pressed && styles.pressed]}
+                    >
+                      <Ionicons
+                        name="trash-outline"
+                        size={18}
+                        color={theme.colors.statusDangerFg}
+                      />
+                    </Pressable>
+                  </Surface>
+                );
+              })}
 
               <Button
                 label="Tambah Kendaraan"
                 icon="add"
-                onPress={() => router.push("/(client)/vehicles/new")}
+                onPress={() => router.push('/(client)/vehicles/new')}
                 style={styles.primary}
               />
             </>
@@ -238,106 +234,99 @@ export default function MyVehiclesScreen() {
             : undefined
         }
         confirmLabel="Hapus kendaraan"
-        onConfirm={confirmDelete}
+        onConfirm={() => void confirmDelete()}
         onCancel={() => (deleting ? undefined : setPendingDelete(null))}
       />
     </View>
   );
 }
 
-const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: Brand.background },
-  content: { padding: ScreenPadding, paddingBottom: Space.xxxl },
+const createStyles = (theme: AppTheme) => ({
+  screen: {
+    flex: 1,
+    backgroundColor: theme.colors.bgCanvas,
+  },
+  content: {
+    padding: theme.spacing.screenPadding,
+    paddingBottom: theme.spacing.xxxl,
+    gap: theme.spacing.md,
+  },
   summary: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: Space.md,
-    backgroundColor: Brand.surface,
-    borderRadius: Radius.lg,
-    borderWidth: 1,
-    borderColor: Brand.border,
-    padding: Space.md,
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: theme.spacing.md,
   },
   summaryIcon: {
-    width: 36,
-    height: 36,
-    borderRadius: Radius.sm,
-    backgroundColor: Brand.primarySoft,
-    alignItems: "center",
-    justifyContent: "center",
+    width: 38,
+    height: 38,
+    borderRadius: theme.radii.sm,
+    backgroundColor: theme.colors.statusInfoBg,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
   },
-  summaryCopy: { flex: 1 },
-  summaryTitle: { ...Type.bodyStrong, color: Brand.text, fontWeight: "700" },
-  summaryText: { ...Type.meta, color: Brand.textSecondary, marginTop: 1 },
+  flexCopy: {
+    flex: 1,
+    gap: theme.spacing.xxs,
+  },
   sectionRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: Space.md,
-    marginTop: Space.xl,
-    marginBottom: Space.md,
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: theme.spacing.md,
+    marginTop: theme.spacing.sm,
   },
-  sectionLabel: { ...Type.micro, color: Brand.textMuted },
   sectionLine: {
     flex: 1,
-    height: StyleSheet.hairlineWidth,
-    backgroundColor: Brand.border,
+    height: 1,
+    backgroundColor: theme.colors.borderSubtle,
   },
   card: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: Brand.surface,
-    borderRadius: Radius.lg,
-    borderWidth: 1,
-    borderColor: Brand.border,
-    padding: Space.md,
-    marginBottom: Space.md,
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
   },
   cardMain: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: Space.md,
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: theme.spacing.md,
     flex: 1,
   },
   iconBox: {
-    width: 58,
-    height: 58,
-    borderRadius: Radius.md,
-    backgroundColor: Brand.primarySoft,
-    alignItems: "center",
-    justifyContent: "center",
+    width: 60,
+    height: 60,
+    borderRadius: theme.radii.md,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
   },
-  vehicleThumb: { width: 68, borderRadius: Radius.md },
-  copy: { flex: 1 },
-  name: {
-    ...Type.bodyStrong,
-    fontSize: 14,
-    fontWeight: "700",
-    color: Brand.text,
+  vehicleThumb: {
+    width: 68,
+    borderRadius: theme.radii.md,
   },
-  meta: { fontSize: 11.5, color: Brand.textSecondary, marginTop: 2 },
+  copy: {
+    flex: 1,
+    gap: theme.spacing.xxs,
+  },
   plate: {
-    alignSelf: "flex-start",
-    paddingHorizontal: 7,
-    paddingVertical: 2,
-    borderRadius: 5,
-    backgroundColor: Brand.divider,
-    marginTop: 6,
+    alignSelf: 'flex-start' as const,
+    paddingHorizontal: theme.spacing.xs,
+    paddingVertical: theme.spacing.xxs,
+    borderRadius: theme.radii.xs,
+    backgroundColor: theme.colors.bgSurfaceSubtle,
+    marginTop: theme.spacing.xxs,
   },
   plateText: {
-    fontSize: 10,
-    fontWeight: "700",
-    color: Brand.textSecondary,
+    fontFamily: theme.fontFamily.bold,
     letterSpacing: 0.4,
   },
   deleteButton: {
-    width: 34,
-    height: 34,
-    borderRadius: Radius.xs,
-    backgroundColor: Brand.redSoft,
-    alignItems: "center",
-    justifyContent: "center",
-    marginLeft: Space.sm,
+    width: 48,
+    height: 48,
+    borderRadius: theme.radii.sm,
+    backgroundColor: theme.colors.statusDangerBg,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+    marginLeft: theme.spacing.xs,
   },
-  pressed: { opacity: 0.7 },
-  primary: { flex: 1.6 },
+  pressed: { opacity: 0.78 },
+  primary: {
+    marginTop: theme.spacing.sm,
+  },
 });

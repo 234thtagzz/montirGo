@@ -1,14 +1,13 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Alert, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { FlatList, Pressable, RefreshControl, View } from 'react-native';
 import { useFocusEffect, useRouter } from 'expo-router';
+import { Ionicons } from '@/components/ui/icon';
 import { ScreenHeader } from '@/components/ui/screen-header';
 import { EmptyState, ErrorState, LoadingState } from '@/components/ui/state';
-import { Ionicons } from '@/components/ui/icon';
-import { Brand, Radius, ScreenPadding, Space, Type } from '@/constants/brand';
-import { createRealtimeChannel, subscribeWithResync } from '@/lib/realtime';
-import { supabase } from '@/lib/supabase';
-import { useSessionUser } from '@/hooks/use-session-user';
-import { useRefreshOnForeground } from '@/hooks/use-foreground';
+import { Surface } from '@/components/ui/surface';
+import { AppText } from '@/components/ui/text';
+import { useToast } from '@/components/ui/toast';
+import { OrderCard } from '@/features/mechanic/components/order-card';
 import {
   acceptOrder,
   ACTIVE_ORDER_MESSAGE,
@@ -16,26 +15,33 @@ import {
   listIncomingOrders,
   type IncomingOrder,
 } from '@/features/mechanic/service';
-import { OrderCard } from '@/features/mechanic/components/order-card';
-import { formatVehicleLabel } from '@/features/vehicles/constants';
 import { MechanicNotificationBell } from '@/features/notifications/components/notification-bell';
+import { formatVehicleLabel } from '@/features/vehicles/constants';
+import { useRefreshOnForeground } from '@/hooks/use-foreground';
+import { useSessionUser } from '@/hooks/use-session-user';
+import { createRealtimeChannel, subscribeWithResync } from '@/lib/realtime';
+import { supabase } from '@/lib/supabase';
+import { useAppTheme, useThemedStyles, type AppTheme } from '@/theme';
 
 const NEW_REQUEST_BADGE = {
   label: 'Request baru',
-  color: Brand.amber,
-  background: Brand.amberSoft,
+  tone: 'warning' as const,
   icon: 'flash-outline' as const,
 };
 
 export default function MechanicRequestsScreen() {
   const { user } = useSessionUser();
+  const { theme } = useAppTheme();
+  const styles = useThemedStyles(createStyles);
+  const { showToast } = useToast();
+  const router = useRouter();
+
   const [orders, setOrders] = useState<IncomingOrder[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [acceptingId, setAcceptingId] = useState<string | null>(null);
   const [activeOrderId, setActiveOrderId] = useState<string | null>(null);
   const [error, setError] = useState(false);
-  const router = useRouter();
 
   const load = useCallback(async () => {
     try {
@@ -54,19 +60,19 @@ export default function MechanicRequestsScreen() {
     }
   }, []);
 
-  // Muat ulang setiap layar difokuskan (mis. kembali dari detail request).
   useFocusEffect(
     useCallback(() => {
-      load();
+      void load();
     }, [load]),
   );
 
-  // Muat ulang saat app kembali aktif agar request terbaru tidak terlewat.
-  useRefreshOnForeground(load);
+  useRefreshOnForeground(() => {
+    void load();
+  });
 
-  // Realtime terfilter untuk user montir ini + debounced reload agar bebas broadcast storm.
+  const userId = user?.id;
   useEffect(() => {
-    if (!user?.id) return;
+    if (!userId) return;
     let timer: ReturnType<typeof setTimeout> | null = null;
     const scheduleReload = () => {
       if (timer) clearTimeout(timer);
@@ -75,13 +81,13 @@ export default function MechanicRequestsScreen() {
       }, 350);
     };
 
-    const ch = createRealtimeChannel(`mechanic-incoming-${user.id}`).on(
+    const ch = createRealtimeChannel(`mechanic-incoming-${userId}`).on(
       'postgres_changes',
       {
         event: 'INSERT',
         schema: 'public',
         table: 'notifications',
-        filter: `user_id=eq.${user.id}`,
+        filter: `user_id=eq.${userId}`,
       },
       scheduleReload,
     );
@@ -90,49 +96,46 @@ export default function MechanicRequestsScreen() {
       if (timer) clearTimeout(timer);
       supabase.removeChannel(ch);
     };
-  }, [user?.id, load]);
+  }, [userId, load]);
 
   const handleAccept = async (id: string) => {
     if (activeOrderId) {
-      Alert.alert('Masih ada order aktif', ACTIVE_ORDER_MESSAGE, [
-        { text: 'Tutup', style: 'cancel' },
-        {
-          text: 'Buka Order Aktif',
-          onPress: () => router.push(`/(mechanic)/active-order/${activeOrderId}`),
-        },
-      ]);
+      showToast({
+        tone: 'warning',
+        title: 'Masih ada order aktif',
+        message: ACTIVE_ORDER_MESSAGE,
+        actionLabel: 'Buka Order',
+        onAction: () => router.push(`/(mechanic)/active-order/${activeOrderId}`),
+      });
       return;
     }
+
     setAcceptingId(id);
     try {
       await acceptOrder(id);
-      // Request langsung hilang dari daftar semua montir...
       setOrders((current) => current.filter((order) => order.id !== id));
-      Alert.alert(
-        'Pengajuan terkirim',
-        'Client akan meninjau profilmu dan mengonfirmasi dalam 5 menit. Request pindah ke Beranda sebagai pengajuan menunggu konfirmasi.',
-        [
-          {
-            text: 'Lihat Pengajuan',
-            onPress: () =>
-              router.replace({
-                pathname: '/(mechanic)/active-order/[id]',
-                params: { id },
-              }),
-          },
-        ],
-        { cancelable: false },
-      );
-      load();
+      showToast({
+        tone: 'success',
+        title: 'Pengajuan terkirim',
+        message: 'Menunggu konfirmasi client dalam 5 menit.',
+      });
+      router.replace({
+        pathname: '/(mechanic)/active-order/[id]',
+        params: { id },
+      });
+      void load();
     } catch (e) {
       const message =
         e instanceof Error ? e.message : 'Order mungkin sudah diambil montir lain.';
-      Alert.alert('Gagal menerima', message);
-      // Hanya hilangkan dari daftar bila request memang sudah tidak tersedia.
+      showToast({
+        tone: 'danger',
+        title: 'Gagal mengajukan diri',
+        message,
+      });
       if (/diambil montir lain|tidak tersedia/i.test(message)) {
         setOrders((current) => current.filter((order) => order.id !== id));
       }
-      load();
+      void load();
     } finally {
       setAcceptingId(null);
     }
@@ -147,6 +150,80 @@ export default function MechanicRequestsScreen() {
     );
   }
 
+  const headerContent = (
+    <View style={styles.headerStack}>
+      <Surface variant="default" padding="md" style={styles.liveStrip}>
+        <View style={styles.liveLeft}>
+          <View style={styles.liveDot} />
+          <AppText variant="caption" tone="secondary">
+            Memantau request baru secara realtime
+          </AppText>
+        </View>
+        <Ionicons name="radio-outline" size={16} color={theme.colors.textMuted} />
+      </Surface>
+
+      {activeOrderId ? (
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Buka order aktif yang sedang berjalan"
+          onPress={() => router.push(`/(mechanic)/active-order/${activeOrderId}`)}
+          style={({ pressed }) => pressed && styles.pressed}
+        >
+          <Surface variant="outlined" padding="md" style={styles.lockCard}>
+            <View style={styles.lockIcon}>
+              <Ionicons
+                name="lock-closed"
+                size={16}
+                color={theme.colors.statusWarningFg}
+              />
+            </View>
+            <View style={styles.lockCopy}>
+              <AppText variant="label">Selesaikan order aktif dulu</AppText>
+              <AppText variant="caption" tone="secondary">
+                Satu montir hanya memegang satu order. Order #
+                {activeOrderId.slice(0, 8).toUpperCase()} masih berjalan.
+              </AppText>
+            </View>
+            <Ionicons
+              name="chevron-forward"
+              size={18}
+              color={theme.colors.statusWarningFg}
+            />
+          </Surface>
+        </Pressable>
+      ) : null}
+
+      {!error && orders.length > 0 ? (
+        <View style={styles.listHeader}>
+          <AppText variant="overline" tone="muted">
+            TERBUKA
+          </AppText>
+          <View style={styles.countPill}>
+            <AppText
+              variant="overline"
+              tabular
+              style={{ color: theme.colors.statusInfoFg }}
+            >
+              {orders.length}
+            </AppText>
+          </View>
+        </View>
+      ) : null}
+    </View>
+  );
+
+  const emptyContent = error ? (
+    <ErrorState onRetry={() => void load()} />
+  ) : (
+    <EmptyState
+      icon="flash-outline"
+      message="Belum ada request masuk"
+      hint="Request darurat client di sekitarmu akan muncul di sini secara realtime."
+      actionLabel="Buka Beranda"
+      onPressAction={() => router.push('/(mechanic)/(tabs)')}
+    />
+  );
+
   return (
     <View style={styles.screen}>
       <ScreenHeader
@@ -159,169 +236,134 @@ export default function MechanicRequestsScreen() {
         showBack={false}
         right={<MechanicNotificationBell />}
       />
-      <ScrollView
+
+      <FlatList
+        data={error ? [] : orders}
+        keyExtractor={(item) => item.id}
         contentContainerStyle={styles.content}
         showsVerticalScrollIndicator={false}
+        ListHeaderComponent={headerContent}
+        ListEmptyComponent={emptyContent}
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
             onRefresh={() => {
               setRefreshing(true);
-              load();
+              void load();
             }}
-            tintColor={Brand.primary}
-            colors={[Brand.primary]}
+            tintColor={theme.colors.actionPrimaryBg}
+            colors={[theme.colors.actionPrimaryBg]}
           />
         }
-      >
-        <View style={styles.liveStrip}>
-          <View style={styles.liveLeft}>
-            <View style={styles.liveDot} />
-            <Text style={styles.liveText}>Memantau request baru secara realtime</Text>
-          </View>
-          <Ionicons name="radio-outline" size={16} color={Brand.textMuted} />
-        </View>
-
-        {activeOrderId ? (
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Buka order aktif yang sedang berjalan"
-            onPress={() => router.push(`/(mechanic)/active-order/${activeOrderId}`)}
-            style={({ pressed }) => [styles.lockCard, pressed && styles.pressed]}
-          >
-            <View style={styles.lockIcon}>
-              <Ionicons name="lock-closed" size={15} color={Brand.amber} />
-            </View>
-            <View style={styles.lockCopy}>
-              <Text style={styles.lockTitle}>Selesaikan order aktif dulu</Text>
-              <Text style={styles.lockText}>
-                Satu montir hanya memegang satu order. Request baru bisa diambil setelah order #
-                {activeOrderId.slice(0, 8).toUpperCase()} lunas.
-              </Text>
-            </View>
-            <Ionicons name="chevron-forward" size={16} color={Brand.amber} />
-          </Pressable>
-        ) : null}
-
-        {error ? (
-          <ErrorState onRetry={load} />
-        ) : orders.length === 0 ? (
-          <EmptyState
-            icon="flash-outline"
-            message="Belum ada request masuk"
-            hint="Request client yang masih terbuka akan muncul di sini. Setelah kamu terima, request pindah ke Beranda sebagai order aktif."
-            actionLabel="Buka Beranda"
-            onPressAction={() => router.push('/(mechanic)/(tabs)')}
+        renderItem={({ item }) => (
+          <OrderCard
+            issue={item.issue_description}
+            status={item.status}
+            createdAt={item.created_at}
+            vehicle={formatVehicleLabel(
+              item.vehicle_type,
+              item.vehicle_brand,
+              item.vehicle_model,
+            )}
+            clientName={item.client_name}
+            address={
+              [
+                item.address_area,
+                item.distance_km != null ? `± ${item.distance_km.toFixed(1)} km` : null,
+              ]
+                .filter(Boolean)
+                .join(' · ') || null
+            }
+            aiRisk={item.ai_risk_level}
+            badge={NEW_REQUEST_BADGE}
+            onPress={() =>
+              router.push({
+                pathname: '/(mechanic)/request/[id]',
+                params: { id: item.id },
+              })
+            }
+            action={{
+              label: activeOrderId
+                ? 'Selesaikan Order Dulu'
+                : acceptingId === item.id
+                  ? 'Mengajukan...'
+                  : 'Ajukan Diri',
+              icon: 'paper-plane-outline',
+              variant: 'primary',
+              loading: acceptingId === item.id,
+              disabled: activeOrderId != null,
+              onPress: () => void handleAccept(item.id),
+            }}
           />
-        ) : (
-          <>
-            <View style={styles.listHeader}>
-              <Text style={styles.listTitle}>TERBUKA</Text>
-              <View style={styles.countPill}>
-                <Text style={styles.countText}>{orders.length}</Text>
-              </View>
-            </View>
-            {orders.map((order) => (
-              <OrderCard
-                key={order.id}
-                issue={order.issue_description}
-                status={order.status}
-                createdAt={order.created_at}
-                vehicle={formatVehicleLabel(
-                  order.vehicle_type,
-                  order.vehicle_brand,
-                  order.vehicle_model,
-                )}
-                clientName={order.client_name}
-                address={[
-                  order.address_area,
-                  order.distance_km != null ? `± ${order.distance_km.toFixed(1)} km` : null,
-                ]
-                  .filter(Boolean)
-                  .join(' · ') || null}
-                aiRisk={order.ai_risk_level}
-                badge={NEW_REQUEST_BADGE}
-                onPress={() =>
-                  router.push({
-                    pathname: '/(mechanic)/request/[id]',
-                    params: { id: order.id },
-                  })
-                }
-                action={{
-                  label: activeOrderId
-                    ? 'Selesaikan Order Dulu'
-                    : acceptingId === order.id
-                      ? 'Memproses...'
-                      : 'Ajukan ke Client',
-                  icon: 'paper-plane-outline',
-                  loading: acceptingId === order.id,
-                  disabled: activeOrderId != null,
-                  onPress: () => handleAccept(order.id),
-                }}
-              />
-            ))}
-          </>
         )}
-      </ScrollView>
+      />
     </View>
   );
 }
 
-const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: Brand.background },
-  content: { paddingHorizontal: ScreenPadding, paddingBottom: Space.xxxl },
-  liveStrip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingVertical: Space.sm,
-    paddingHorizontal: Space.md,
-    backgroundColor: Brand.surface,
-    borderRadius: Radius.md,
-    borderWidth: 1,
-    borderColor: Brand.border,
-    marginBottom: Space.md,
+const createStyles = (theme: AppTheme) => ({
+  screen: {
+    flex: 1,
+    backgroundColor: theme.colors.bgCanvas,
   },
-  liveLeft: { flexDirection: 'row', alignItems: 'center', gap: 7 },
-  liveDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: Brand.green },
-  liveText: { ...Type.meta, color: Brand.textSecondary },
+  content: {
+    paddingHorizontal: theme.spacing.screenPadding,
+    paddingBottom: theme.spacing.xxxl,
+  },
+  headerStack: {
+    gap: theme.spacing.md,
+    marginBottom: theme.spacing.sm,
+  },
+  liveStrip: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    justifyContent: 'space-between' as const,
+  },
+  liveLeft: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: theme.spacing.sm,
+  },
+  liveDot: {
+    width: 7,
+    height: 7,
+    borderRadius: 4,
+    backgroundColor: theme.colors.statusSuccessFg,
+  },
   lockCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Space.md,
-    backgroundColor: Brand.amberSoft,
-    borderRadius: Radius.lg,
-    padding: Space.md,
-    marginBottom: Space.md,
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: theme.spacing.md,
+    backgroundColor: theme.colors.statusWarningBg,
+    borderColor: theme.colors.statusWarningBorder,
   },
   lockIcon: {
-    width: 34,
-    height: 34,
-    borderRadius: Radius.sm,
-    backgroundColor: Brand.surface,
-    alignItems: 'center',
-    justifyContent: 'center',
+    width: 36,
+    height: 36,
+    borderRadius: theme.radii.sm,
+    backgroundColor: theme.colors.bgSurface,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
   },
-  lockCopy: { flex: 1 },
-  lockTitle: { ...Type.label, color: Brand.text, fontWeight: '700' },
-  lockText: { ...Type.meta, color: '#7C5A12', marginTop: 2, lineHeight: 15 },
+  lockCopy: {
+    flex: 1,
+    gap: 2,
+  },
   listHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    marginTop: Space.sm,
-    marginBottom: Space.md,
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: theme.spacing.sm,
   },
-  listTitle: { ...Type.micro, color: Brand.textMuted, letterSpacing: 1 },
   countPill: {
-    minWidth: 20,
-    height: 20,
-    borderRadius: 10,
-    backgroundColor: Brand.primarySoft,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 5,
+    minWidth: 22,
+    height: 22,
+    borderRadius: theme.radii.pill,
+    backgroundColor: theme.colors.statusInfoBg,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+    paddingHorizontal: theme.spacing.xs,
   },
-  countText: { ...Type.micro, color: Brand.primary, fontSize: 9.5 },
-  pressed: { opacity: 0.8 },
+  pressed: {
+    opacity: 0.85,
+  },
 });

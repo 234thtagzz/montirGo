@@ -1,13 +1,13 @@
-import { StyleSheet, View } from 'react-native';
-
+import { View } from 'react-native';
 import { ErrorState } from '@/components/ui/state';
-import { Brand } from '@/constants/brand';
+import { useThemedStyles, type AppTheme } from '@/theme';
 
 /**
  * Ditampilkan saat sesi belum bisa diverifikasi karena gangguan jaringan.
- * Berbeda dari sesi berakhir: pengguna tidak dipaksa logout, cukup coba lagi.
  */
 export function SessionRetryScreen({ onRetry }: { onRetry: () => void }) {
+  const styles = useThemedStyles(createStyles);
+
   return (
     <View style={styles.screen}>
       <ErrorState
@@ -18,10 +18,10 @@ export function SessionRetryScreen({ onRetry }: { onRetry: () => void }) {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (theme: AppTheme) => ({
   screen: {
     flex: 1,
-    backgroundColor: Brand.background,
-    justifyContent: 'center',
+    backgroundColor: theme.colors.bgCanvas,
+    justifyContent: 'center' as const,
   },
 });

@@ -1,515 +1,54 @@
-import { Avatar } from "@/components/ui/avatar";
-import { Button } from "@/components/ui/button";
-import { ConfirmSheet } from "@/components/ui/confirm-sheet";
-import { Money } from "@/components/ui/money";
-import { SectionHeader } from "@/components/ui/section-header";
-import { Ionicons } from "@/components/ui/icon";
-import { ScreenHeader } from "@/components/ui/screen-header";
-import { EmptyState, ErrorState, LoadingState } from "@/components/ui/state";
+import { useCallback, useRef } from 'react';
 import {
-  Brand,
-  CardShadow,
-  Radius,
-  ScreenPadding,
-  Space,
-  Tabular,
-  Type,
-} from "@/constants/brand";
-import {
-  getMechanicProgressLabel,
-  getNextAction,
-  MECHANIC_CANCEL_REASONS,
-} from "@/features/mechanic/constants";
-import {
-  addOrderInvoiceItem,
-  cancelOrderAsMechanic,
-  canMechanicCancel,
-  deleteOrderInvoiceItem,
-  getMyOrder,
-  listOrderInvoiceItems,
-  listOrderStatusHistory,
-  reopenOrderInvoice,
-  sendOrderInvoice,
-  updateOrderStatus,
-  type MechanicOrderDetail,
-  type OrderInvoiceItem,
-  type OrderStatusEvent,
-} from "@/features/mechanic/service";
-import {
-  confirmCashPayment,
-  getFinanceSettings,
-  syncPaymentStatus,
-  type FinanceSettings,
-} from "@/features/finance/service";
-import {
-  analyzeRequest,
-  getRequestAnalysis,
-  type AiAnalysis,
-} from "@/features/service-request/ai";
-import { AiAnalysisCard } from "@/features/service-request/components/ai-analysis-card";
-import { getStatusMeta, TOTAL_STEPS } from "@/features/service-request/status";
-import { TripEntryCard } from "@/features/mechanic/components/trip/trip-entry-card";
-import { AssignmentPendingCard } from "@/features/mechanic/components/assignment-pending-card";
-import { VehicleProfileCard } from "@/features/vehicles/components/vehicle-profile-card";
-import { createRealtimeChannel, subscribeWithResync } from "@/lib/realtime";
-import { supabase } from "@/lib/supabase";
-import { useRefreshOnForeground } from "@/hooks/use-foreground";
-import { formatDateTime, formatIDR } from "@/utils/format";
-import { openWhatsApp } from "@/utils/whatsapp";
-import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
-import { useCallback, useEffect, useRef, useState } from "react";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
-import {
-  Alert,
-  Pressable,
   RefreshControl,
   ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
   View,
   type LayoutChangeEvent,
   type ScrollViewInstance,
-} from "react-native";
+} from 'react-native';
+import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { Chip } from '@/components/ui/chip';
+import { ConfirmSheet } from '@/components/ui/confirm-sheet';
+import { Money } from '@/components/ui/money';
+import { ScreenHeader } from '@/components/ui/screen-header';
+import { EmptyState, ErrorState, LoadingState } from '@/components/ui/state';
+import { AppText } from '@/components/ui/text';
+import { OrderDetailsAndCancel } from '@/features/mechanic/active-order/order-details-and-cancel';
+import { OrderHeroAndStage } from '@/features/mechanic/active-order/order-hero-and-stage';
+import { QuoteAndBillingSection } from '@/features/mechanic/active-order/quote-and-billing-section';
+import { useMechanicActiveOrder } from '@/features/mechanic/active-order/use-mechanic-active-order';
+import { MECHANIC_CANCEL_REASONS } from '@/features/mechanic/constants';
+import { useAppTheme, useThemedStyles, type AppTheme } from '@/theme';
+import { formatIDR } from '@/utils/format';
 
 export default function MechanicOrderDetailScreen() {
   const { id, focus } = useLocalSearchParams<{ id: string; focus?: string }>();
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const { theme } = useAppTheme();
+  const styles = useThemedStyles(createStyles);
+
   const scrollRef = useRef<ScrollViewInstance>(null);
   const billingOffset = useRef<number | null>(null);
   const scrolledToBilling = useRef(false);
 
-  const [order, setOrder] = useState<MechanicOrderDetail | null>(null);
-  const [history, setHistory] = useState<OrderStatusEvent[]>([]);
-  const [analysis, setAnalysis] = useState<AiAnalysis | null>(null);
-  const [analysisError, setAnalysisError] = useState<string | null>(null);
-  const [analyzing, setAnalyzing] = useState(false);
-  const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
-  const [error, setError] = useState(false);
-  const [updating, setUpdating] = useState(false);
-  const [settings, setSettings] = useState<FinanceSettings | null>(null);
-  const [invoiceItems, setInvoiceItems] = useState<OrderInvoiceItem[]>([]);
-  const [draftKeterangan, setDraftKeterangan] = useState("");
-  const [draftHarga, setDraftHarga] = useState("");
-  const [addingItem, setAddingItem] = useState(false);
-  const [removingItemId, setRemovingItemId] = useState<string | null>(null);
-  const [sendingInvoice, setSendingInvoice] = useState(false);
-  const [confirmingCash, setConfirmingCash] = useState(false);
-  const [invoiceConfirmOpen, setInvoiceConfirmOpen] = useState(false);
-  const [reopenConfirmOpen, setReopenConfirmOpen] = useState(false);
-  const [reopeningInvoice, setReopeningInvoice] = useState(false);
-  const [checkingPayment, setCheckingPayment] = useState(false);
-  const [cashConfirmOpen, setCashConfirmOpen] = useState(false);
-  const [cancelOpen, setCancelOpen] = useState(false);
-  const [cancelling, setCancelling] = useState(false);
-  const [cancelReason, setCancelReason] = useState<string | null>(null);
+  const state = useMechanicActiveOrder(id);
 
-  const loadAnalysis = useCallback(async () => {
-    if (!id) return;
-    try {
-      setAnalysis(await getRequestAnalysis(id));
-      setAnalysisError(null);
-    } catch {
-      setAnalysisError(
-        "Analisis AI gagal dimuat. Periksa koneksi lalu coba lagi.",
-      );
-    }
-  }, [id]);
-
-  const load = useCallback(async () => {
-    if (!id) return;
-    try {
-      const [detail, events, items] = await Promise.all([
-        getMyOrder(id),
-        listOrderStatusHistory(id),
-        listOrderInvoiceItems(id).catch(() => [] as OrderInvoiceItem[]),
-      ]);
-      setOrder(detail);
-      setHistory(events);
-      setInvoiceItems(items);
-      setError(false);
-      await loadAnalysis();
-    } catch {
-      setError(true);
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
-    }
-  }, [id, loadAnalysis]);
-
-  useFocusEffect(
-    useCallback(() => {
-      load();
-    }, [load]),
-  );
-
-  // Muat ulang saat app kembali aktif (status, pembayaran, signed URL foto).
-  useRefreshOnForeground(() => {
-    void load();
-  });
-
-  // Realtime: perubahan status order + hasil analisis AI.
-  useEffect(() => {
-    if (!id) return;
-    const channel = createRealtimeChannel(`mechanic-order-${id}`)
-      .on(
-        "postgres_changes",
-        {
-          event: "*",
-          schema: "public",
-          table: "service_requests",
-          filter: `id=eq.${id}`,
-        },
-        () => load(),
-      )
-      .on(
-        "postgres_changes",
-        {
-          event: "INSERT",
-          schema: "public",
-          table: "ai_diagnoses",
-          filter: `request_id=eq.${id}`,
-        },
-        () => loadAnalysis(),
-      );
-    // Setelah koneksi sempat putus, ambil ulang data yang terlewat.
-    subscribeWithResync(channel, () => void load());
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, [id, load, loadAnalysis]);
-
-  // Webhook Xendit bisa telat atau belum terdaftar. Selama status order masih
-  // `payment`, montir juga memeriksa langsung ke Xendit agar status "lunas"
-  // ikut berubah walau notifikasi webhook tidak sampai ke server.
-  // Polling cadangan dengan exponential backoff (15s -> 30s -> 60s) saat status payment.
-  useEffect(() => {
-    if (!id || order?.status !== "payment" || order?.payment_method === "cash") return;
-    let active = true;
-    let timer: ReturnType<typeof setTimeout> | null = null;
-    const delays = [15_000, 30_000, 60_000];
-    let attempt = 0;
-
-    const tick = async () => {
-      try {
-        const result = await syncPaymentStatus(id);
-        if (!active) return;
-        if (result.status === "paid") {
-          const [detail, events] = await Promise.all([
-            getMyOrder(id),
-            listOrderStatusHistory(id),
-          ]);
-          if (!active) return;
-          setOrder(detail);
-          setHistory(events);
-          return;
-        }
-      } catch {
-        // Gagal sementara — backoff mencoba lagi.
-      }
-      if (!active) return;
-      const delay = delays[Math.min(attempt, delays.length - 1)];
-      attempt += 1;
-      timer = setTimeout(() => {
-        void tick();
-      }, delay);
-    };
-
-    void tick();
-    return () => {
-      active = false;
-      if (timer) clearTimeout(timer);
-    };
-  }, [id, order?.status, order?.payment_method]);
-
-  const manualCheckPayment = async () => {
-    if (!id || checkingPayment) return;
-    setCheckingPayment(true);
-    try {
-      const result = await syncPaymentStatus(id);
-      if (result.status === "paid") {
-        await load();
-      } else {
-        Alert.alert("Belum lunas", "Client belum menyelesaikan pembayaran online.");
-      }
-    } catch (e) {
-      Alert.alert(
-        "Gagal memeriksa status",
-        e instanceof Error ? e.message : "Coba lagi beberapa saat lagi.",
-      );
-    } finally {
-      setCheckingPayment(false);
-    }
-  };
-
-  useEffect(() => {
-    let cancelled = false;
-    getFinanceSettings()
-      .then((value) => {
-        if (!cancelled) setSettings(value);
-      })
-      .catch(() => {
-        // Batas harga memakai default UI bila pengaturan gagal dimuat.
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  // Montir yang baru menekan "Sampai di Lokasi" diarahkan ke sini dengan
-  // param `focus=invoice`, jadi form tagihan langsung terlihat tanpa scroll manual.
   const handleBillingLayout = useCallback(
     (event: LayoutChangeEvent) => {
       billingOffset.current = event.nativeEvent.layout.y;
-      if (focus !== "invoice" || scrolledToBilling.current) return;
+      if (focus !== 'invoice' || scrolledToBilling.current) return;
       scrolledToBilling.current = true;
-      const y = Math.max(0, billingOffset.current - Space.md);
+      const y = Math.max(0, billingOffset.current - theme.spacing.md);
       requestAnimationFrame(() => {
         scrollRef.current?.scrollTo({ y, animated: true });
       });
     },
-    [focus],
+    [focus, theme.spacing.md],
   );
 
-  // Total tagihan selalu dihitung sistem dari seluruh baris rincian.
-  const invoiceTotal = invoiceItems.reduce((sum, item) => sum + item.amount, 0);
-  const minPrice = settings?.minOrderPrice ?? 10000;
-  const maxPrice = settings?.maxOrderPrice ?? 10000000;
-  const feePercent = settings?.feePercent ?? 10;
-  const platformFee = Math.round((invoiceTotal * feePercent) / 100);
-  const netPrice = invoiceTotal - platformFee;
-  const totalError =
-    invoiceTotal === 0
-      ? null
-      : invoiceTotal < minPrice
-        ? `Minimal ${formatIDR(minPrice)}.`
-        : invoiceTotal > maxPrice
-          ? `Maksimal ${formatIDR(maxPrice)}.`
-          : null;
-  const canSendInvoice =
-    !sendingInvoice &&
-    invoiceItems.length > 0 &&
-    invoiceTotal >= minPrice &&
-    invoiceTotal <= maxPrice &&
-    !totalError;
-  const canEditInvoice = order != null && order.status === "arrived";
-
-  const openInvoiceConfirm = () => {
-    if (!order || !canSendInvoice) return;
-    setInvoiceConfirmOpen(true);
-  };
-
-  const addItem = async () => {
-    if (!order || addingItem) return;
-    const amount = Number(draftHarga.replace(/[^0-9]/g, "")) || 0;
-    if (!draftKeterangan.trim()) {
-      Alert.alert(
-        "Keterangan kosong",
-        "Tulis keterangan tindakan atau suku cadang terlebih dahulu.",
-      );
-      return;
-    }
-    if (amount <= 0) {
-      Alert.alert("Harga belum valid", "Isi harga baris lebih dari 0.");
-      return;
-    }
-    setAddingItem(true);
-    try {
-      const item = await addOrderInvoiceItem(order.id, {
-        description: draftKeterangan,
-        amount,
-      });
-      setInvoiceItems((prev) => [...prev, item]);
-      setDraftKeterangan("");
-      setDraftHarga("");
-    } catch (e) {
-      Alert.alert(
-        "Gagal menambah baris",
-        e instanceof Error ? e.message : "Coba lagi.",
-      );
-    } finally {
-      setAddingItem(false);
-    }
-  };
-
-  const removeItem = async (item: OrderInvoiceItem) => {
-    if (removingItemId) return;
-    setRemovingItemId(item.id);
-    try {
-      await deleteOrderInvoiceItem(item.id);
-      setInvoiceItems((prev) => prev.filter((row) => row.id !== item.id));
-    } catch (e) {
-      Alert.alert(
-        "Gagal menghapus baris",
-        e instanceof Error ? e.message : "Coba lagi.",
-      );
-    } finally {
-      setRemovingItemId(null);
-    }
-  };
-
-  const sendInvoice = async () => {
-    if (!order || !canSendInvoice) return;
-    setSendingInvoice(true);
-    try {
-      await sendOrderInvoice(order.id);
-      setInvoiceConfirmOpen(false);
-      setDraftKeterangan("");
-      setDraftHarga("");
-      await load();
-    } catch (e) {
-      Alert.alert(
-        "Gagal mengirim tagihan",
-        e instanceof Error ? e.message : "Coba lagi.",
-      );
-    } finally {
-      setSendingInvoice(false);
-    }
-  };
-
-  const submitReopenInvoice = async () => {
-    if (!order || reopeningInvoice) return;
-    setReopeningInvoice(true);
-    try {
-      await reopenOrderInvoice(order.id);
-      setReopenConfirmOpen(false);
-      await load();
-    } catch (e) {
-      Alert.alert(
-        "Gagal membuka tagihan",
-        e instanceof Error ? e.message : "Coba lagi.",
-      );
-    } finally {
-      setReopeningInvoice(false);
-    }
-  };
-
-  /** Montir mengonfirmasi uang tunai sudah diterima dari client. */
-  const openCashConfirm = () => {
-    if (!order || confirmingCash) return;
-    setCashConfirmOpen(true);
-  };
-
-  const submitCash = async () => {
-    if (!order) return;
-    setConfirmingCash(true);
-    try {
-      await confirmCashPayment(order.id);
-      setCashConfirmOpen(false);
-      await load();
-    } catch (e) {
-      Alert.alert(
-        'Gagal mengonfirmasi',
-        e instanceof Error ? e.message : 'Coba lagi.',
-      );
-    } finally {
-      setConfirmingCash(false);
-    }
-  };
-
-  const retryAnalysis = async () => {
-    if (!id || analyzing) return;
-    setAnalyzing(true);
-    try {
-      await analyzeRequest(id);
-      await loadAnalysis();
-    } catch (e) {
-      setAnalysisError(
-        e instanceof Error
-          ? e.message
-          : "Analisis AI gagal. Coba lagi beberapa saat lagi.",
-      );
-    } finally {
-      setAnalyzing(false);
-    }
-  };
-
-  const chatClient = () => {
-    if (!order) return;
-    const phone = order.client_phone ?? order.contact_phone;
-    void openWhatsApp(
-      phone,
-      `Halo, saya montir MontirGo yang menangani pesanan #${order.id
-        .slice(0, 8)
-        .toUpperCase()}.`,
-    );
-  };
-
-  const nextAction = order ? getNextAction(order.status) : null;
-  const pendingConfirmation = order?.status === "mechanic_assigned";
-  const tripStatus: "mechanic_accepted" | "on_the_way" | null =
-    order?.status === "mechanic_accepted" || order?.status === "on_the_way"
-      ? order.status
-      : null;
-  // Transisi "Mulai Perjalanan"/"Sampai di Lokasi" dimiliki layar trip agar
-  // tidak ada dua tombol yang mengubah status yang sama.
-  const stageAction = tripStatus ? null : nextAction;
-  const canCancel = order ? canMechanicCancel(order.status) : false;
-
-  const openCancel = () => {
-    if (!canCancel || cancelling) return;
-    setCancelReason(null);
-    setCancelOpen(true);
-  };
-
-  const submitCancel = async () => {
-    if (!order || cancelling) return;
-    setCancelling(true);
-    try {
-      const { returnedToPool } = await cancelOrderAsMechanic(
-        order.id,
-        cancelReason ?? undefined,
-      );
-      setCancelOpen(false);
-      setCancelReason(null);
-      await load();
-      Alert.alert(
-        "Pesanan dibatalkan",
-        returnedToPool
-          ? "Pesanan dibuka kembali agar client dapat ditangani montir lain."
-          : "Client sudah menerima pembaruan bahwa pesanan dibatalkan.",
-      );
-    } catch (e) {
-      Alert.alert(
-        "Gagal membatalkan",
-        e instanceof Error ? e.message : "Coba lagi beberapa saat.",
-      );
-    } finally {
-      setCancelling(false);
-    }
-  };
-
-  const advance = () => {
-    if (!order || !nextAction) return;
-    Alert.alert(
-      "Ubah status order?",
-      `Status akan menjadi "${nextAction.label}".`,
-      [
-        { text: "Batal", style: "cancel" },
-        {
-          text: "Lanjutkan",
-          onPress: async () => {
-            setUpdating(true);
-            try {
-              await updateOrderStatus(order.id, nextAction.next);
-              await load();
-            } catch (e) {
-              Alert.alert(
-                "Gagal",
-                e instanceof Error ? e.message : "Tidak bisa mengubah status.",
-              );
-            } finally {
-              setUpdating(false);
-            }
-          },
-        },
-      ],
-    );
-  };
-
-  if (loading) {
+  if (state.loading) {
     return (
       <View style={styles.screen}>
         <ScreenHeader title="Detail Order" />
@@ -518,16 +57,16 @@ export default function MechanicOrderDetailScreen() {
     );
   }
 
-  if (error) {
+  if (state.error) {
     return (
       <View style={styles.screen}>
         <ScreenHeader title="Detail Order" />
-        <ErrorState onRetry={load} />
+        <ErrorState onRetry={() => void state.load()} />
       </View>
     );
   }
 
-  if (!order) {
+  if (!state.order) {
     return (
       <View style={styles.screen}>
         <ScreenHeader title="Detail Order" />
@@ -536,37 +75,13 @@ export default function MechanicOrderDetailScreen() {
           message="Order tidak ditemukan"
           hint="Order mungkin sudah selesai atau bukan milikmu."
           actionLabel="Kembali ke Beranda"
-          onPressAction={() => router.replace("/(mechanic)/(tabs)")}
+          onPressAction={() => router.replace('/(mechanic)/(tabs)')}
         />
       </View>
     );
   }
 
-  const meta = getStatusMeta(order.status);
-  const cashAmount = order.price_amount ?? 0;
-  const hasVehicle = Boolean(
-    order.vehicle_type ||
-      order.vehicle_brand ||
-      order.vehicle_model ||
-      order.vehicle_plate ||
-      order.vehicle_photo_url,
-  );
-
-  const heroTitle = getMechanicProgressLabel(order.status);
-  const heroSub =
-    order.status === "paid"
-      ? order.payment_method === "cash"
-        ? "Dibayar tunai oleh pelanggan"
-        : "Pembayaran online terverifikasi"
-      : order.status === "payment"
-        ? order.payment_method === "cash"
-          ? "Pelanggan memilih pembayaran tunai"
-          : "Menunggu pembayaran dari pelanggan"
-        : order.status === "cancelled"
-          ? null
-          : meta.label.toLowerCase() !== heroTitle.toLowerCase()
-            ? meta.label
-            : null;
+  const order = state.order;
 
   return (
     <View style={styles.screen}>
@@ -578,583 +93,202 @@ export default function MechanicOrderDetailScreen() {
         ref={scrollRef}
         contentContainerStyle={[
           styles.content,
-          { paddingBottom: Space.xxxl + insets.bottom },
+          { paddingBottom: theme.spacing.xxxl + insets.bottom },
         ]}
         showsVerticalScrollIndicator={false}
         refreshControl={
           <RefreshControl
-            refreshing={refreshing}
+            refreshing={state.refreshing}
             onRefresh={() => {
-              setRefreshing(true);
-              load();
+              state.setRefreshing(true);
+              void state.load();
             }}
-            tintColor={Brand.primary}
-            colors={[Brand.primary]}
+            tintColor={theme.colors.actionPrimaryBg}
+            colors={[theme.colors.actionPrimaryBg]}
           />
         }
       >
-        <View style={styles.hero}>
-          <View style={styles.heroTop}>
-            <View style={styles.heroChip}>
-              <View style={[styles.heroChipDot, { backgroundColor: meta.color }]} />
-              <Text style={styles.heroChipText}>{meta.shortLabel}</Text>
-            </View>
-            <Text style={styles.heroTime}>{formatDateTime(order.created_at)}</Text>
-          </View>
-          <Text style={styles.heroTitle}>{heroTitle}</Text>
-          {heroSub ? <Text style={styles.heroSub}>{heroSub}</Text> : null}
-
-          {meta.step > 0 ? (
-            <View style={styles.progressWrap}>
-              <View style={styles.progress}>
-                {Array.from({ length: TOTAL_STEPS }).map((_, index) => (
-                  <View
-                    key={index}
-                    style={[
-                      styles.segment,
-                      index < meta.step && styles.segmentActive,
-                    ]}
-                  />
-                ))}
-              </View>
-              <Text style={styles.progressLabel}>
-                Tahap {meta.step} dari {TOTAL_STEPS}
-              </Text>
-            </View>
-          ) : null}
-
-          <View style={styles.heroDivider} />
-
-          <View style={styles.clientRow}>
-            <Avatar name={order.client_name ?? "Client"} size={42} />
-            <View style={styles.clientCopy}>
-              <Text style={styles.clientName} numberOfLines={1}>
-                {order.client_name ?? "Client MontirGo"}
-              </Text>
-              <Text style={styles.clientRole}>Pelanggan yang kamu tangani</Text>
-            </View>
-            {order.client_phone || order.contact_phone ? (
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel="Hubungi pelanggan lewat WhatsApp"
-                onPress={chatClient}
-                style={({ pressed }) => [
-                  styles.chatButton,
-                  pressed && styles.pressed,
-                ]}
-              >
-                <Ionicons name="logo-whatsapp" size={19} color={Brand.volt} />
-              </Pressable>
-            ) : null}
-          </View>
-        </View>
-
-        {pendingConfirmation ? (
-          <AssignmentPendingCard expiresAt={order.assignment_expires_at} />
-        ) : tripStatus ? (
-          <TripEntryCard
-            status={tripStatus}
-            onPress={() =>
-              router.push({
-                pathname: '/(mechanic)/trip/[id]',
-                params: { id: order.id },
-              })
-            }
-          />
-        ) : null}
-
-        {hasVehicle ? (
-          <>
-            <SectionHeader eyebrow="KENDARAAN" title="Kendaraan client" />
-            <VehicleProfileCard
-              title="Data kendaraan"
-              photo={order.vehicle_photo_url}
-              type={order.vehicle_type}
-              brand={order.vehicle_brand}
-              model={order.vehicle_model}
-              year={order.vehicle_year}
-              plate={order.vehicle_plate}
-            />
-          </>
-        ) : null}
-
-        <SectionHeader eyebrow="KELUHAN" title="Detail permintaan" />
-        <View style={styles.detailCard}>
-          <DetailRow label="Keluhan" value={order.issue_description} />
-          {order.symptoms ? (
-            <DetailRow label="Gejala" value={order.symptoms} />
-          ) : null}
-          {!hasVehicle ? (
-            <DetailRow label="Kendaraan" value="Tidak dicantumkan" />
-          ) : null}
-          <DetailRow
-            label="Lokasi"
-            value={order.address || "Lokasi GPS terdeteksi"}
-          />
-          <DetailRow label="WhatsApp" value={order.contact_phone} />
-          {order.additional_notes ? (
-            <DetailRow label="Catatan" value={order.additional_notes} />
-          ) : null}
-          {order.price_amount != null ? (
-            <DetailRow
-              label="Biaya"
-              value={formatIDR(order.price_amount)}
-              highlight
-            />
-          ) : null}
-        </View>
-
-        <View onLayout={handleBillingLayout} />
-        <SectionHeader eyebrow="PEMBAYARAN" title="Tagihan terperinci" />
-        {canEditInvoice ? (
-          <View style={styles.billingCard}>
-            <Text style={styles.billingLabel}>
-              Rincian tindakan & suku cadang
-            </Text>
-            {invoiceItems.length === 0 ? (
-              <Text style={styles.billingHint}>
-                Belum ada baris. Tambahkan keterangan dan harga — total dihitung
-                otomatis oleh sistem.
-              </Text>
-            ) : (
-              <InvoiceItemList
-                items={invoiceItems}
-                editable
-                removingItemId={removingItemId}
-                onRemove={removeItem}
-              />
-            )}
-
-            <View style={styles.addItemBox}>
-              <TextInput
-                value={draftKeterangan}
-                onChangeText={setDraftKeterangan}
-                placeholder="Keterangan (mis. Ganti oli mesin)"
-                placeholderTextColor={Brand.textMuted}
-                selectionColor={Brand.primary}
-                style={styles.addItemInput}
-              />
-              <View style={styles.addItemPriceRow}>
-                <Text style={styles.addItemCurrency}>Rp</Text>
-                <TextInput
-                  value={
-                    draftHarga ? Number(draftHarga).toLocaleString("id-ID") : ""
-                  }
-                  onChangeText={(text) =>
-                    setDraftHarga(text.replace(/[^0-9]/g, ""))
-                  }
-                  placeholder="0"
-                  placeholderTextColor={Brand.textMuted}
-                  keyboardType="number-pad"
-                  selectionColor={Brand.primary}
-                  style={[styles.addItemPriceInput, Tabular]}
-                />
-              </View>
-              <Button
-                label="Tambah Baris"
-                icon="add-outline"
-                variant="secondary"
-                loading={addingItem}
-                disabled={addingItem}
-                onPress={addItem}
-              />
-            </View>
-
-            <View style={styles.totalBand}>
-              <View style={styles.netCopy}>
-                <Text style={styles.totalLabel}>Total dihitung sistem</Text>
-                <Text style={styles.totalHint}>
-                  {invoiceItems.length} baris rincian
-                </Text>
-              </View>
-              <Money value={invoiceTotal} size="md" color={Brand.text} />
-            </View>
-            {totalError ? (
-              <Text style={styles.priceError}>{totalError}</Text>
-            ) : (
-              <Text style={styles.priceHelper}>
-                Rentang {formatIDR(minPrice)} – {formatIDR(maxPrice)}
-              </Text>
-            )}
-            <View style={styles.priceRow}>
-              <Text style={styles.priceMetaLabel}>
-                Fee platform ({feePercent}%)
-              </Text>
-              <Text style={[styles.priceMetaValue, Tabular]}>
-                − {formatIDR(platformFee)}
-              </Text>
-            </View>
-            <View style={styles.netBand}>
-              <View style={styles.netCopy}>
-                <Text style={styles.netLabel}>Kamu terima</Text>
-                <Text style={styles.netHint}>Setelah fee platform</Text>
-              </View>
-              <Money value={netPrice} size="md" color={Brand.green} />
-            </View>
-            <Button
-              label="Kirim Tagihan Terperinci"
-              icon="receipt-outline"
-              variant="ink"
-              loading={sendingInvoice}
-              disabled={!canSendInvoice}
-              onPress={openInvoiceConfirm}
-              style={styles.sendPrice}
-            />
-            <Text style={styles.billingHint}>
-              Client melihat setiap baris keterangan dan harga sebelum membayar.
-              Jika ada perubahan sebelum dibayar, kamu masih bisa merevisi
-              tagihan. Pembayaran bisa lewat QRIS / e-wallet Xendit atau tunai
-              langsung ke kamu.
-            </Text>
-          </View>
-        ) : invoiceItems.length > 0 ? (
-          <View style={styles.billingCard}>
-            <Text style={styles.billingLabel}>
-              Rincian yang dikirim ke client
-            </Text>
-            <InvoiceItemList items={invoiceItems} editable={false} />
-            <View style={styles.totalBand}>
-              <View style={styles.netCopy}>
-                <Text style={styles.totalLabel}>Total tagihan</Text>
-                <Text style={styles.totalHint}>
-                  {invoiceItems.length} baris rincian
-                </Text>
-              </View>
-              <Money
-                value={order.price_amount ?? invoiceTotal}
-                size="md"
-                color={Brand.text}
-              />
-            </View>
-          </View>
-        ) : null}
-
-        {canEditInvoice ? null : order.status === "payment" ? (
-          <>
-            <View style={styles.pendingCard}>
-              <Ionicons
-                name={order.payment_method === "cash" ? "cash-outline" : "time-outline"}
-                size={18}
-                color={Brand.amber}
-              />
-              <View style={styles.pendingCopy}>
-                <Text style={styles.pendingText}>
-                  Tagihan {formatIDR(order.price_amount ?? 0)} sudah dikirim.{" "}
-                  {order.payment_method === "cash"
-                    ? "Client memilih bayar tunai — konfirmasi setelah uang kamu terima."
-                    : "Menunggu pembayaran client."}
-                </Text>
-                {order.payment_method === "cash" ? (
-                  <Text style={styles.pendingHint}>
-                    Uang tunai langsung kamu terima (tidak masuk saldo dompet).
-                    Komisi platform {feePercent}% dipotong dari saldo dompet
-                    atau dicatat sebagai tunggakan komisi.
-                  </Text>
-                ) : null}
-              </View>
-            </View>
-            {order.payment_method === "cash" ? (
-              <Button
-                label="Konfirmasi Pembayaran Cash"
-                icon="cash-outline"
-                variant="ink"
-                loading={confirmingCash}
-                onPress={openCashConfirm}
-                style={styles.cashConfirm}
-              />
-            ) : (
-              <Button
-                label="Cek Status Pembayaran"
-                icon="refresh-outline"
-                variant="secondary"
-                loading={checkingPayment}
-                disabled={reopeningInvoice}
-                onPress={manualCheckPayment}
-                style={styles.cashConfirm}
-              />
-            )}
-            <Button
-              label="Revisi Tagihan"
-              icon="create-outline"
-              variant="secondary"
-              loading={reopeningInvoice}
-              disabled={confirmingCash}
-              onPress={() => setReopenConfirmOpen(true)}
-              style={styles.cashConfirm}
-            />
-          </>
-        ) : order.status === "paid" ? (
-          <View style={styles.doneCard}>
-            <Ionicons
-              name="checkmark-done-outline"
-              size={16}
-              color={Brand.green}
-            />
-            <Text style={styles.doneText}>
-              {order.payment_method === "cash" ? (
-                <>
-                  Pembayaran tunai {formatIDR(order.price_amount ?? 0)} sudah
-                  dikonfirmasi. Pendapatan tercatat di menu Pendapatan dan
-                  komisi platform {feePercent}% telah diperhitungkan di
-                  dompetmu.
-                </>
-              ) : (
-                <>
-                  Pembayaran {formatIDR(order.price_amount ?? 0)} sudah lunas.
-                  Pendapatan masuk ke saldo pending.
-                </>
-              )}
-            </Text>
-          </View>
-        ) : invoiceItems.length === 0 ? (
-          <View style={styles.infoCard}>
-            <Ionicons
-              name="information-circle-outline"
-              size={18}
-              color={Brand.primary}
-            />
-            <Text style={styles.infoText}>
-              Tagihan bisa dikirim setelah kamu menekan “Sampai di Lokasi”. Client
-              langsung menerima notifikasi pembayaran.
-            </Text>
-          </View>
-        ) : null}
-
-        <SectionHeader eyebrow="AI" title="Analisis awal" />
-        <AiAnalysisCard
-          analysis={analysis}
-          error={analysisError}
-          retrying={analyzing}
-          onRetry={
-            order.status !== "cancelled" && order.status !== "paid"
-              ? retryAnalysis
-              : undefined
+        <OrderHeroAndStage
+          order={order}
+          updatingStage={state.updatingStage}
+          onChatClient={() => void state.chatClient()}
+          onOpenTrip={() =>
+            router.push({
+              pathname: '/(mechanic)/trip/[id]',
+              params: { id: order.id },
+            })
           }
-          subtitle="Indikasi awal — lakukan pemeriksaan langsung"
+          onAdvanceStage={(toStatus) => void state.advanceStage(toStatus)}
         />
 
-        {history.length > 0 ? (
-          <>
-            <SectionHeader eyebrow="RIWAYAT" title="Riwayat status" />
-            <View style={styles.detailCard}>
-              {history.map((event, index) => {
-                const eventMeta = getStatusMeta(event.to_status);
-                return (
-                  <View key={event.id} style={styles.timelineRow}>
-                    <View style={styles.timelineLeft}>
-                      <View
-                        style={[
-                          styles.timelineDot,
-                          { backgroundColor: eventMeta.color },
-                        ]}
-                      />
-                      {index < history.length - 1 ? (
-                        <View style={styles.timelineLine} />
-                      ) : null}
-                    </View>
-                    <View style={styles.timelineCopy}>
-                      <Text style={styles.timelineTitle}>
-                        {eventMeta.label}
-                      </Text>
-                      {event.notes ? (
-                        <Text style={styles.timelineNote}>{event.notes}</Text>
-                      ) : null}
-                      <Text style={styles.timelineTime}>
-                        {formatDateTime(event.created_at)}
-                      </Text>
-                    </View>
-                  </View>
-                );
-              })}
-            </View>
-          </>
-        ) : null}
+        <View onLayout={handleBillingLayout} />
+        <QuoteAndBillingSection
+          order={order}
+          invoiceItems={state.invoiceItems}
+          invoiceTotal={state.invoiceTotal}
+          minPrice={state.minPrice}
+          maxPrice={state.maxPrice}
+          feePercent={state.feePercent}
+          platformFee={state.platformFee}
+          netPrice={state.netPrice}
+          totalError={state.totalError}
+          canSendInvoice={state.canSendInvoice}
+          draftType={state.draftType}
+          onChangeDraftType={state.setDraftType}
+          draftDescription={state.draftDescription}
+          onChangeDraftDescription={state.setDraftDescription}
+          draftAmountText={state.draftAmountText}
+          onChangeDraftAmountText={state.setDraftAmountText}
+          addingItem={state.addingItem}
+          removingItemId={state.removingItemId}
+          quotePhotoPaths={state.quotePhotoPaths}
+          quotePhotoUrls={state.quotePhotoUrls}
+          uploadingPhoto={state.uploadingPhoto}
+          submittingQuote={state.submittingQuote}
+          withdrawingQuote={state.withdrawingQuote}
+          addonDescription={state.addonDescription}
+          onChangeAddonDescription={state.setAddonDescription}
+          addonAmountText={state.addonAmountText}
+          onChangeAddonAmountText={state.setAddonAmountText}
+          submittingAddon={state.submittingAddon}
+          sendingInvoice={state.sendingInvoice}
+          reopeningInvoice={state.reopeningInvoice}
+          checkingPayment={state.checkingPayment}
+          confirmingCash={state.confirmingCash}
+          onAddItem={(override) => void state.addItem(override)}
+          onRemoveItem={(item) => void state.removeItem(item)}
+          onAddPhoto={(source) => void state.addDamagePhoto(source)}
+          onRemovePhoto={(path) => void state.removeDamagePhoto(path)}
+          onSubmitQuote={() => void state.submitQuote()}
+          onOpenWithdrawQuote={() => state.setWithdrawConfirmOpen(true)}
+          onSubmitAddon={() => void state.submitAddon()}
+          onOpenInvoiceConfirm={() => state.setInvoiceConfirmOpen(true)}
+          onOpenReopenConfirm={() => state.setReopenConfirmOpen(true)}
+          onManualCheckPayment={() => void state.manualCheckPayment()}
+          onConfirmCash={() => void state.submitCash()}
+        />
 
-        <SectionHeader eyebrow="LAPORAN" title="Laporkan keluhan ke admin" />
-        <View style={styles.reportCard}>
-          <View style={styles.reportHead}>
-            <View style={styles.reportIcon}>
-              <Ionicons name="shield-checkmark-outline" size={18} color={Brand.primary} />
-            </View>
-            <Text style={styles.reportText}>
-              Ada kendala selama perjalanan atau transaksi ini? Laporkan ke admin MontirGo — soal
-              pembayaran, client, kendaraan, atau aplikasi.
-            </Text>
-          </View>
-          <Button
-            label="Ajukan Keluhan"
-            icon="alert-circle-outline"
-            variant="secondary"
-            onPress={() =>
-              router.push({ pathname: '/(mechanic)/complaints', params: { requestId: id } })
-            }
-            style={styles.reportButton}
-          />
-        </View>
-
-        {stageAction ? (
-          <Button
-            label={stageAction.label}
-            icon={stageAction.icon}
-            variant="ink"
-            loading={updating}
-            onPress={advance}
-            style={styles.action}
-          />
-        ) : canEditInvoice ||
-          tripStatus ||
-          pendingConfirmation ||
-          order.status === "paid" ||
-          order.status === "payment" ? null : (
-          <View style={styles.doneCard}>
-            <Ionicons
-              name="checkmark-done-outline"
-              size={16}
-              color={Brand.green}
-            />
-            <Text style={styles.doneText}>
-              Tidak ada aksi lanjutan untuk status ini.
-            </Text>
-          </View>
-        )}
-
-        {canCancel ? (
-          <View style={styles.cancelZone}>
-            <View style={styles.cancelDivider} />
-            <Button
-              label="Batalkan Pesanan"
-              icon="close-circle-outline"
-              variant="danger"
-              loading={cancelling}
-              onPress={openCancel}
-            />
-            <Text style={styles.cancelHint}>
-              Pesanan akan dihentikan dan client diberi tahu. Gunakan hanya jika
-              kamu benar-benar tidak bisa melanjutkan pekerjaan ini.
-            </Text>
-          </View>
-        ) : null}
+        <OrderDetailsAndCancel
+          order={order}
+          history={state.history}
+          analysis={state.analysis}
+          analysisError={state.analysisError}
+          analyzing={state.analyzing}
+          canCancel={state.canCancel}
+          cancelling={state.cancelling}
+          onRetryAnalysis={() => void state.retryAnalysis()}
+          onOpenComplaint={() =>
+            router.push({
+              pathname: '/(mechanic)/complaints',
+              params: { requestId: order.id },
+            })
+          }
+          onOpenCancel={state.openCancel}
+        />
       </ScrollView>
 
       <ConfirmSheet
-        visible={invoiceConfirmOpen}
-        title="Kirim tagihan terperinci?"
-        message={`Client akan menerima ${invoiceItems.length} baris rincian dengan total ${formatIDR(invoiceTotal)} dan bisa langsung membayar.`}
+        visible={state.withdrawConfirmOpen}
+        title="Tarik & edit estimasi?"
+        message="Estimasi dikembalikan ke draf agar kamu dapat mengubah rincian sebelum disetujui client."
+        confirmLabel="Ya, tarik estimasi"
+        icon="create-outline"
+        loading={state.withdrawingQuote}
+        onConfirm={() => void state.withdrawQuote()}
+        onCancel={() => state.setWithdrawConfirmOpen(false)}
+      />
+
+      <ConfirmSheet
+        visible={state.invoiceConfirmOpen}
+        title="Finalisasi & kirim tagihan?"
+        message={`Client akan menerima tagihan resmi sebesar ${formatIDR(state.invoiceTotal)} (${state.invoiceItems.length} item) dan memilih metode pembayaran.`}
         confirmLabel="Kirim tagihan"
         icon="receipt-outline"
-        loading={sendingInvoice}
-        onConfirm={sendInvoice}
-        onCancel={() => setInvoiceConfirmOpen(false)}
+        loading={state.sendingInvoice}
+        onConfirm={() => void state.sendInvoice()}
+        onCancel={() => state.setInvoiceConfirmOpen(false)}
       >
         <View style={styles.sheetBox}>
-          {invoiceItems.map((item) => (
+          {state.invoiceItems.map((item) => (
             <View key={item.id} style={styles.sheetRow}>
-              <Text style={styles.sheetLabel} numberOfLines={1}>
+              <AppText variant="caption" tone="secondary" numberOfLines={1} style={styles.sheetLabel}>
                 {item.description}
-              </Text>
-              <Text style={[styles.sheetValue, Tabular]}>
+              </AppText>
+              <AppText variant="label" tabular>
                 {formatIDR(item.amount)}
-              </Text>
+              </AppText>
             </View>
           ))}
           <View style={styles.sheetDivider} />
           <View style={styles.sheetRow}>
-            <Text style={styles.sheetLabel}>Total</Text>
-            <Money value={invoiceTotal} size="sm" color={Brand.text} />
+            <AppText variant="caption" tone="secondary">
+              Total
+            </AppText>
+            <Money value={state.invoiceTotal} size="sm" color={theme.colors.textPrimary} />
           </View>
           <View style={styles.sheetRow}>
-            <Text style={styles.sheetLabel}>Fee platform ({feePercent}%)</Text>
-            <Text style={[styles.sheetValue, Tabular]}>
-              − {formatIDR(platformFee)}
-            </Text>
+            <AppText variant="caption" tone="secondary">
+              Fee platform ({state.feePercent}%)
+            </AppText>
+            <AppText variant="caption" tabular>
+              − {formatIDR(state.platformFee)}
+            </AppText>
           </View>
           <View style={styles.sheetDivider} />
           <View style={styles.sheetRow}>
-            <Text style={styles.sheetLabel}>Kamu terima</Text>
-            <Money value={netPrice} size="md" color={Brand.green} />
+            <AppText variant="label">Kamu terima</AppText>
+            <Money value={state.netPrice} size="md" color={theme.colors.statusSuccessFg} />
           </View>
         </View>
       </ConfirmSheet>
 
       <ConfirmSheet
-        visible={cashConfirmOpen}
-        title="Konfirmasi pembayaran tunai?"
-        message={
-          `Pastikan kamu sudah menerima uang tunai ${formatIDR(cashAmount)} dari client.` +
-          (order.payment_method === "cash"
-            ? ""
-            : "\n\nClient belum memilih metode tunai di aplikasi.")
-        }
-        confirmLabel="Ya, sudah diterima"
-        icon="cash-outline"
-        loading={confirmingCash}
-        onConfirm={submitCash}
-        onCancel={() => setCashConfirmOpen(false)}
-      >
-        <View style={styles.sheetCash}>
-          <Ionicons name="cash-outline" size={18} color={Brand.green} />
-          <Text style={styles.sheetCashText}>
-            Uang tunai tercatat di menu Pendapatan dan tidak masuk saldo dompet.
-            Komisi platform {feePercent}% akan dipotong dari saldo atau dicatat
-            sebagai tunggakan komisi.
-          </Text>
-        </View>
-      </ConfirmSheet>
-
-      <ConfirmSheet
-        visible={reopenConfirmOpen}
+        visible={state.reopenConfirmOpen}
         title="Revisi tagihan?"
-        message="Link pembayaran Xendit yang belum dibayar akan dibatalkan dan tagihan dibuka kembali agar kamu bisa mengubah rinciannya."
+        message="Link pembayaran Xendit yang belum dibayar akan dibatalkan dan estimasi dibuka ulang sebagai draf (memerlukan persetujuan ulang client)."
         confirmLabel="Ya, revisi tagihan"
         icon="create-outline"
-        loading={reopeningInvoice}
-        onConfirm={submitReopenInvoice}
+        loading={state.reopeningInvoice}
+        onConfirm={() => void state.submitReopenInvoice()}
         onCancel={() => {
-          if (!reopeningInvoice) setReopenConfirmOpen(false);
+          if (!state.reopeningInvoice) state.setReopenConfirmOpen(false);
         }}
       />
 
       <ConfirmSheet
-        visible={cancelOpen}
+        visible={state.cancelOpen}
         title="Batalkan pesanan?"
-        message="Client akan diberi tahu bahwa pesanan dibatalkan. Tindakan ini tidak bisa diurungkan."
-        confirmLabel="Ya, batalkan pesanan"
+        message={
+          order.status === 'arrived'
+            ? 'Setelah tiba di lokasi, alasan pembatalan wajib dipilih sebelum menghentikan pesanan.'
+            : 'Pesanan akan dilepas agar client dapat ditangani montir lain.'
+        }
+        confirmLabel="Ya, batalkan"
         cancelLabel="Kembali"
         icon="close-circle-outline"
         destructive
-        loading={cancelling}
-        onConfirm={submitCancel}
+        loading={state.cancelling}
+        onConfirm={() => void state.submitCancel()}
         onCancel={() => {
-          if (!cancelling) setCancelOpen(false);
+          if (!state.cancelling) state.setCancelOpen(false);
         }}
       >
         <View style={styles.cancelSheet}>
-          <Text style={styles.cancelSheetLabel}>Alasan (opsional)</Text>
+          <AppText variant="label" tone="secondary">
+            {order.status === 'arrived' ? 'Alasan (wajib)' : 'Alasan (opsional)'}
+          </AppText>
           <View style={styles.reasonWrap}>
             {MECHANIC_CANCEL_REASONS.map((reason) => {
-              const active = cancelReason === reason;
+              const active = state.cancelReason === reason;
               return (
-                <Pressable
+                <Chip
                   key={reason}
-                  accessibilityRole="button"
-                  accessibilityState={{ selected: active }}
-                  disabled={cancelling}
-                  onPress={() => setCancelReason(active ? null : reason)}
-                  style={({ pressed }) => [
-                    styles.reasonChip,
-                    active && styles.reasonChipActive,
-                    pressed && styles.reasonChipPressed,
-                  ]}
-                >
-                  <Text
-                    style={[
-                      styles.reasonText,
-                      active && styles.reasonTextActive,
-                    ]}
-                  >
-                    {reason}
-                  </Text>
-                </Pressable>
+                  label={reason}
+                  tone="danger"
+                  selected={active}
+                  disabled={state.cancelling}
+                  onPress={() => state.setCancelReason(active ? null : reason)}
+                />
               );
             })}
           </View>
@@ -1164,430 +298,41 @@ export default function MechanicOrderDetailScreen() {
   );
 }
 
-function DetailRow({
-  label,
-  value,
-  highlight = false,
-}: {
-  label: string;
-  value: string;
-  highlight?: boolean;
-}) {
-  return (
-    <View style={styles.detailRow}>
-      <Text style={styles.detailLabel}>{label}</Text>
-      <Text
-        style={[styles.detailValue, highlight && styles.detailValueHighlight]}
-      >
-        {value}
-      </Text>
-    </View>
-  );
-}
-
-/** Daftar baris tagihan (deskripsi + nominal) milik montir. */
-function InvoiceItemList({
-  items,
-  editable,
-  removingItemId,
-  onRemove,
-}: {
-  items: OrderInvoiceItem[];
-  editable: boolean;
-  removingItemId?: string | null;
-  onRemove?: (item: OrderInvoiceItem) => void;
-}) {
-  return (
-    <View style={styles.invoiceList}>
-      {items.map((item) => (
-        <View key={item.id} style={styles.invoiceRow}>
-          <Text style={styles.invoiceRowLabel} numberOfLines={2}>
-            {item.description}
-          </Text>
-          <Text style={[styles.invoiceRowAmount, Tabular]}>
-            {formatIDR(item.amount)}
-          </Text>
-          {editable && onRemove ? (
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel={`Hapus ${item.description}`}
-              hitSlop={6}
-              disabled={removingItemId === item.id}
-              onPress={() => onRemove(item)}
-              style={({ pressed }) => [
-                styles.removeItem,
-                pressed && styles.pressed,
-              ]}
-            >
-              <Ionicons
-                name="close-circle-outline"
-                size={18}
-                color={Brand.red}
-              />
-            </Pressable>
-          ) : null}
-        </View>
-      ))}
-    </View>
-  );
-}
-
-const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: Brand.background },
-  content: { padding: ScreenPadding, paddingBottom: Space.xxxl },
-  hero: {
-    backgroundColor: Brand.ink,
-    borderRadius: Radius.xxl,
-    borderWidth: 1,
-    borderColor: Brand.inkBorder,
-    padding: Space.lg,
-    ...CardShadow,
-  },
-  heroTop: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-  },
-  heroChip: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    paddingHorizontal: 9,
-    paddingVertical: 4,
-    borderRadius: Radius.pill,
-    backgroundColor: "rgba(255,255,255,0.08)",
-  },
-  heroChipDot: { width: 6, height: 6, borderRadius: 3 },
-  heroChipText: { ...Type.micro, color: Brand.inkText, fontSize: 9.5, letterSpacing: 0.3 },
-  heroTime: { ...Type.meta, color: Brand.inkMuted, fontSize: 10 },
-  heroTitle: { ...Type.h2, color: Brand.white, marginTop: Space.md },
-  heroSub: { ...Type.meta, color: Brand.inkMuted, marginTop: 3 },
-  progressWrap: { marginTop: Space.lg },
-  progress: { flexDirection: "row", gap: 4 },
-  segment: {
+const createStyles = (theme: AppTheme) => ({
+  screen: {
     flex: 1,
-    height: 4,
-    borderRadius: 2,
-    backgroundColor: Brand.inkBorder,
+    backgroundColor: theme.colors.bgCanvas,
   },
-  segmentActive: { backgroundColor: Brand.volt },
-  progressLabel: { ...Type.micro, color: Brand.inkMuted, fontSize: 9, marginTop: 6 },
-  heroDivider: {
-    height: 1,
-    backgroundColor: Brand.inkBorder,
-    marginVertical: Space.lg,
+  content: {
+    padding: theme.spacing.screenPadding,
+    gap: theme.spacing.md,
   },
-  clientRow: { flexDirection: "row", alignItems: "center", gap: Space.md },
-  clientCopy: { flex: 1 },
-  clientName: { ...Type.bodyStrong, color: Brand.white, fontWeight: "700" },
-  clientRole: { ...Type.meta, color: Brand.inkMuted, marginTop: 2 },
-  chatButton: {
-    width: 42,
-    height: 42,
-    borderRadius: 21,
-    backgroundColor: Brand.ink,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  detailCard: {
-    backgroundColor: Brand.surface,
-    borderRadius: Radius.lg,
-    paddingHorizontal: Space.lg,
-    paddingVertical: Space.xs,
-    borderWidth: 1,
-    borderColor: Brand.border,
-  },
-  detailRow: {
-    paddingVertical: Space.md,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: Brand.divider,
-  },
-  detailLabel: { fontSize: 11, color: Brand.textMuted, fontWeight: "600" },
-  detailValue: {
-    fontSize: 13,
-    color: Brand.text,
-    marginTop: 3,
-    lineHeight: 18,
-  },
-  detailValueHighlight: {
-    fontSize: 15,
-    fontWeight: "700",
-    color: Brand.primary,
-  },
-  timelineRow: {
-    flexDirection: "row",
-    gap: Space.md,
-    paddingVertical: Space.sm,
-  },
-  timelineLeft: { alignItems: "center", width: 12 },
-  timelineDot: { width: 10, height: 10, borderRadius: 5, marginTop: 4 },
-  timelineLine: {
-    flex: 1,
-    width: 2,
-    backgroundColor: Brand.divider,
-    marginTop: 2,
-  },
-  timelineCopy: { flex: 1, paddingBottom: Space.sm },
-  timelineTitle: { fontSize: 13, fontWeight: "600", color: Brand.text },
-  timelineNote: { fontSize: 11.5, color: Brand.textSecondary, marginTop: 2 },
-  timelineTime: { fontSize: 10.5, color: Brand.textMuted, marginTop: 3 },
-  action: { marginTop: Space.xxl },
-  billingCard: {
-    backgroundColor: Brand.surface,
-    borderRadius: Radius.lg,
-    borderWidth: 1,
-    borderColor: Brand.border,
-    padding: Space.lg,
-    ...CardShadow,
-  },
-  billingLabel: {
-    ...Type.meta,
-    fontWeight: "700",
-    color: Brand.text,
-    marginBottom: Space.sm,
-  },
-  invoiceList: { marginBottom: Space.xs },
-  invoiceRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: Space.sm,
-    paddingVertical: Space.sm,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: Brand.divider,
-  },
-  invoiceRowLabel: {
-    flex: 1,
-    ...Type.bodyStrong,
-    color: Brand.text,
-    fontWeight: "600",
-  },
-  invoiceRowAmount: { ...Type.label, color: Brand.text, fontWeight: "700" },
-  removeItem: { padding: 2 },
-  addItemBox: {
-    marginTop: Space.sm,
-    padding: Space.md,
-    borderRadius: Radius.md,
-    backgroundColor: Brand.background,
-    gap: Space.sm,
-  },
-  addItemInput: {
-    minHeight: 44,
-    borderWidth: 1,
-    borderColor: Brand.border,
-    borderRadius: Radius.sm,
-    backgroundColor: Brand.surface,
-    paddingHorizontal: Space.md,
-    fontSize: 13,
-    color: Brand.text,
-  },
-  addItemPriceRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: Space.xs,
-    borderWidth: 1,
-    borderColor: Brand.border,
-    borderRadius: Radius.sm,
-    backgroundColor: Brand.surface,
-    paddingHorizontal: Space.md,
-  },
-  addItemCurrency: { ...Type.title, color: Brand.textSecondary },
-  addItemPriceInput: {
-    flex: 1,
-    minHeight: 44,
-    fontSize: 16,
-    fontWeight: "700",
-    color: Brand.text,
-    paddingVertical: 0,
-  },
-  totalBand: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: Space.md,
-    marginTop: Space.md,
-    padding: Space.md,
-    borderRadius: Radius.md,
-    backgroundColor: Brand.primarySoft,
-  },
-  totalLabel: { ...Type.label, color: Brand.primary, fontWeight: "700" },
-  totalHint: {
-    ...Type.meta,
-    color: Brand.primary,
-    fontSize: 9.5,
-    opacity: 0.75,
-    marginTop: 1,
-  },
-  priceError: { ...Type.meta, color: Brand.red, marginTop: 6 },
-  priceHelper: { ...Type.meta, color: Brand.textMuted, marginTop: 6, fontSize: 10.5 },
-  priceRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: Space.md,
-    marginTop: Space.md,
-    paddingTop: Space.md,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: Brand.divider,
-  },
-  priceMetaLabel: { ...Type.meta, color: Brand.textMuted, fontWeight: "600" },
-  priceMetaValue: { ...Type.label, color: Brand.text, fontWeight: "700" },
-  netBand: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: Space.md,
-    backgroundColor: Brand.greenSoft,
-    borderRadius: Radius.md,
-    paddingHorizontal: Space.md,
-    paddingVertical: Space.sm,
-    marginTop: Space.sm,
-  },
-  netCopy: { flex: 1 },
-  netLabel: { ...Type.label, color: Brand.green, fontWeight: "700" },
-  netHint: { ...Type.meta, color: Brand.green, fontSize: 9.5, opacity: 0.8, marginTop: 1 },
-  sendPrice: { marginTop: Space.lg },
-  billingHint: {
-    ...Type.meta,
-    color: Brand.textMuted,
-    marginTop: Space.sm,
-    lineHeight: 15,
-    fontSize: 10.5,
-  },
-  pendingCard: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: Space.sm,
-    backgroundColor: Brand.amberSoft,
-    borderRadius: Radius.md,
-    padding: Space.md,
-  },
-  pendingText: {
-    fontSize: 12,
-    color: Brand.amber,
-    fontWeight: "600",
-    lineHeight: 17,
-  },
-  pendingCopy: { flex: 1, gap: 3 },
-  pendingHint: {
-    fontSize: 10.5,
-    color: Brand.amber,
-    lineHeight: 15,
-    opacity: 0.85,
-  },
-  cashConfirm: { marginTop: Space.md },
-  infoCard: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: Space.sm,
-    backgroundColor: Brand.primarySoft,
-    borderRadius: Radius.md,
-    padding: Space.md,
-  },
-  infoText: {
-    flex: 1,
-    fontSize: 11.5,
-    color: Brand.primary,
-    lineHeight: 16,
-  },
-  reportCard: {
-    backgroundColor: Brand.surface,
-    borderRadius: Radius.lg,
-    borderWidth: 1,
-    borderColor: Brand.border,
-    padding: Space.lg,
-    marginTop: Space.xxl,
-  },
-  reportHead: { flexDirection: "row", gap: Space.md, alignItems: "flex-start" },
-  reportIcon: {
-    width: 34,
-    height: 34,
-    borderRadius: Radius.sm,
-    backgroundColor: Brand.primarySoft,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  reportText: { ...Type.meta, color: Brand.textSecondary, lineHeight: 18, flex: 1 },
-  reportButton: { marginTop: Space.lg },
-  doneCard: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: Space.sm,
-    backgroundColor: Brand.greenSoft,
-    borderRadius: Radius.md,
-    padding: Space.md,
-    marginTop: Space.xxl,
-  },
-  doneText: {
-    flex: 1,
-    fontSize: 12,
-    color: Brand.green,
-    fontWeight: "600",
-    lineHeight: 17,
-  },
-  cancelZone: { marginTop: Space.xxl },
-  cancelDivider: {
-    height: StyleSheet.hairlineWidth,
-    backgroundColor: Brand.border,
-    marginBottom: Space.xl,
-  },
-  cancelHint: {
-    ...Type.meta,
-    color: Brand.textMuted,
-    lineHeight: 16,
-    textAlign: "center",
-    marginTop: Space.sm,
-  },
-  cancelSheet: { gap: Space.sm },
-  cancelSheetLabel: {
-    ...Type.meta,
-    color: Brand.textSecondary,
-    fontWeight: "600",
-  },
-  reasonWrap: { flexDirection: "row", flexWrap: "wrap", gap: Space.sm },
-  reasonChip: {
-    paddingHorizontal: Space.md,
-    paddingVertical: 9,
-    borderRadius: Radius.pill,
-    borderWidth: 1,
-    borderColor: Brand.border,
-    backgroundColor: Brand.surface,
-  },
-  reasonChipActive: { backgroundColor: Brand.redSoft, borderColor: Brand.red },
-  reasonChipPressed: { opacity: 0.7 },
-  reasonText: { ...Type.meta, fontSize: 11.5, color: Brand.textSecondary },
-  reasonTextActive: { color: Brand.red, fontWeight: "700" },
   sheetBox: {
-    backgroundColor: Brand.background,
-    borderRadius: Radius.md,
-    padding: Space.md,
+    backgroundColor: theme.colors.bgSurfaceSubtle,
+    borderRadius: theme.radii.md,
+    padding: theme.spacing.md,
+    gap: theme.spacing.xs,
   },
   sheetRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: Space.md,
-    paddingVertical: 5,
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    justifyContent: 'space-between' as const,
+    gap: theme.spacing.md,
   },
-  sheetLabel: { ...Type.meta, color: Brand.textSecondary },
-  sheetValue: { ...Type.meta, color: Brand.text, fontWeight: "700" },
-  sheetDivider: {
-    height: StyleSheet.hairlineWidth,
-    backgroundColor: Brand.border,
-    marginVertical: Space.xs,
-  },
-  sheetCash: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    gap: Space.sm,
-    backgroundColor: Brand.greenSoft,
-    borderRadius: Radius.md,
-    padding: Space.md,
-  },
-  sheetCashText: {
+  sheetLabel: {
     flex: 1,
-    ...Type.meta,
-    color: Brand.green,
-    lineHeight: 16,
   },
-  pressed: { opacity: 0.7 },
+  sheetDivider: {
+    height: 1,
+    backgroundColor: theme.colors.borderSubtle,
+    marginVertical: theme.spacing.xs,
+  },
+  cancelSheet: {
+    gap: theme.spacing.sm,
+  },
+  reasonWrap: {
+    flexDirection: 'row' as const,
+    flexWrap: 'wrap' as const,
+    gap: theme.spacing.xs,
+  },
 });

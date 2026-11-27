@@ -1,12 +1,16 @@
 import type { IconName } from '@/components/ui/icon';
+import type { SemanticTone } from '@/theme';
+
+export type CalloutTierSuggestion = 'motor' | 'mobil' | 'derek';
 
 export interface ServiceCategory {
   key: string;
   label: string;
   description: string;
   icon: IconName;
-  color: string;
-  background: string;
+  tone: SemanticTone;
+  /** Tier biaya panggil default bila kategori dipilih. */
+  defaultTier?: CalloutTierSuggestion;
   /** Teks awal yang diisikan ke form permintaan. */
   presetIssue?: string;
   /** Route khusus; jika kosong, membuka form permintaan dengan `?category=`. */
@@ -14,44 +18,41 @@ export interface ServiceCategory {
 }
 
 /**
- * Kategori layanan di Beranda. Setiap kategori darurat hanya melakukan
- * prefill deskripsi pada form permintaan — tidak membuat backend baru.
+ * Kategori layanan MontirGo berbasis semantic tone (tanpa warna hex statis).
+ * Setiap kategori darurat hanya melakukan prefill deskripsi dan tier saran.
  */
 export const SERVICE_CATEGORIES: ServiceCategory[] = [
   {
-    key: 'montir',
-    label: 'Butuh Montir',
-    description: 'Montir datang langsung ke lokasimu.',
-    icon: 'construct-outline',
-    color: '#0B74E5',
-    background: '#E8F1FF',
-    presetIssue: 'Kendaraan saya bermasalah dan butuh bantuan montir di lokasi.',
+    key: 'ban',
+    label: 'Ban Bocor',
+    description: 'Ban bocor, kempes, atau roda bermasalah.',
+    icon: 'disc-outline',
+    tone: 'warning',
+    presetIssue: 'Ban kendaraan bocor / kempes dan butuh bantuan di lokasi.',
   },
   {
     key: 'aki',
     label: 'Aki & Kelistrikan',
-    description: 'Aki lemah, lampu mati, atau kendaraan tidak mau menyala.',
+    description: 'Aki lemah, lampu mati, atau kendaraan tidak menyala.',
     icon: 'battery-charging-outline',
-    color: '#B45309',
-    background: '#FEF3C7',
+    tone: 'info',
     presetIssue: 'Aki lemah / kendaraan tidak mau menyala.',
   },
   {
-    key: 'ban',
-    label: 'Ban & Roda',
-    description: 'Ban bocor, kempes, atau roda bermasalah.',
-    icon: 'disc-outline',
-    color: '#0891B2',
-    background: '#E0F7FA',
-    presetIssue: 'Ban kendaraan bocor / kempes dan butuh bantuan di lokasi.',
+    key: 'montir',
+    label: 'Mogok / Mesin',
+    description: 'Kendaraan bermasalah atau mogok di jalan.',
+    icon: 'construct-outline',
+    tone: 'emergency',
+    presetIssue: 'Kendaraan saya bermasalah / mogok dan butuh bantuan montir di lokasi.',
   },
   {
     key: 'derek',
-    label: 'Derek & Towing',
-    description: 'Kendaraan tidak bisa dikendarai dan perlu diderek.',
+    label: 'Butuh Derek',
+    description: 'Kendaraan tidak bisa jalan dan perlu diderek.',
     icon: 'car-sport-outline',
-    color: '#7C3AED',
-    background: '#F1EAFE',
+    tone: 'danger',
+    defaultTier: 'derek',
     presetIssue: 'Kendaraan tidak bisa dikendarai dan butuh derek/towing.',
   },
   {
@@ -59,8 +60,7 @@ export const SERVICE_CATEGORIES: ServiceCategory[] = [
     label: 'Bensin Darurat',
     description: 'Kehabisan bahan bakar di perjalanan.',
     icon: 'speedometer-outline',
-    color: '#DC2626',
-    background: '#FEE2E2',
+    tone: 'warning',
     presetIssue: 'Kendaraan kehabisan bahan bakar dan butuh bantuan.',
   },
   {
@@ -68,8 +68,7 @@ export const SERVICE_CATEGORIES: ServiceCategory[] = [
     label: 'Servis Ringan',
     description: 'Servis rutin atau pengecekan kondisi kendaraan.',
     icon: 'settings-outline',
-    color: '#059669',
-    background: '#E6F7EE',
+    tone: 'success',
     presetIssue: 'Saya ingin servis ringan / pengecekan kondisi kendaraan.',
   },
   {
@@ -77,8 +76,7 @@ export const SERVICE_CATEGORIES: ServiceCategory[] = [
     label: 'Kendaraan Saya',
     description: 'Kelola data kendaraan yang tersimpan.',
     icon: 'car-outline',
-    color: '#334155',
-    background: '#EEF2F7',
+    tone: 'neutral',
     route: 'vehicles',
   },
   {
@@ -86,11 +84,17 @@ export const SERVICE_CATEGORIES: ServiceCategory[] = [
     label: 'Semua Layanan',
     description: 'Lihat seluruh layanan MontirGo.',
     icon: 'grid-outline',
-    color: '#0B74E5',
-    background: '#E8F1FF',
+    tone: 'info',
     route: 'services',
   },
 ];
+
+const TRIAGE_KEYS = ['ban', 'aki', 'montir', 'derek', 'bensin', 'servis'] as const;
+
+/** 6 kategori utama untuk Grid Triase Visual 2x3 di Beranda Client. */
+export const TRIAGE_CATEGORIES: ServiceCategory[] = TRIAGE_KEYS.map((key) =>
+  SERVICE_CATEGORIES.find((item) => item.key === key),
+).filter((item): item is ServiceCategory => Boolean(item));
 
 export function getCategory(key: string | undefined): ServiceCategory | undefined {
   return SERVICE_CATEGORIES.find((category) => category.key === key);

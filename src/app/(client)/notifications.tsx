@@ -1,70 +1,38 @@
 import { useCallback, useMemo, useState } from 'react';
-import { Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { FlatList, Pressable, RefreshControl, View } from 'react-native';
 import { useFocusEffect, useRouter } from 'expo-router';
+import { Ionicons, type IconName } from '@/components/ui/icon';
 import { ScreenHeader } from '@/components/ui/screen-header';
 import { EmptyState, ErrorState, LoadingState } from '@/components/ui/state';
-import { Ionicons, type IconName } from '@/components/ui/icon';
-import { Brand, Radius, ScreenPadding, Space, Type } from '@/constants/brand';
+import { AppText } from '@/components/ui/text';
 import {
   listNotifications,
   markNotificationsRead,
   type ClientNotification,
 } from '@/features/client/service';
+import { useAppTheme, useThemedStyles, type AppTheme, type SemanticTone } from '@/theme';
 import { formatDateTime } from '@/utils/format';
 
 interface NotificationVisual {
   icon: IconName;
-  color: string;
-  background: string;
+  tone: SemanticTone;
 }
 
 const VISUALS: Record<string, NotificationVisual> = {
-  assignment_requested: {
-    icon: 'person-add-outline',
-    color: Brand.amber,
-    background: Brand.amberSoft,
-  },
-  assignment_confirmed: {
-    icon: 'checkmark-circle-outline',
-    color: Brand.green,
-    background: Brand.greenSoft,
-  },
-  assignment_rejected: {
-    icon: 'close-circle-outline',
-    color: Brand.red,
-    background: Brand.redSoft,
-  },
-  assignment_expired: {
-    icon: 'time-outline',
-    color: Brand.red,
-    background: Brand.redSoft,
-  },
-  assignment_cancelled: {
-    icon: 'close-circle-outline',
-    color: Brand.red,
-    background: Brand.redSoft,
-  },
-  payment: {
-    icon: 'wallet-outline',
-    color: Brand.primary,
-    background: Brand.primarySoft,
-  },
-  review: {
-    icon: 'star-outline',
-    color: Brand.amber,
-    background: Brand.amberSoft,
-  },
+  assignment_requested: { icon: 'person-add-outline', tone: 'warning' },
+  assignment_confirmed: { icon: 'checkmark-circle-outline', tone: 'success' },
+  assignment_rejected: { icon: 'close-circle-outline', tone: 'danger' },
+  assignment_expired: { icon: 'time-outline', tone: 'danger' },
+  assignment_cancelled: { icon: 'close-circle-outline', tone: 'danger' },
+  quote_submitted: { icon: 'document-text-outline', tone: 'warning' },
+  payment: { icon: 'wallet-outline', tone: 'info' },
+  review: { icon: 'star-outline', tone: 'warning' },
 };
 
 const FALLBACK_VISUAL: NotificationVisual = {
   icon: 'notifications-outline',
-  color: Brand.primary,
-  background: Brand.primarySoft,
+  tone: 'info',
 };
-
-function getVisual(type: string): NotificationVisual {
-  return VISUALS[type] ?? FALLBACK_VISUAL;
-}
 
 function dayKey(iso: string): string {
   const d = new Date(iso);
@@ -81,13 +49,13 @@ function dayLabel(iso: string): string {
   return d.toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' });
 }
 
-interface DayGroup {
-  key: string;
-  label: string;
-  items: ClientNotification[];
-}
+type NotificationListItem =
+  | { kind: 'header'; key: string; label: string }
+  | { kind: 'item'; key: string; notification: ClientNotification };
 
 export default function NotificationsScreen() {
+  const { theme } = useAppTheme();
+  const styles = useThemedStyles(createStyles);
   const router = useRouter();
   const [items, setItems] = useState<ClientNotification[]>([]);
   const [loading, setLoading] = useState(true);
@@ -99,7 +67,6 @@ export default function NotificationsScreen() {
       const rows = await listNotifications();
       setItems(rows);
       setError(false);
-      // Sudah dibaca saat layar dibuka; kegagalan penandaan tidak mengganggu tampilan.
       if (rows.some((row) => !row.is_read)) {
         markNotificationsRead().catch(() => {});
       }
@@ -113,19 +80,22 @@ export default function NotificationsScreen() {
 
   useFocusEffect(
     useCallback(() => {
-      load();
+      void load();
     }, [load]),
   );
 
-  const groups = useMemo<DayGroup[]>(() => {
-    const map = new Map<string, DayGroup>();
+  const listItems = useMemo<NotificationListItem[]>(() => {
+    const out: NotificationListItem[] = [];
+    let lastDay = '';
     for (const item of items) {
       const key = dayKey(item.created_at);
-      const existing = map.get(key);
-      if (existing) existing.items.push(item);
-      else map.set(key, { key, label: dayLabel(item.created_at), items: [item] });
+      if (key !== lastDay) {
+        lastDay = key;
+        out.push({ kind: 'header', key: `hdr-${key}`, label: dayLabel(item.created_at) });
+      }
+      out.push({ kind: 'item', key: item.id, notification: item });
     }
-    return Array.from(map.values());
+    return out;
   }, [items]);
 
   return (
@@ -134,128 +104,141 @@ export default function NotificationsScreen() {
 
       {loading ? (
         <LoadingState message="Memuat notifikasi..." />
+      ) : error ? (
+        <ErrorState onRetry={load} />
       ) : (
-        <ScrollView
+        <FlatList
+          data={listItems}
+          keyExtractor={(item) => item.key}
           contentContainerStyle={styles.content}
-          refreshControl={
-            <RefreshControl
-              refreshing={refreshing}
-              onRefresh={() => {
-                setRefreshing(true);
-                load();
-              }}
-              tintColor={Brand.primary}
-              colors={[Brand.primary]}
-            />
-          }
-        >
-          {error ? (
-            <ErrorState onRetry={load} />
-          ) : items.length === 0 ? (
+          showsVerticalScrollIndicator={false}
+          ListEmptyComponent={
             <EmptyState
               icon="notifications-outline"
               message="Belum ada notifikasi"
               hint="Pemberitahuan tentang pesanan dan montir akan muncul di sini."
             />
-          ) : (
-            groups.map((group) => (
-              <View key={group.key} style={styles.group}>
-                <Text style={styles.groupLabel}>{group.label}</Text>
-                <View style={styles.inbox}>
-                  {group.items.map((item, index) => {
-                    const visual = getVisual(item.type);
-                    const targetId =
-                      item.related_entity_type === 'service_request'
-                        ? item.related_entity_id
-                        : null;
-                    const actionable = Boolean(targetId);
-                    return (
-                      <Pressable
-                        key={item.id}
-                        accessibilityRole={actionable ? 'button' : undefined}
-                        accessibilityLabel={item.title}
-                        disabled={!actionable}
-                        onPress={() => {
-                          if (!targetId) return;
-                          router.push({
-                            pathname: '/(client)/orders/[id]',
-                            params: { id: targetId },
-                          });
-                        }}
-                        style={({ pressed }) => [
-                          styles.row,
-                          index > 0 && styles.rowBorder,
-                          !item.is_read && styles.rowUnread,
-                          pressed && actionable && styles.pressed,
-                        ]}
-                      >
-                        <View style={[styles.iconBox, { backgroundColor: visual.background }]}>
-                          <Ionicons name={visual.icon} size={17} color={visual.color} />
-                        </View>
-                        <View style={styles.copy}>
-                          <Text style={styles.title}>{item.title}</Text>
-                          {item.body ? (
-                            <Text style={styles.body} numberOfLines={3}>
-                              {item.body}
-                            </Text>
-                          ) : null}
-                          <Text style={styles.time}>{formatDateTime(item.created_at)}</Text>
-                        </View>
-                        {!item.is_read ? (
-                          <View style={styles.unreadDot} />
-                        ) : actionable ? (
-                          <Ionicons name="chevron-forward" size={15} color={Brand.textMuted} />
-                        ) : null}
-                      </Pressable>
-                    );
-                  })}
+          }
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={() => {
+                setRefreshing(true);
+                void load();
+              }}
+              tintColor={theme.colors.actionPrimaryAltBg}
+              colors={[theme.colors.actionPrimaryAltBg]}
+            />
+          }
+          renderItem={({ item }) => {
+            if (item.kind === 'header') {
+              return (
+                <AppText variant="overline" tone="muted" style={styles.groupLabel}>
+                  {item.label}
+                </AppText>
+              );
+            }
+            const notification = item.notification;
+            const visual = VISUALS[notification.type] ?? FALLBACK_VISUAL;
+            const tonePalette = theme.tones[visual.tone];
+            const targetId =
+              notification.related_entity_type === 'service_request'
+                ? notification.related_entity_id
+                : null;
+            const actionable = Boolean(targetId);
+
+            return (
+              <Pressable
+                accessibilityRole={actionable ? 'button' : undefined}
+                accessibilityLabel={notification.title}
+                disabled={!actionable}
+                onPress={() => {
+                  if (!targetId) return;
+                  router.push({
+                    pathname: '/(client)/orders/[id]',
+                    params: { id: targetId },
+                  });
+                }}
+                style={({ pressed }) => [
+                  styles.row,
+                  !notification.is_read && styles.rowUnread,
+                  pressed && actionable && styles.pressed,
+                ]}
+              >
+                <View style={[styles.iconBox, { backgroundColor: tonePalette.bg }]}>
+                  <Ionicons name={visual.icon} size={18} color={tonePalette.fg} />
                 </View>
-              </View>
-            ))
-          )}
-        </ScrollView>
+                <View style={styles.copy}>
+                  <AppText variant="label">{notification.title}</AppText>
+                  {notification.body ? (
+                    <AppText variant="caption" tone="secondary" numberOfLines={3}>
+                      {notification.body}
+                    </AppText>
+                  ) : null}
+                  <AppText variant="caption" tone="muted">
+                    {formatDateTime(notification.created_at)}
+                  </AppText>
+                </View>
+                {!notification.is_read ? (
+                  <View style={styles.unreadDot} />
+                ) : actionable ? (
+                  <Ionicons name="chevron-forward" size={16} color={theme.colors.textMuted} />
+                ) : null}
+              </Pressable>
+            );
+          }}
+        />
       )}
     </View>
   );
 }
 
-const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: Brand.background },
-  content: { padding: ScreenPadding, paddingBottom: Space.xxxl },
-  group: { marginBottom: Space.xl },
-  groupLabel: { ...Type.micro, color: Brand.textMuted, marginBottom: Space.sm },
-  inbox: {
-    backgroundColor: Brand.surface,
-    borderRadius: Radius.lg,
-    borderWidth: 1,
-    borderColor: Brand.border,
-    overflow: 'hidden',
+const createStyles = (theme: AppTheme) => ({
+  screen: {
+    flex: 1,
+    backgroundColor: theme.colors.bgCanvas,
+  },
+  content: {
+    padding: theme.spacing.screenPadding,
+    paddingBottom: theme.spacing.xxxl,
+  },
+  groupLabel: {
+    marginTop: theme.spacing.md,
+    marginBottom: theme.spacing.sm,
   },
   row: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: Space.md,
-    padding: Space.md,
+    flexDirection: 'row' as const,
+    alignItems: 'flex-start' as const,
+    gap: theme.spacing.md,
+    padding: theme.spacing.md,
+    marginBottom: theme.spacing.sm,
+    backgroundColor: theme.colors.bgSurface,
+    borderRadius: theme.radii.md,
+    borderCurve: theme.components.card.borderCurve,
+    borderWidth: 1,
+    borderColor: theme.colors.borderSubtle,
   },
-  rowBorder: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: Brand.divider },
-  rowUnread: { backgroundColor: Brand.primarySoft },
-  pressed: { opacity: 0.75 },
+  rowUnread: {
+    backgroundColor: theme.colors.statusInfoBg,
+    borderColor: theme.colors.statusInfoBorder,
+  },
+  pressed: { opacity: 0.78 },
   iconBox: {
-    width: 36,
-    height: 36,
-    borderRadius: Radius.sm,
-    alignItems: 'center',
-    justifyContent: 'center',
+    width: 38,
+    height: 38,
+    borderRadius: theme.radii.sm,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
   },
-  copy: { flex: 1 },
-  title: { ...Type.bodyStrong, color: Brand.text, fontWeight: '700' },
-  body: { ...Type.meta, color: Brand.textSecondary, marginTop: 2, lineHeight: 17 },
-  time: { ...Type.meta, color: Brand.textMuted, marginTop: 6, fontSize: 10 },
+  copy: {
+    flex: 1,
+    gap: theme.spacing.xxs,
+  },
   unreadDot: {
     width: 8,
     height: 8,
     borderRadius: 4,
-    backgroundColor: Brand.primary,
+    backgroundColor: theme.colors.actionPrimaryAltBg,
     marginTop: 6,
   },
 });

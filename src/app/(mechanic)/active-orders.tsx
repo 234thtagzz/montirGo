@@ -1,21 +1,26 @@
 import { useCallback, useEffect, useState } from 'react';
-import { RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { FlatList, RefreshControl, View } from 'react-native';
 import { useRouter } from 'expo-router';
-import { ScreenHeader } from '@/components/ui/screen-header';
 import { Ionicons } from '@/components/ui/icon';
+import { ScreenHeader } from '@/components/ui/screen-header';
 import { EmptyState, ErrorState, LoadingState } from '@/components/ui/state';
-import { Brand, Radius, ScreenPadding, Space, Type } from '@/constants/brand';
-import { listMyOrders, type MyOrder } from '@/features/mechanic/service';
+import { Surface } from '@/components/ui/surface';
+import { AppText } from '@/components/ui/text';
 import { syncMechanicPendingPayments } from '@/features/finance/service';
 import { OrderCard } from '@/features/mechanic/components/order-card';
+import { listMyOrders, type MyOrder } from '@/features/mechanic/service';
 import { formatVehicleLabel } from '@/features/vehicles/constants';
+import { useAppTheme, useThemedStyles, type AppTheme } from '@/theme';
 
 export default function MechanicActiveOrdersScreen() {
+  const router = useRouter();
+  const { theme } = useAppTheme();
+  const styles = useThemedStyles(createStyles);
+
   const [orders, setOrders] = useState<MyOrder[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState(false);
-  const router = useRouter();
 
   const load = useCallback(async () => {
     try {
@@ -34,135 +39,129 @@ export default function MechanicActiveOrdersScreen() {
   }, []);
 
   useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        let rows = await listMyOrders(true);
-        if (await syncMechanicPendingPayments(rows)) {
-          rows = await listMyOrders(true);
-        }
-        if (!cancelled) {
-          setOrders(rows);
-          setError(false);
-        }
-      } catch {
-        if (!cancelled) setError(true);
-      } finally {
-        if (!cancelled) {
-          setLoading(false);
-          setRefreshing(false);
-        }
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+    const timer = setTimeout(() => {
+      void load();
+    }, 0);
+    return () => clearTimeout(timer);
+  }, [load]);
+
+  const listHeader =
+    !error && orders.length > 0 ? (
+      <Surface variant="default" padding="md" style={styles.summary}>
+        <View style={styles.summaryIcon}>
+          <Ionicons
+            name="construct-outline"
+            size={18}
+            color={theme.colors.statusInfoFg}
+          />
+        </View>
+        <View style={styles.summaryCopy}>
+          <AppText variant="bodyStrong">
+            {orders.length} order sedang berjalan
+          </AppText>
+          <AppText variant="caption" tone="secondary">
+            Status diperbarui otomatis saat client dan pembayaran berubah.
+          </AppText>
+        </View>
+      </Surface>
+    ) : undefined;
+
+  const emptyContent = error ? (
+    <ErrorState onRetry={() => void load()} />
+  ) : (
+    <EmptyState
+      icon="construct-outline"
+      message="Belum ada order aktif"
+      hint="Terima request di tab Request untuk mulai mengerjakan order."
+      actionLabel="Lihat Request"
+      onPressAction={() => router.push('/(mechanic)/(tabs)/requests')}
+    />
+  );
 
   return (
     <View style={styles.screen}>
-      <ScreenHeader title="Order Aktif" subtitle="Order yang sedang kamu tangani" />
+      <ScreenHeader
+        title="Order Aktif"
+        subtitle="Order yang sedang kamu tangani"
+      />
       {loading ? (
         <LoadingState message="Memuat order aktif..." />
       ) : (
-        <ScrollView
+        <FlatList
+          data={error ? [] : orders}
+          keyExtractor={(item) => item.id}
           contentContainerStyle={styles.content}
           showsVerticalScrollIndicator={false}
+          ListHeaderComponent={listHeader}
+          ListEmptyComponent={emptyContent}
           refreshControl={
             <RefreshControl
               refreshing={refreshing}
               onRefresh={() => {
                 setRefreshing(true);
-                load();
+                void load();
               }}
-              tintColor={Brand.primary}
-              colors={[Brand.primary]}
+              tintColor={theme.colors.actionPrimaryBg}
+              colors={[theme.colors.actionPrimaryBg]}
             />
           }
-        >
-          {error ? (
-            <ErrorState onRetry={load} />
-          ) : orders.length === 0 ? (
-            <EmptyState
-              icon="construct-outline"
-              message="Belum ada order aktif"
-              hint="Terima request di tab Request untuk mulai mengerjakan order."
-              actionLabel="Lihat Request"
-              onPressAction={() => router.push('/(mechanic)/(tabs)/requests')}
+          renderItem={({ item: order }) => (
+            <OrderCard
+              issue={order.issue_description}
+              status={order.status}
+              createdAt={order.created_at}
+              vehicle={formatVehicleLabel(
+                order.vehicle_type,
+                order.vehicle_brand,
+                order.vehicle_model,
+              )}
+              clientName={order.client_name}
+              address={order.address}
+              price={order.price_amount}
+              onPress={() => router.push(`/(mechanic)/active-order/${order.id}`)}
+              action={{
+                label: 'Laporkan',
+                icon: 'alert-circle-outline',
+                variant: 'ghost',
+                onPress: () =>
+                  router.push({
+                    pathname: '/(mechanic)/complaints',
+                    params: { requestId: order.id },
+                  }),
+              }}
             />
-          ) : (
-            <>
-              <View style={styles.summary}>
-                <View style={styles.summaryIcon}>
-                  <Ionicons name="construct-outline" size={17} color={Brand.primary} />
-                </View>
-                <View style={styles.summaryCopy}>
-                  <Text style={styles.summaryTitle}>
-                    {orders.length} order sedang berjalan
-                  </Text>
-                  <Text style={styles.summaryText}>
-                    Status diperbarui otomatis saat client dan pembayaran berubah.
-                  </Text>
-                </View>
-              </View>
-              {orders.map((order) => (
-                <OrderCard
-                  key={order.id}
-                  issue={order.issue_description}
-                  status={order.status}
-                  createdAt={order.created_at}
-                  vehicle={formatVehicleLabel(
-                    order.vehicle_type,
-                    order.vehicle_brand,
-                    order.vehicle_model,
-                  )}
-                  clientName={order.client_name}
-                  address={order.address}
-                  price={order.price_amount}
-                  onPress={() => router.push(`/(mechanic)/active-order/${order.id}`)}
-                  action={{
-                    label: "Laporkan",
-                    icon: "alert-circle-outline",
-                    variant: "ghost",
-                    onPress: () =>
-                      router.push({
-                        pathname: "/(mechanic)/complaints",
-                        params: { requestId: order.id },
-                      }),
-                  }}
-                />
-              ))}
-            </>
           )}
-        </ScrollView>
+        />
       )}
     </View>
   );
 }
 
-const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: Brand.background },
-  content: { padding: ScreenPadding, paddingBottom: Space.xxxl },
+const createStyles = (theme: AppTheme) => ({
+  screen: {
+    flex: 1,
+    backgroundColor: theme.colors.bgCanvas,
+  },
+  content: {
+    padding: theme.spacing.screenPadding,
+    paddingBottom: theme.spacing.xxxl,
+  },
   summary: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Space.md,
-    backgroundColor: Brand.surface,
-    borderRadius: Radius.lg,
-    borderWidth: 1,
-    borderColor: Brand.border,
-    padding: Space.md,
-    marginBottom: Space.md,
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: theme.spacing.md,
+    marginBottom: theme.spacing.md,
   },
   summaryIcon: {
-    width: 36,
-    height: 36,
-    borderRadius: Radius.sm,
-    backgroundColor: Brand.primarySoft,
-    alignItems: 'center',
-    justifyContent: 'center',
+    width: 38,
+    height: 38,
+    borderRadius: theme.radii.sm,
+    backgroundColor: theme.colors.statusInfoBg,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
   },
-  summaryCopy: { flex: 1 },
-  summaryTitle: { ...Type.bodyStrong, color: Brand.text, fontWeight: '700' },
-  summaryText: { ...Type.meta, color: Brand.textSecondary, marginTop: 1 },
+  summaryCopy: {
+    flex: 1,
+    gap: 2,
+  },
 });

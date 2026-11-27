@@ -1,34 +1,30 @@
 // Label & ikon jenis kendaraan yang dipakai bersama oleh section client dan montir.
 import type { IconName } from '@/components/ui/icon';
-import { Brand } from '@/constants/brand';
+import type { SemanticTone } from '@/theme';
 
 export type VehicleTypeValue = 'motor' | 'mobil' | 'lainnya';
 
 export interface VehicleTypeMeta {
   label: string;
   icon: IconName;
-  color: string;
-  background: string;
+  tone: SemanticTone;
 }
 
 export const VEHICLE_TYPE_META: Record<VehicleTypeValue, VehicleTypeMeta> = {
   motor: {
     label: 'Motor',
     icon: 'bicycle-outline',
-    color: Brand.primary,
-    background: Brand.primarySoft,
+    tone: 'info',
   },
   mobil: {
     label: 'Mobil',
     icon: 'car-outline',
-    color: Brand.green,
-    background: Brand.greenSoft,
+    tone: 'success',
   },
   lainnya: {
     label: 'Lainnya',
     icon: 'cube-outline',
-    color: Brand.amber,
-    background: Brand.amberSoft,
+    tone: 'warning',
   },
 };
 

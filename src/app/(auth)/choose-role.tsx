@@ -1,10 +1,11 @@
 import { useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Button } from '@/components/ui/button';
 import { Ionicons, type IconName } from '@/components/ui/icon';
+import { AppText } from '@/components/ui/text';
 import { AuthScreen } from '@/features/auth/components/auth-screen';
-import { Brand, Radius, Space, Type } from '@/constants/brand';
+import { useAppTheme, useThemedStyles, type AppTheme } from '@/theme';
 
 type Role = 'CLIENT' | 'MONTIR';
 
@@ -32,6 +33,8 @@ const OPTIONS: {
 ];
 
 export default function ChooseRoleScreen() {
+  const { theme } = useAppTheme();
+  const styles = useThemedStyles(createStyles);
   const [role, setRole] = useState<Role>('CLIENT');
   const router = useRouter();
 
@@ -62,14 +65,16 @@ export default function ChooseRoleScreen() {
                   <Ionicons
                     name={option.icon}
                     size={20}
-                    color={active ? Brand.volt : Brand.textSecondary}
+                    color={
+                      active ? theme.colors.actionPrimaryFg : theme.colors.textSecondary
+                    }
                   />
                 </View>
                 <View style={styles.optionCopy}>
-                  <Text style={[styles.optionTitle, active && styles.optionTitleActive]}>
-                    {option.title}
-                  </Text>
-                  <Text style={styles.optionDescription}>{option.description}</Text>
+                  <AppText variant="title">{option.title}</AppText>
+                  <AppText variant="caption" tone="secondary">
+                    {option.description}
+                  </AppText>
                 </View>
                 <View style={[styles.radio, active && styles.radioActive]}>
                   {active ? <View style={styles.radioDot} /> : null}
@@ -81,10 +86,12 @@ export default function ChooseRoleScreen() {
                   <View key={point} style={styles.point}>
                     <Ionicons
                       name="checkmark"
-                      size={12}
-                      color={active ? Brand.primary : Brand.textMuted}
+                      size={14}
+                      color={active ? theme.colors.statusInfoFg : theme.colors.textMuted}
                     />
-                    <Text style={styles.pointText}>{point}</Text>
+                    <AppText variant="caption" tone="secondary">
+                      {point}
+                    </AppText>
                   </View>
                 ))}
               </View>
@@ -96,57 +103,75 @@ export default function ChooseRoleScreen() {
       <Button
         label="Lanjut Daftar"
         icon="arrow-forward"
+        size="cta"
         onPress={() => router.push(`/(auth)/register?role=${role}`)}
-        style={styles.submit}
       />
     </AuthScreen>
   );
 }
 
-const styles = StyleSheet.create({
-  list: { gap: Space.md },
+const createStyles = (theme: AppTheme) => ({
+  list: { gap: theme.spacing.md },
   option: {
-    borderRadius: Radius.lg,
-    borderWidth: 1,
-    borderColor: Brand.border,
-    backgroundColor: Brand.surface,
-    padding: Space.md,
+    borderRadius: theme.radii.lg,
+    borderWidth: 1.5,
+    borderColor: theme.colors.borderDefault,
+    backgroundColor: theme.colors.bgSurface,
+    padding: theme.spacing.md,
   },
-  optionActive: { borderColor: Brand.ink, backgroundColor: Brand.surface },
+  optionActive: {
+    borderColor: theme.colors.borderFocus,
+    backgroundColor: theme.colors.statusInfoBg,
+  },
   pressed: { opacity: 0.85 },
-  optionTop: { flexDirection: 'row', alignItems: 'center', gap: Space.md },
+  optionTop: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: theme.spacing.md,
+  },
   iconBox: {
     width: 44,
     height: 44,
-    borderRadius: Radius.sm,
-    backgroundColor: Brand.background,
-    alignItems: 'center',
-    justifyContent: 'center',
+    borderRadius: theme.radii.sm,
+    backgroundColor: theme.colors.bgCanvas,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
   },
-  iconBoxActive: { backgroundColor: Brand.ink },
-  optionCopy: { flex: 1 },
-  optionTitle: { ...Type.bodyStrong, fontSize: 15, fontWeight: '700', color: Brand.text },
-  optionTitleActive: { color: Brand.text },
-  optionDescription: { ...Type.meta, color: Brand.textSecondary, marginTop: 1 },
+  iconBoxActive: {
+    backgroundColor: theme.colors.actionPrimaryAltBg,
+  },
+  optionCopy: {
+    flex: 1,
+    gap: theme.spacing.xxs,
+  },
   radio: {
-    width: 20,
-    height: 20,
-    borderRadius: 10,
+    width: 22,
+    height: 22,
+    borderRadius: 11,
     borderWidth: 1.5,
-    borderColor: Brand.border,
-    alignItems: 'center',
-    justifyContent: 'center',
+    borderColor: theme.colors.borderDefault,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
   },
-  radioActive: { borderColor: Brand.primary },
-  radioDot: { width: 10, height: 10, borderRadius: 5, backgroundColor: Brand.primary },
+  radioActive: {
+    borderColor: theme.colors.borderFocus,
+  },
+  radioDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    backgroundColor: theme.colors.actionPrimaryAltBg,
+  },
   points: {
-    marginTop: Space.md,
-    paddingTop: Space.sm,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: Brand.divider,
-    gap: 5,
+    marginTop: theme.spacing.md,
+    paddingTop: theme.spacing.sm,
+    borderTopWidth: 1,
+    borderTopColor: theme.colors.borderSubtle,
+    gap: theme.spacing.xs,
   },
-  point: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  pointText: { fontSize: 11, color: Brand.textSecondary },
-  submit: { marginTop: Space.xl },
+  point: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: theme.spacing.xs,
+  },
 });

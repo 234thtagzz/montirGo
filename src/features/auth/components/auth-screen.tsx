@@ -4,30 +4,28 @@ import {
   Platform,
   Pressable,
   ScrollView,
-  StyleSheet,
-  Text,
   View,
 } from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
-import { StatusBar } from 'expo-status-bar';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@/components/ui/icon';
-import { Brand, CardShadow, Gradient, Radius, ScreenPadding, Space, Type } from '@/constants/brand';
+import { Surface } from '@/components/ui/surface';
+import { AppText } from '@/components/ui/text';
+import { useAppTheme, useThemedStyles, type AppTheme } from '@/theme';
 
 interface AuthScreenProps {
   title: string;
   subtitle?: string;
-  /** Tampilkan tombol kembali di atas hero (mis. layar daftar). */
   showBack?: boolean;
   children: ReactNode;
 }
 
 /**
- * Kerangka layar auth yang konsisten dengan section client:
- * hero ink + kartu putih yang sedikit menumpuk ke atas.
+ * Kerangka layar auth bergaya Calm Utility (adaptif Light & Dark).
  */
 export function AuthScreen({ title, subtitle, showBack = false, children }: AuthScreenProps) {
+  const { theme } = useAppTheme();
+  const styles = useThemedStyles(createStyles);
   const insets = useSafeAreaInsets();
   const router = useRouter();
 
@@ -38,22 +36,16 @@ export function AuthScreen({ title, subtitle, showBack = false, children }: Auth
 
   return (
     <View style={styles.screen}>
-      <StatusBar style="light" />
       <KeyboardAvoidingView
         style={styles.flex}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       >
         <ScrollView
-          contentContainerStyle={[styles.scroll, { paddingBottom: insets.bottom + Space.xxl }]}
+          contentContainerStyle={[styles.scroll, { paddingBottom: insets.bottom + theme.spacing.xxl }]}
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
-          <LinearGradient
-            colors={Gradient.header}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
-            style={[styles.hero, { paddingTop: insets.top + Space.md }]}
-          >
+          <View style={[styles.hero, { paddingTop: insets.top + theme.spacing.lg }]}>
             {showBack ? (
               <Pressable
                 accessibilityRole="button"
@@ -62,106 +54,97 @@ export function AuthScreen({ title, subtitle, showBack = false, children }: Auth
                 onPress={goBack}
                 style={({ pressed }) => [styles.back, pressed && styles.pressed]}
               >
-                <Ionicons name="arrow-back" size={19} color={Brand.white} />
+                <Ionicons name="arrow-back" size={20} color={theme.colors.textPrimary} />
               </Pressable>
             ) : null}
 
             <View style={styles.brandRow}>
               <View style={styles.logo}>
-                <Ionicons name="construct" size={22} color={Brand.ink} />
+                <Ionicons name="construct" size={22} color={theme.colors.actionEmergencyFg} />
               </View>
-              <View>
-                <Text style={styles.brandName}>MontirGo</Text>
-                <Text style={styles.brandTag}>Montir terdekat, siap bantu</Text>
+              <View style={styles.brandCopy}>
+                <AppText variant="title">MontirGo</AppText>
+                <AppText variant="caption" tone="secondary">
+                  Montir terdekat, siap bantu kapan saja
+                </AppText>
               </View>
             </View>
 
-            <Text style={styles.headline}>
-              Kendaraan bermasalah?{'\n'}Montir datang ke lokasimu.
-            </Text>
-            <View style={styles.taglineRow}>
-              <View style={styles.taglineBar} />
-              <Text style={styles.tagline}>
-                Masuk atau daftar untuk memesan bantuan montir dan melacak pesananmu.
-              </Text>
-            </View>
-          </LinearGradient>
-
-          <View style={styles.card}>
-            <Text style={styles.title}>{title}</Text>
-            {subtitle ? <Text style={styles.subtitle}>{subtitle}</Text> : null}
-            <View style={styles.form}>{children}</View>
+            <AppText variant="h1" style={styles.headline}>
+              Kendaraan bermasalah? Montir datang ke lokasimu.
+            </AppText>
           </View>
+
+          <Surface variant="default" padding="lg" style={styles.card}>
+            <AppText variant="h1">{title}</AppText>
+            {subtitle ? (
+              <AppText variant="body" tone="secondary" style={styles.subtitle}>
+                {subtitle}
+              </AppText>
+            ) : null}
+            <View style={styles.form}>{children}</View>
+          </Surface>
         </ScrollView>
       </KeyboardAvoidingView>
     </View>
   );
 }
 
-const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: Brand.background },
+const createStyles = (theme: AppTheme) => ({
+  screen: {
+    flex: 1,
+    backgroundColor: theme.colors.bgCanvas,
+  },
   flex: { flex: 1 },
   scroll: { flexGrow: 1 },
   hero: {
-    paddingHorizontal: ScreenPadding,
-    paddingBottom: 78,
-    overflow: 'hidden',
+    backgroundColor: theme.colors.bgSurface,
+    paddingHorizontal: theme.spacing.screenPadding,
+    paddingBottom: theme.spacing.xxl,
+    borderBottomWidth: 1,
+    borderBottomColor: theme.colors.borderSubtle,
+    gap: theme.spacing.md,
   },
   back: {
-    width: 38,
-    height: 38,
-    borderRadius: Radius.sm,
-    backgroundColor: 'rgba(255,255,255,0.12)',
+    width: theme.touchTarget.min,
+    height: theme.touchTarget.min,
+    borderRadius: theme.radii.md,
+    backgroundColor: theme.colors.bgSurfaceSubtle,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.14)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: Space.md,
+    borderColor: theme.colors.borderSubtle,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
   },
-  brandRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  brandRow: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: theme.spacing.md,
+  },
   logo: {
-    width: 44,
-    height: 44,
-    borderRadius: Radius.md,
-    backgroundColor: Brand.volt,
-    alignItems: 'center',
-    justifyContent: 'center',
+    width: 46,
+    height: 46,
+    borderRadius: theme.radii.md,
+    backgroundColor: theme.colors.actionEmergencyBg,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
   },
-  brandName: { color: Brand.white, fontSize: 17, fontWeight: '700', letterSpacing: -0.2 },
-  brandTag: { color: Brand.inkMuted, fontSize: 11.5, marginTop: 1 },
-  headline: {
-    ...Type.h1,
-    color: Brand.white,
-    marginTop: Space.xl,
-  },
-  taglineRow: {
-    flexDirection: 'row',
-    gap: Space.md,
-    marginTop: Space.sm,
-    maxWidth: 300,
-  },
-  taglineBar: {
-    width: 2,
-    borderRadius: 1,
-    backgroundColor: Brand.volt,
-    marginVertical: 2,
-  },
-  tagline: {
+  brandCopy: {
     flex: 1,
-    color: Brand.inkText,
-    fontSize: 12.5,
-    lineHeight: 19,
+    gap: theme.spacing.xxs,
+  },
+  headline: {
+    marginTop: theme.spacing.xs,
   },
   card: {
-    backgroundColor: Brand.surface,
-    borderRadius: Radius.xl,
-    padding: Space.xl,
-    marginHorizontal: ScreenPadding,
-    marginTop: -56,
-    ...CardShadow,
+    marginHorizontal: theme.spacing.screenPadding,
+    marginTop: theme.spacing.lg,
   },
-  title: { ...Type.h1, fontSize: 20, color: Brand.text },
-  subtitle: { ...Type.meta, color: Brand.textSecondary, marginTop: 4, lineHeight: 18 },
-  form: { marginTop: Space.lg },
-  pressed: { opacity: 0.7 },
+  subtitle: {
+    marginTop: theme.spacing.xs,
+  },
+  form: {
+    marginTop: theme.spacing.lg,
+    gap: theme.spacing.md,
+  },
+  pressed: { opacity: 0.75 },
 });

@@ -2,18 +2,24 @@
 import { getCurrentUserId } from '@/lib/auth-session';
 import { supabase } from '@/lib/supabase';
 import type { OrderStatus } from '@/features/service-request/status';
+import { getCsWhatsAppNumber } from '@/utils/whatsapp';
 import type {
+  AssignedOrderMechanic,
   AssignmentDecision,
+  CalloutFeeTier,
   ClientNotification,
   ClientOrder,
   ClientReview,
   ClientVehicle,
   CreateServiceRequestInput,
+  InvoiceItemType,
   MechanicAssignmentProfile,
   MechanicLocationSnapshot,
   NearbyMechanic,
   OrderInvoiceItem,
   OrderStatusEvent,
+  PlatformPricingAndSupport,
+  QuoteStatus,
   VehicleInput,
 } from './types';
 
@@ -28,6 +34,9 @@ const ORDER_SELECT =
   'additional_notes, price_amount, payment_method, created_at, updated_at, vehicle_id, ' +
   'mechanic_id, assignment_requested_at, assignment_expires_at, ' +
   'route_polyline, route_distance_m, route_duration_s, route_updated_at, ' +
+  'callout_fee_tier, callout_fee_amount, quote_status, quote_submitted_at, ' +
+  'quote_approved_at, quote_expires_at, quote_revision_note, quote_photo_paths, ' +
+  'rejected_quote_snapshot, ' +
   ORDER_RELATIONS;
 
 interface RawOrder {
@@ -48,6 +57,19 @@ interface RawOrder {
   mechanic_id: string | null;
   assignment_requested_at: string | null;
   assignment_expires_at: string | null;
+  route_polyline: string | null;
+  route_distance_m: number | null;
+  route_duration_s: number | null;
+  route_updated_at: string | null;
+  callout_fee_tier: string | null;
+  callout_fee_amount: number | null;
+  quote_status: string | null;
+  quote_submitted_at: string | null;
+  quote_approved_at: string | null;
+  quote_expires_at: string | null;
+  quote_revision_note: string | null;
+  quote_photo_paths: string[] | null;
+  rejected_quote_snapshot: unknown | null;
   vehicles: {
     type?: string;
     brand?: string;
@@ -57,6 +79,22 @@ interface RawOrder {
     photo_url?: string | null;
   } | null;
   mechanic: { full_name?: string; phone_number?: string; avatar_url?: string } | null;
+}
+
+function normalizeCalloutTier(value: string | null | undefined): CalloutFeeTier {
+  if (value === 'mobil' || value === 'derek') return value;
+  return 'motor';
+}
+
+function normalizeQuoteStatus(value: string | null | undefined): QuoteStatus {
+  if (
+    value === 'pending_approval' ||
+    value === 'approved' ||
+    value === 'callout_only'
+  ) {
+    return value;
+  }
+  return 'draft';
 }
 
 function mapOrder(row: RawOrder): ClientOrder {
@@ -78,6 +116,19 @@ function mapOrder(row: RawOrder): ClientOrder {
     mechanic_id: row.mechanic_id,
     assignment_requested_at: row.assignment_requested_at ?? null,
     assignment_expires_at: row.assignment_expires_at ?? null,
+    route_polyline: row.route_polyline ?? null,
+    route_distance_m: row.route_distance_m ?? null,
+    route_duration_s: row.route_duration_s ?? null,
+    route_updated_at: row.route_updated_at ?? null,
+    callout_fee_tier: normalizeCalloutTier(row.callout_fee_tier),
+    callout_fee_amount: Number(row.callout_fee_amount ?? 0),
+    quote_status: normalizeQuoteStatus(row.quote_status),
+    quote_submitted_at: row.quote_submitted_at ?? null,
+    quote_approved_at: row.quote_approved_at ?? null,
+    quote_expires_at: row.quote_expires_at ?? null,
+    quote_revision_note: row.quote_revision_note ?? null,
+    quote_photo_paths: Array.isArray(row.quote_photo_paths) ? row.quote_photo_paths : [],
+    rejected_quote_snapshot: row.rejected_quote_snapshot ?? null,
     vehicle_type: row.vehicles?.type ?? null,
     vehicle_brand: row.vehicles?.brand ?? null,
     vehicle_model: row.vehicles?.model ?? null,
@@ -126,6 +177,49 @@ export async function getMyClientSummary(): Promise<ClientProfileSummary> {
     total_requests: requests.count ?? 0,
     total_vehicles: vehicles.count ?? 0,
   };
+}
+
+// ---------- Tarif biaya panggil & dukungan CS ----------
+
+export const DEFAULT_PLATFORM_PRICING: PlatformPricingAndSupport = {
+  callout_fee_motor: 25_000,
+  callout_fee_mobil: 45_000,
+  callout_fee_derek: 100_000,
+  quote_expire_minutes: 15,
+  cs_whatsapp_number: getCsWhatsAppNumber(null),
+};
+
+export async function getPlatformPricingAndSupport(): Promise<PlatformPricingAndSupport> {
+  const { data, error } = await supabase
+    .from('platform_settings')
+    .select(
+      'callout_fee_motor, callout_fee_mobil, callout_fee_derek, quote_expire_minutes, cs_whatsapp_number',
+    )
+    .limit(1)
+    .maybeSingle();
+
+  if (error || !data) {
+    return DEFAULT_PLATFORM_PRICING;
+  }
+
+  return {
+    callout_fee_motor: Number(data.callout_fee_motor ?? DEFAULT_PLATFORM_PRICING.callout_fee_motor),
+    callout_fee_mobil: Number(data.callout_fee_mobil ?? DEFAULT_PLATFORM_PRICING.callout_fee_mobil),
+    callout_fee_derek: Number(data.callout_fee_derek ?? DEFAULT_PLATFORM_PRICING.callout_fee_derek),
+    quote_expire_minutes: Number(
+      data.quote_expire_minutes ?? DEFAULT_PLATFORM_PRICING.quote_expire_minutes,
+    ),
+    cs_whatsapp_number: getCsWhatsAppNumber(data.cs_whatsapp_number),
+  };
+}
+
+export function getCalloutFeeAmountForTier(
+  pricing: PlatformPricingAndSupport,
+  tier: CalloutFeeTier,
+): number {
+  if (tier === 'derek') return pricing.callout_fee_derek;
+  if (tier === 'mobil') return pricing.callout_fee_mobil;
+  return pricing.callout_fee_motor;
 }
 
 // ---------- Kendaraan ----------
@@ -240,20 +334,22 @@ const CREATE_REQUEST_ERRORS: Record<string, string> = {
   INVALID_CONTACT_PHONE: 'Nomor WhatsApp wajib diisi dengan benar.',
   INVALID_COORDINATES: 'Koordinat lokasi tidak valid.',
   INVALID_VEHICLE: 'Kendaraan yang dipilih tidak valid.',
+  INVALID_CALLOUT_TIER: 'Pilih kategori biaya panggil (Motor, Mobil, atau Derek).',
 };
 
 export async function createServiceRequest(
   input: CreateServiceRequestInput,
 ): Promise<{ id: string }> {
   const { data, error } = await supabase.rpc('create_service_request', {
-    p_vehicle_id: input.vehicleId || null,
+    p_vehicle_id: input.vehicleId || undefined,
     p_issue_description: input.issueDescription.trim(),
-    p_symptoms: input.symptoms?.trim() || null,
+    p_symptoms: input.symptoms?.trim() || undefined,
     p_lat: input.lat,
     p_lng: input.lng,
-    p_address: input.address?.trim() || null,
+    p_address: input.address?.trim() || undefined,
     p_contact_phone: input.contactPhone.trim(),
-    p_additional_notes: input.additionalNotes?.trim() || null,
+    p_additional_notes: input.additionalNotes?.trim() || undefined,
+    p_callout_fee_tier: input.calloutFeeTier ?? undefined,
   });
   if (error) {
     const code = (error.message ?? '').trim();
@@ -267,7 +363,7 @@ export async function createServiceRequest(
 export async function cancelServiceRequest(id: string, reason?: string): Promise<void> {
   const { error } = await supabase.rpc('cancel_order', {
     p_request_id: id,
-    p_reason: reason?.trim() || null,
+    p_reason: reason?.trim() || undefined,
   });
   if (error) {
     const code = (error.message ?? '').trim();
@@ -289,22 +385,75 @@ export async function listStatusHistory(requestId: string): Promise<OrderStatusE
 }
 
 /**
- * Rincian baris tagihan (deskripsi + nominal) yang dikirim montir.
- * RLS memperbolehkan client membaca baris milik ordernya sendiri.
+ * Rincian baris tagihan (deskripsi, nominal, tipe, kunci) yang dikirim montir.
+ * Secara default hanya mengembalikan baris aktif (`voided_at is null`).
  */
 export async function listOrderInvoiceItems(
   requestId: string,
+  options?: { includeVoided?: boolean },
 ): Promise<OrderInvoiceItem[]> {
-  const { data, error } = await supabase
+  let query = supabase
     .from('order_invoice_items')
-    .select('id, request_id, mechanic_id, description, amount, created_at, updated_at')
-    .eq('request_id', requestId)
-    .order('created_at', { ascending: true });
+    .select(
+      'id, request_id, mechanic_id, description, amount, item_type, is_locked, approved_at, voided_at, quote_photo_paths, created_at, updated_at',
+    )
+    .eq('request_id', requestId);
+
+  if (!options?.includeVoided) {
+    query = query.is('voided_at', null);
+  }
+
+  const { data, error } = await query.order('created_at', { ascending: true });
   if (error) throw error;
-  return (data ?? []) as OrderInvoiceItem[];
+
+  const items = ((data ?? []) as Partial<OrderInvoiceItem>[]).map((row) => ({
+    id: row.id ?? '',
+    request_id: row.request_id ?? requestId,
+    mechanic_id: row.mechanic_id,
+    description: row.description ?? '',
+    amount: Number(row.amount ?? 0),
+    item_type: (row.item_type as InvoiceItemType) || 'service',
+    is_locked: Boolean(row.is_locked),
+    approved_at: row.approved_at ?? null,
+    voided_at: row.voided_at ?? null,
+    quote_photo_paths: Array.isArray(row.quote_photo_paths) ? row.quote_photo_paths : [],
+    created_at: row.created_at ?? '',
+    updated_at: row.updated_at,
+  }));
+
+  return items.sort((a, b) => {
+    if (a.item_type === 'callout_fee' && b.item_type !== 'callout_fee') return -1;
+    if (a.item_type !== 'callout_fee' && b.item_type === 'callout_fee') return 1;
+    return a.created_at.localeCompare(b.created_at);
+  });
 }
 
-// ---------- Montir online ----------
+const QUOTE_RESPONSE_ERRORS: Record<string, string> = {
+  UNAUTHORIZED: 'Sesi berakhir. Silakan login kembali.',
+  FORBIDDEN: 'Hanya client pemilik pesanan yang dapat menanggapi estimasi.',
+  ORDER_NOT_ARRIVED: 'Estimasi hanya bisa ditanggapi saat montir berstatus tiba di lokasi.',
+  QUOTE_NOT_PENDING: 'Estimasi belum dikirim atau statusnya sudah berubah.',
+  REVISION_NOTE_REQUIRED: 'Tulis alasan / catatan revisi sebelum meminta perbaikan estimasi.',
+};
+
+export async function respondToQuote(
+  requestId: string,
+  action: 'approve' | 'request_revision' | 'callout_only',
+  note?: string,
+): Promise<void> {
+  const { error } = await supabase.rpc('respond_to_quote', {
+    p_request_id: requestId,
+    p_action: action,
+    p_note: note?.trim() || undefined,
+  });
+  if (!error) return;
+  const code = (error.message ?? '').trim();
+  throw new Error(
+    QUOTE_RESPONSE_ERRORS[code] ?? (code || 'Gagal menyimpan keputusan estimasi.'),
+  );
+}
+
+// ---------- Montir online & pasca-penugasan ----------
 
 interface RawDirectoryMechanic {
   profile_id: string;
@@ -351,8 +500,8 @@ export async function listOnlineMechanics(
   coords?: { lat: number; lng: number; radiusKm?: number } | null,
 ): Promise<NearbyMechanic[]> {
   const { data, error } = await supabase.rpc('list_nearby_mechanics', {
-    p_lat: coords?.lat ?? null,
-    p_lng: coords?.lng ?? null,
+    p_lat: coords?.lat ?? undefined,
+    p_lng: coords?.lng ?? undefined,
     p_radius_km: coords?.radiusKm ?? 15,
     p_limit: limit,
   });
@@ -397,7 +546,7 @@ export async function markNotificationsRead(): Promise<void> {
   if (error) throw error;
 }
 
-// ---------- Ulasan montir ----------
+// ---------- Ulasan & Profil Montir ----------
 
 /** Ulasan yang sudah dikirim client untuk satu pesanan (null bila belum). */
 export async function getReviewForRequest(requestId: string): Promise<ClientReview | null> {
@@ -438,12 +587,28 @@ export async function getMechanicAssignmentProfile(
     .select(
       'profile_id, full_name, avatar_url, workshop_name, workshop_address, bio, ' +
         'experience_years, skills, vehicle_specialization, certifications, workshop_photo, ' +
-        'rating_avg, rating_count, total_jobs, is_verified, verified_at',
+        'vehicle_label, vehicle_plate, rating_avg, rating_count, total_jobs, is_verified, verified_at',
     )
     .eq('profile_id', mechanicId)
     .maybeSingle();
   if (error) throw error;
   return (data as MechanicAssignmentProfile | null) ?? null;
+}
+
+/** Info kendaraan & profil montir terassigned via `assigned_order_mechanic_view` (pasca-penugasan). */
+export async function getAssignedOrderMechanic(
+  requestId: string,
+): Promise<AssignedOrderMechanic | null> {
+  const { data, error } = await supabase
+    .from('assigned_order_mechanic_view')
+    .select(
+      'request_id, mechanic_id, full_name, avatar_url, phone_number, workshop_name, ' +
+        'workshop_address, vehicle_label, vehicle_plate, rating_avg, rating_count, total_jobs, is_verified',
+    )
+    .eq('request_id', requestId)
+    .maybeSingle();
+  if (error) throw error;
+  return (data as AssignedOrderMechanic | null) ?? null;
 }
 
 const ASSIGNMENT_ERROR_MESSAGES: Record<string, string> = {

@@ -1,22 +1,20 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { ScrollView, View } from 'react-native';
 import { Image } from 'expo-image';
-import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { Avatar } from '@/components/ui/avatar';
+import { Badge } from '@/components/ui/badge';
 import { Ionicons } from '@/components/ui/icon';
-import { Brand, Radius, Space, Type } from '@/constants/brand';
-import { useForegroundEpoch } from '@/hooks/use-foreground';
+import { AppText } from '@/components/ui/text';
 import type { NearbyMechanic } from '@/features/client/types';
-import { formatSpecializations } from '@/features/mechanic/specializations';
 import { forgetWorkshopPhotoUrl, resolveWorkshopPhotoUrls } from '@/features/mechanic/photo';
+import { formatSpecializations } from '@/features/mechanic/specializations';
+import { useForegroundEpoch } from '@/hooks/use-foreground';
+import { useAppTheme, useThemedStyles, type AppTheme } from '@/theme';
 
 interface NearbyMechanicsProps {
   mechanics: NearbyMechanic[];
 }
 
-/**
- * Foto bengkel (path privat) → signed URL, dimuat sekali untuk semua kartu.
- * Dimuat ulang saat app kembali ke foreground karena signed URL hanya ±1 jam.
- */
 function useWorkshopPhotos(mechanics: NearbyMechanic[]) {
   const foregroundEpoch = useForegroundEpoch();
   const [urls, setUrls] = useState<Record<string, string>>({});
@@ -24,20 +22,19 @@ function useWorkshopPhotos(mechanics: NearbyMechanic[]) {
   const key = mechanics.map((item) => item.workshop_photo ?? '').join('|');
 
   useEffect(() => {
-    const paths = mechanics.map((item) => item.workshop_photo).filter((path): path is string => !!path);
+    const paths = mechanics
+      .map((item) => item.workshop_photo)
+      .filter((path): path is string => !!path);
     if (paths.length === 0) return;
     let active = true;
     resolveWorkshopPhotoUrls(paths)
       .then((resolved) => {
         if (active) setUrls(resolved);
       })
-      .catch(() => {
-        // Foto bersifat pelengkap — kartu tetap tampil tanpa foto.
-      });
+      .catch(() => {});
     return () => {
       active = false;
     };
-    // `key` mewakili isi daftar foto; `mechanics` sendiri dibuat ulang tiap render.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [key, foregroundEpoch, reloadToken]);
 
@@ -50,12 +47,13 @@ function useWorkshopPhotos(mechanics: NearbyMechanic[]) {
 }
 
 export function NearbyMechanics({ mechanics }: NearbyMechanicsProps) {
+  const { theme } = useAppTheme();
+  const styles = useThemedStyles(createStyles);
   const { urls: photoUrls, retry } = useWorkshopPhotos(mechanics);
   const retried = useRef(new Set<string>());
   const [failedPaths, setFailedPaths] = useState<Set<string>>(new Set());
 
   const handlePhotoError = (path: string) => {
-    // Coba sekali dengan signed URL baru; bila tetap gagal, pakai avatar.
     if (retried.current.has(path)) {
       setFailedPaths((current) => {
         if (current.has(path)) return current;
@@ -72,12 +70,12 @@ export function NearbyMechanics({ mechanics }: NearbyMechanicsProps) {
   if (mechanics.length === 0) {
     return (
       <View style={styles.empty}>
-        <Ionicons name="moon-outline" size={18} color={Brand.textSecondary} />
+        <Ionicons name="moon-outline" size={20} color={theme.colors.textSecondary} />
         <View style={styles.emptyCopy}>
-          <Text style={styles.emptyTitle}>Belum ada montir online</Text>
-          <Text style={styles.emptyHint}>
-            Kamu tetap bisa membuat permintaan — montir yang online akan menerimanya.
-          </Text>
+          <AppText variant="label">Belum ada montir online</AppText>
+          <AppText variant="caption" tone="secondary">
+            Kamu tetap bisa membuat permintaan — montir yang siap akan langsung menerima.
+          </AppText>
         </View>
       </View>
     );
@@ -93,13 +91,12 @@ export function NearbyMechanics({ mechanics }: NearbyMechanicsProps) {
         const name = mechanic.full_name?.trim() || 'Montir MontirGo';
         const specialization = formatSpecializations(mechanic.vehicle_specialization);
         const workshopPath = mechanic.workshop_photo ?? '';
-        // Foto yang gagal setelah retry diperlakukan seperti tidak ada foto.
         const workshopPhoto =
           workshopPath && !failedPaths.has(workshopPath) ? photoUrls[workshopPath] ?? null : null;
         const workshopName = mechanic.workshop_name?.trim() || 'Montir panggilan';
 
         return (
-          <View key={mechanic.profile_id} style={styles.card}>
+          <View key={mechanic.profile_id} style={[styles.card, theme.elevation.card]}>
             <View style={styles.media}>
               {workshopPhoto ? (
                 <Image
@@ -119,38 +116,43 @@ export function NearbyMechanics({ mechanics }: NearbyMechanicsProps) {
                   <Avatar name={name} uri={mechanic.avatar_url} size={36} />
                 </View>
               ) : null}
-              <View style={styles.onlineChip}>
-                <View style={styles.onlineDot} />
-                <Text style={styles.onlineText}>Online</Text>
+              <View style={styles.onlineChipWrap}>
+                <Badge label="Siaga" tone="success" dot size="sm" />
               </View>
             </View>
 
-            <Text style={styles.name} numberOfLines={1}>
+            <AppText variant="label" numberOfLines={1}>
               {name}
-            </Text>
-            <Text style={styles.workshop} numberOfLines={1}>
+            </AppText>
+            <AppText variant="caption" tone="secondary" numberOfLines={1}>
               {workshopName}
-            </Text>
+            </AppText>
 
             <View style={styles.ratingRow}>
-              <Ionicons name="star" size={11} color="#E8A317" />
-              <Text style={styles.rating}>{mechanic.rating_avg.toFixed(1)}</Text>
-              <Text style={styles.dot}>·</Text>
-              <Text style={styles.jobs}>{mechanic.total_jobs} pekerjaan</Text>
+              <Ionicons name="star" size={13} color={theme.colors.statusWarningFg} />
+              <AppText variant="caption" style={[styles.rating, theme.tabularNums]}>
+                {mechanic.rating_avg.toFixed(1)}
+              </AppText>
+              <AppText variant="caption" tone="muted">
+                ·
+              </AppText>
+              <AppText variant="caption" tone="muted" style={theme.tabularNums}>
+                {mechanic.total_jobs} job
+              </AppText>
             </View>
 
             {specialization ? (
               <View style={styles.specChip}>
-                <Text style={styles.specText} numberOfLines={1}>
+                <AppText variant="caption" tone="info" numberOfLines={1}>
                   {specialization}
-                </Text>
+                </AppText>
               </View>
             ) : (
-              <Text style={styles.specPlaceholder} numberOfLines={1}>
+              <AppText variant="caption" tone="muted" numberOfLines={1} style={styles.specPlaceholder}>
                 {mechanic.experience_years
                   ? `${mechanic.experience_years} tahun pengalaman`
                   : 'Montir terverifikasi'}
-              </Text>
+              </AppText>
             )}
           </View>
         );
@@ -159,85 +161,85 @@ export function NearbyMechanics({ mechanics }: NearbyMechanicsProps) {
   );
 }
 
-const styles = StyleSheet.create({
-  row: { gap: Space.md, paddingRight: Space.xs },
-  card: {
-    width: 172,
-    backgroundColor: Brand.surface,
-    borderRadius: Radius.lg,
-    padding: Space.md,
-    borderWidth: 1,
-    borderColor: Brand.border,
+const createStyles = (theme: AppTheme) => ({
+  row: {
+    gap: theme.spacing.md,
+    paddingRight: theme.spacing.xs,
   },
-  media: { marginBottom: Space.md },
+  card: {
+    width: 184,
+    backgroundColor: theme.colors.bgSurface,
+    borderRadius: theme.radii.lg,
+    borderCurve: theme.components.card.borderCurve,
+    padding: theme.spacing.md,
+    borderWidth: 1,
+    borderColor: theme.colors.borderSubtle,
+  },
+  media: {
+    marginBottom: theme.spacing.md,
+  },
   workshopPhoto: {
-    width: '100%',
-    height: 76,
-    borderRadius: Radius.md,
-    backgroundColor: Brand.background,
+    width: '100%' as const,
+    height: 78,
+    borderRadius: theme.radii.md,
+    backgroundColor: theme.colors.bgSurfaceSubtle,
   },
   mediaFallback: {
-    height: 76,
-    borderRadius: Radius.md,
-    backgroundColor: Brand.ink,
-    alignItems: 'center',
-    justifyContent: 'center',
+    height: 78,
+    borderRadius: theme.radii.md,
+    borderCurve: theme.components.card.borderCurve,
+    backgroundColor: theme.colors.bgSurfaceSubtle,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
   },
   avatarOverlay: {
-    position: 'absolute',
+    position: 'absolute' as const,
     left: 6,
-    bottom: -12,
-    borderRadius: 999,
+    bottom: -10,
+    borderRadius: theme.radii.pill,
     borderWidth: 2,
-    borderColor: Brand.surface,
+    borderColor: theme.colors.bgSurface,
   },
-  onlineChip: {
-    position: 'absolute',
+  onlineChipWrap: {
+    position: 'absolute' as const,
     top: 6,
     right: 6,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    paddingHorizontal: 6,
-    paddingVertical: 3,
-    borderRadius: Radius.pill,
-    backgroundColor: 'rgba(11,18,32,0.78)',
   },
-  onlineDot: { width: 5, height: 5, borderRadius: 3, backgroundColor: Brand.volt },
-  onlineText: { fontSize: 9, fontWeight: '700', color: Brand.white },
-  name: { ...Type.label, fontSize: 13, fontWeight: '700', color: Brand.text },
-  workshop: { fontSize: 11, color: Brand.textSecondary, marginTop: 1 },
   ratingRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    marginTop: Space.sm,
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: theme.spacing.xs,
+    marginTop: theme.spacing.sm,
   },
-  rating: { fontSize: 11.5, fontWeight: '700', color: Brand.text },
-  dot: { fontSize: 11, color: Brand.textMuted },
-  jobs: { fontSize: 10.5, color: Brand.textMuted },
+  rating: {
+    fontFamily: theme.fontFamily.bold,
+    color: theme.colors.textPrimary,
+  },
   specChip: {
-    alignSelf: 'flex-start',
-    maxWidth: '100%',
-    paddingHorizontal: 7,
-    paddingVertical: 3,
-    borderRadius: Radius.xs,
-    backgroundColor: Brand.primarySoft,
-    marginTop: Space.sm,
+    alignSelf: 'flex-start' as const,
+    maxWidth: '100%' as const,
+    paddingHorizontal: theme.spacing.sm,
+    paddingVertical: theme.spacing.xxs,
+    borderRadius: theme.radii.xs,
+    backgroundColor: theme.colors.statusInfoBg,
+    marginTop: theme.spacing.sm,
   },
-  specText: { fontSize: 9.5, fontWeight: '600', color: Brand.primary },
-  specPlaceholder: { fontSize: 10, color: Brand.textMuted, marginTop: Space.sm },
+  specPlaceholder: {
+    marginTop: theme.spacing.sm,
+  },
   empty: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Space.md,
-    backgroundColor: Brand.surface,
-    borderRadius: Radius.lg,
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: theme.spacing.md,
+    backgroundColor: theme.colors.bgSurface,
+    borderRadius: theme.radii.lg,
+    borderCurve: theme.components.card.borderCurve,
     borderWidth: 1,
-    borderColor: Brand.border,
-    padding: Space.lg,
+    borderColor: theme.colors.borderSubtle,
+    padding: theme.spacing.lg,
   },
-  emptyCopy: { flex: 1 },
-  emptyTitle: { fontSize: 13, fontWeight: '700', color: Brand.text },
-  emptyHint: { fontSize: 11.5, color: Brand.textSecondary, marginTop: 2, lineHeight: 16 },
+  emptyCopy: {
+    flex: 1,
+    gap: theme.spacing.xxs,
+  },
 });

@@ -1,7 +1,9 @@
-import { Pressable, StyleSheet, Text, View } from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
+import { Pressable, View } from 'react-native';
+import { Badge } from '@/components/ui/badge';
 import { Ionicons } from '@/components/ui/icon';
-import { Brand, Gradient, Radius, Space, Type } from '@/constants/brand';
+import { Surface } from '@/components/ui/surface';
+import { AppText } from '@/components/ui/text';
+import { useAppTheme, useThemedStyles, type AppTheme } from '@/theme';
 
 interface TripEntryCardProps {
   /** Status order yang sedang berada di fase perjalanan. */
@@ -10,10 +12,11 @@ interface TripEntryCardProps {
 }
 
 /**
- * Pintu masuk ke layar perjalanan (trip mode). Dipakai di beranda montir dan
- * detail order agar montir tidak perlu mencari menu navigasi.
+ * Pintu masuk ke layar perjalanan (trip mode) dari beranda montir dan detail order.
  */
 export function TripEntryCard({ status, onPress }: TripEntryCardProps) {
+  const { theme } = useAppTheme();
+  const styles = useThemedStyles(createStyles);
   const enroute = status === 'on_the_way';
 
   return (
@@ -23,56 +26,66 @@ export function TripEntryCard({ status, onPress }: TripEntryCardProps) {
       onPress={onPress}
       style={({ pressed }) => [styles.wrap, pressed && styles.pressed]}
     >
-      <LinearGradient
-        colors={Gradient.ink}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 1 }}
-        style={styles.gradient}
-      >
+      <Surface variant="elevated" padding="lg" style={styles.card}>
         <View style={styles.iconWrap}>
-          <Ionicons name={enroute ? 'navigate' : 'map-outline'} size={20} color={Brand.ink} />
+          <Ionicons
+            name={enroute ? 'navigate' : 'map-outline'}
+            size={22}
+            color={theme.colors.actionPrimaryFg}
+          />
         </View>
         <View style={styles.copy}>
-          <View style={styles.labelRow}>
-            <View style={styles.liveDot} />
-            <Text style={styles.label}>{enroute ? 'TRIP MODE · LIVE' : 'TRIP MODE'}</Text>
-          </View>
-          <Text style={styles.title}>
+          <Badge
+            size="sm"
+            dot={enroute}
+            tone={enroute ? 'success' : 'info'}
+            label={enroute ? 'TRIP MODE · LIVE' : 'TRIP MODE'}
+          />
+          <AppText variant="bodyStrong">
             {enroute ? 'Perjalanan sedang berlangsung' : 'Siap berangkat ke lokasi client'}
-          </Text>
-          <Text style={styles.desc} numberOfLines={2}>
+          </AppText>
+          <AppText variant="caption" tone="secondary" numberOfLines={2}>
             {enroute
               ? 'Lanjutkan navigasi realtime, lalu konfirmasi saat tiba.'
               : 'Buka rute, ETA, dan mulai perjalanan dari sini.'}
-          </Text>
+          </AppText>
         </View>
-        <Ionicons name="arrow-forward" size={18} color={Brand.inkMuted} />
-      </LinearGradient>
+        <Ionicons
+          name="arrow-forward"
+          size={18}
+          color={theme.colors.textSecondary}
+        />
+      </Surface>
     </Pressable>
   );
 }
 
-const styles = StyleSheet.create({
-  wrap: { borderRadius: Radius.lg, overflow: 'hidden', marginTop: Space.md },
-  gradient: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Space.md,
-    padding: Space.lg,
+const createStyles = (theme: AppTheme) => ({
+  wrap: {
+    marginTop: theme.spacing.md,
+  },
+  pressed: {
+    opacity: 0.85,
+  },
+  card: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: theme.spacing.md,
+    borderWidth: 1.5,
+    borderColor: theme.colors.statusInfoBorder,
+    backgroundColor: theme.colors.statusInfoBg,
   },
   iconWrap: {
-    width: 44,
-    height: 44,
-    borderRadius: Radius.md,
-    backgroundColor: Brand.volt,
-    alignItems: 'center',
-    justifyContent: 'center',
+    width: theme.touchTarget.min,
+    height: theme.touchTarget.min,
+    borderRadius: theme.radii.md,
+    borderCurve: theme.components.card.borderCurve,
+    backgroundColor: theme.colors.actionPrimaryBg,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
   },
-  copy: { flex: 1 },
-  labelRow: { flexDirection: 'row', alignItems: 'center', gap: 5, marginBottom: 4 },
-  liveDot: { width: 5, height: 5, borderRadius: 3, backgroundColor: Brand.volt },
-  label: { ...Type.micro, color: Brand.inkMuted, fontSize: 9, letterSpacing: 1 },
-  title: { ...Type.bodyStrong, color: Brand.white, fontWeight: '700' },
-  desc: { ...Type.meta, color: Brand.inkMuted, marginTop: 2, lineHeight: 15 },
-  pressed: { opacity: 0.85 },
+  copy: {
+    flex: 1,
+    gap: theme.spacing.xxs,
+  },
 });

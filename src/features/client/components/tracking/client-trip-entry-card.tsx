@@ -1,70 +1,77 @@
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, View } from 'react-native';
 import { Ionicons } from '@/components/ui/icon';
-import { Brand, Radius, Space, Type } from '@/constants/brand';
+import { AppText } from '@/components/ui/text';
+import { useAppTheme, useThemedStyles, type AppTheme } from '@/theme';
 
 interface ClientTripEntryCardProps {
   onPress: () => void;
 }
 
 /**
- * Pintu masuk ke layar perjalanan client. Permukaan ink dengan aksen volt
- * menandai bahwa ada sesuatu yang sedang berlangsung saat ini.
+ * Pintu masuk ke layar perjalanan client saat montir `on_the_way`.
  */
 export function ClientTripEntryCard({ onPress }: ClientTripEntryCardProps) {
+  const { theme } = useAppTheme();
+  const styles = useThemedStyles(createStyles);
+
   return (
     <Pressable
       accessibilityRole="button"
       accessibilityLabel="Buka peta perjalanan montir"
       onPress={onPress}
-      style={({ pressed }) => [styles.wrap, pressed && styles.pressed]}
+      style={({ pressed }) => [styles.wrap, theme.elevation.card, pressed && styles.pressed]}
     >
       <View style={styles.rail} />
       <View style={styles.iconWrap}>
-        <Ionicons name="navigate" size={19} color={Brand.volt} />
+        <Ionicons name="navigate" size={20} color={theme.colors.statusInfoFg} />
       </View>
       <View style={styles.copy}>
-        <Text style={styles.eyebrow}>SEDANG BERLANGSUNG</Text>
-        <Text style={styles.title}>Montir menuju lokasimu</Text>
-        <Text style={styles.desc} numberOfLines={2}>
+        <AppText variant="overline" tone="info">
+          SEDANG BERLANGSUNG
+        </AppText>
+        <AppText variant="title">Montir menuju lokasimu</AppText>
+        <AppText variant="caption" tone="secondary" numberOfLines={2}>
           Buka peta untuk melihat posisi, rute, dan perkiraan tiba secara realtime.
-        </Text>
+        </AppText>
       </View>
-      <Ionicons name="chevron-forward" size={17} color={Brand.inkMuted} />
+      <Ionicons name="chevron-forward" size={18} color={theme.colors.textMuted} />
     </Pressable>
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (theme: AppTheme) => ({
   wrap: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Space.md,
-    backgroundColor: Brand.ink,
-    borderRadius: Radius.lg,
-    padding: Space.lg,
-    paddingLeft: Space.lg + 3,
-    marginTop: Space.md,
-    overflow: 'hidden',
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: theme.spacing.md,
+    backgroundColor: theme.colors.bgSurface,
+    borderRadius: theme.radii.lg,
+    borderCurve: theme.components.card.borderCurve,
+    borderWidth: 1,
+    borderColor: theme.colors.statusInfoBorder,
+    padding: theme.spacing.lg,
+    paddingLeft: theme.spacing.lg + 4,
+    overflow: 'hidden' as const,
   },
   rail: {
-    position: 'absolute',
+    position: 'absolute' as const,
     left: 0,
     top: 0,
     bottom: 0,
-    width: 3,
-    backgroundColor: Brand.volt,
+    width: 4,
+    backgroundColor: theme.colors.actionPrimaryAltBg,
   },
   iconWrap: {
-    width: 40,
-    height: 40,
-    borderRadius: Radius.sm,
-    backgroundColor: 'rgba(255,255,255,0.08)',
-    alignItems: 'center',
-    justifyContent: 'center',
+    width: 42,
+    height: 42,
+    borderRadius: theme.radii.sm,
+    backgroundColor: theme.colors.statusInfoBg,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
   },
-  copy: { flex: 1 },
-  eyebrow: { ...Type.micro, fontSize: 8.5, color: Brand.inkMuted },
-  title: { ...Type.bodyStrong, fontWeight: '700', color: Brand.white, marginTop: 2 },
-  desc: { fontSize: 11, color: Brand.inkText, marginTop: 2, lineHeight: 15 },
-  pressed: { opacity: 0.9 },
+  copy: {
+    flex: 1,
+    gap: theme.spacing.xxs,
+  },
+  pressed: { opacity: 0.85 },
 });

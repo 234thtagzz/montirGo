@@ -1,21 +1,24 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { FlatList, Pressable, RefreshControl, View } from 'react-native';
 import { useFocusEffect, useRouter } from 'expo-router';
+import { Badge } from '@/components/ui/badge';
+import { Ionicons } from '@/components/ui/icon';
+import { Money } from '@/components/ui/money';
 import { ScreenHeader } from '@/components/ui/screen-header';
 import { Segmented, type SegmentedOption } from '@/components/ui/segmented';
-import { Money } from '@/components/ui/money';
 import { EmptyState, ErrorState, LoadingState } from '@/components/ui/state';
-import { Ionicons } from '@/components/ui/icon';
-import { Brand, Radius, ScreenPadding, Space, Tabular, Type } from '@/constants/brand';
-import { useSessionUser } from '@/hooks/use-session-user';
-import { useRefreshOnForeground } from '@/hooks/use-foreground';
-import { createRealtimeChannel, subscribeWithResync } from '@/lib/realtime';
-import { supabase } from '@/lib/supabase';
+import { Surface } from '@/components/ui/surface';
+import { AppText } from '@/components/ui/text';
 import { listMyRequests, type ClientOrder } from '@/features/client/service';
 import { ComplaintBadge } from '@/features/complaints/components/complaint-badge';
 import { listMyComplaintRequestIds } from '@/features/complaints/service';
-import { formatVehicleLabel } from '@/features/vehicles/constants';
 import { getStatusMeta, isActiveStatus } from '@/features/service-request/status';
+import { formatVehicleLabel } from '@/features/vehicles/constants';
+import { useRefreshOnForeground } from '@/hooks/use-foreground';
+import { useSessionUser } from '@/hooks/use-session-user';
+import { createRealtimeChannel, subscribeWithResync } from '@/lib/realtime';
+import { supabase } from '@/lib/supabase';
+import { useAppTheme, useThemedStyles, type AppTheme } from '@/theme';
 import { formatDayLabel, formatTime } from '@/utils/format';
 
 type FilterKey = 'all' | 'active' | 'done' | 'cancelled';
@@ -27,13 +30,13 @@ const FILTERS: SegmentedOption<FilterKey>[] = [
   { value: 'cancelled', label: 'Batal' },
 ];
 
-interface DayGroup {
-  key: string;
-  label: string;
-  orders: ClientOrder[];
-}
+type RequestListItem =
+  | { kind: 'header'; key: string; label: string }
+  | { kind: 'order'; key: string; order: ClientOrder };
 
 export default function MyRequestsScreen() {
+  const { theme } = useAppTheme();
+  const styles = useThemedStyles(createStyles);
   const { user } = useSessionUser();
   const router = useRouter();
 
@@ -54,7 +57,6 @@ export default function MyRequestsScreen() {
       setLoading(false);
       setRefreshing(false);
     }
-    // Badge "ada keluhan" terpisah, kegagalannya tidak mengganggu riwayat.
     void listMyComplaintRequestIds()
       .then((ids) => setComplaintIds(new Set(ids)))
       .catch(() => setComplaintIds(new Set()));
@@ -62,11 +64,10 @@ export default function MyRequestsScreen() {
 
   useFocusEffect(
     useCallback(() => {
-      load();
+      void load();
     }, [load]),
   );
 
-  // Data & signed URL di-refresh saat app kembali aktif.
   useRefreshOnForeground(load);
 
   useEffect(() => {
@@ -79,7 +80,9 @@ export default function MyRequestsScreen() {
         table: 'service_requests',
         filter: `client_id=eq.${user.id}`,
       },
-      () => load(),
+      () => {
+        void load();
+      },
     );
     subscribeWithResync(channel, () => void load());
     return () => {
@@ -96,7 +99,7 @@ export default function MyRequestsScreen() {
     [orders],
   );
 
-  const groups = useMemo<DayGroup[]>(() => {
+  const listItems = useMemo<RequestListItem[]>(() => {
     const visible = orders.filter((order) => {
       if (filter === 'active') return isActiveStatus(order.status);
       if (filter === 'done') return order.status === 'paid';
@@ -104,15 +107,39 @@ export default function MyRequestsScreen() {
       return true;
     });
 
-    const map = new Map<string, DayGroup>();
-    visible.forEach((order) => {
+    const out: RequestListItem[] = [];
+    let currentLabel = '';
+    for (const order of visible) {
       const label = formatDayLabel(order.created_at);
-      const existing = map.get(label);
-      if (existing) existing.orders.push(order);
-      else map.set(label, { key: label, label, orders: [order] });
-    });
-    return Array.from(map.values());
+      if (label !== currentLabel) {
+        currentLabel = label;
+        out.push({ kind: 'header', key: `hdr-${label}`, label });
+      }
+      out.push({ kind: 'order', key: order.id, order });
+    }
+    return out;
   }, [orders, filter]);
+
+  const headerComponent = (
+    <View style={styles.listHeader}>
+      <Surface variant="default" padding="none" style={styles.summary}>
+        <SummaryStat label="Total" value={counts.total} />
+        <View style={styles.summaryDivider} />
+        <SummaryStat label="Aktif" value={counts.active} tone="info" />
+        <View style={styles.summaryDivider} />
+        <SummaryStat label="Selesai" value={counts.done} tone="success" />
+      </Surface>
+
+      <Segmented
+        options={FILTERS}
+        value={filter}
+        onChange={setFilter}
+        style={styles.segmented}
+      />
+
+      {error ? <ErrorState onRetry={load} /> : null}
+    </View>
+  );
 
   return (
     <View style={styles.screen}>
@@ -125,75 +152,64 @@ export default function MyRequestsScreen() {
       {loading ? (
         <LoadingState message="Memuat pesanan..." />
       ) : (
-        <ScrollView
+        <FlatList
+          data={error ? [] : listItems}
+          keyExtractor={(item) => item.key}
           contentContainerStyle={styles.content}
           showsVerticalScrollIndicator={false}
+          ListHeaderComponent={headerComponent}
+          ListEmptyComponent={
+            !error ? (
+              <EmptyState
+                icon="receipt-outline"
+                message={filter === 'all' ? 'Belum ada pesanan' : 'Tidak ada pesanan di filter ini'}
+                hint="Permintaan bantuan montir akan tampil di sini."
+                actionLabel={filter === 'all' ? 'Butuh Montir' : undefined}
+                onPressAction={
+                  filter === 'all'
+                    ? () =>
+                        router.push({
+                          pathname: '/(client)/request/new',
+                          params: { category: 'montir' },
+                        })
+                    : undefined
+                }
+              />
+            ) : undefined
+          }
           refreshControl={
             <RefreshControl
               refreshing={refreshing}
               onRefresh={() => {
                 setRefreshing(true);
-                load();
+                void load();
               }}
-              tintColor={Brand.primary}
-              colors={[Brand.primary]}
+              tintColor={theme.colors.actionPrimaryAltBg}
+              colors={[theme.colors.actionPrimaryAltBg]}
             />
           }
-        >
-          <View style={styles.summary}>
-            <SummaryStat label="Total" value={counts.total} />
-            <View style={styles.summaryDivider} />
-            <SummaryStat label="Aktif" value={counts.active} accent={Brand.primary} />
-            <View style={styles.summaryDivider} />
-            <SummaryStat label="Selesai" value={counts.done} accent={Brand.green} />
-          </View>
-
-          <Segmented
-            options={FILTERS}
-            value={filter}
-            onChange={setFilter}
-            style={styles.segmented}
-          />
-
-          {error ? (
-            <ErrorState onRetry={load} />
-          ) : groups.length === 0 ? (
-            <EmptyState
-              icon="receipt-outline"
-              message={filter === 'all' ? 'Belum ada pesanan' : 'Tidak ada pesanan di filter ini'}
-              hint="Permintaan bantuan montir akan tampil di sini."
-              actionLabel={filter === 'all' ? 'Butuh Montir' : undefined}
-              onPressAction={
-                filter === 'all'
-                  ? () =>
-                      router.push({
-                        pathname: '/(client)/request/new',
-                        params: { category: 'montir' },
-                      })
-                  : undefined
-              }
-            />
-          ) : (
-            groups.map((group) => (
-              <View key={group.key} style={styles.group}>
-                <Text style={styles.groupLabel}>{group.label}</Text>
-                {group.orders.map((order) => (
-                  <OrderRow
-                    key={order.id}
-                    order={order}
-                    hasComplaint={complaintIds.has(order.id)}
-                    onPress={() =>
-                      router.push({
-                        pathname: '/(client)/orders/[id]',
-                        params: { id: order.id },
-                      })
-                    }
-                  />
-                ))}
-              </View>
-            ))
-          )}
-        </ScrollView>
+          renderItem={({ item }) => {
+            if (item.kind === 'header') {
+              return (
+                <AppText variant="overline" tone="muted" style={styles.groupLabel}>
+                  {item.label}
+                </AppText>
+              );
+            }
+            return (
+              <OrderRow
+                order={item.order}
+                hasComplaint={complaintIds.has(item.order.id)}
+                onPress={() =>
+                  router.push({
+                    pathname: '/(client)/orders/[id]',
+                    params: { id: item.order.id },
+                  })
+                }
+              />
+            );
+          }}
+        />
       )}
     </View>
   );
@@ -202,18 +218,22 @@ export default function MyRequestsScreen() {
 function SummaryStat({
   label,
   value,
-  accent,
+  tone = 'primary',
 }: {
   label: string;
   value: number;
-  accent?: string;
+  tone?: 'primary' | 'info' | 'success';
 }) {
+  const { theme } = useAppTheme();
+  const styles = useThemedStyles(createStyles);
   return (
     <View style={styles.summaryItem}>
-      <Text style={[styles.summaryValue, Tabular, accent ? { color: accent } : null]}>
+      <AppText variant="h2" tone={tone} style={theme.tabularNums}>
         {value}
-      </Text>
-      <Text style={styles.summaryLabel}>{label}</Text>
+      </AppText>
+      <AppText variant="caption" tone="muted">
+        {label}
+      </AppText>
     </View>
   );
 }
@@ -227,9 +247,14 @@ function OrderRow({
   onPress: () => void;
   hasComplaint?: boolean;
 }) {
+  const { theme } = useAppTheme();
+  const styles = useThemedStyles(createStyles);
+
   const meta = getStatusMeta(order.status);
+  const tonePalette = theme.tones[meta.tone];
   const pendingConfirmation =
     order.status === 'mechanic_assigned' && Boolean(order.mechanic_id);
+  const isCalloutOnly = order.quote_status === 'callout_only';
   const vehicle = formatVehicleLabel(
     order.vehicle_type,
     order.vehicle_brand,
@@ -241,55 +266,63 @@ function OrderRow({
       accessibilityRole="button"
       accessibilityLabel={`Pesanan ${meta.label}`}
       onPress={onPress}
-      style={({ pressed }) => [styles.card, pressed && styles.pressed]}
+      style={({ pressed }) => [styles.card, theme.elevation.card, pressed && styles.pressed]}
     >
-      <View style={[styles.rail, { backgroundColor: meta.color }]} />
+      <View style={[styles.rail, { backgroundColor: tonePalette.fg }]} />
 
       <View style={styles.cardBody}>
         <View style={styles.cardTop}>
-          <View style={[styles.chip, { backgroundColor: meta.background }]}>
-            <Ionicons name={meta.icon} size={12} color={meta.color} />
-            <Text style={[styles.statusText, { color: meta.color }]}>{meta.shortLabel}</Text>
-          </View>
-          <Text style={[styles.time, Tabular]}>{formatTime(order.created_at)}</Text>
+          <Badge label={meta.shortLabel} tone={meta.tone} icon={meta.icon} size="sm" />
+          <AppText variant="caption" tone="muted" style={theme.tabularNums}>
+            {formatTime(order.created_at)}
+          </AppText>
         </View>
 
-        {hasComplaint ? (
+        {hasComplaint || isCalloutOnly ? (
           <View style={styles.badgeRow}>
-            <ComplaintBadge />
+            {hasComplaint ? <ComplaintBadge /> : null}
+            {isCalloutOnly ? (
+              <Badge label="Biaya panggil saja" tone="neutral" size="sm" />
+            ) : null}
           </View>
         ) : null}
 
-        <Text style={styles.issue} numberOfLines={2}>
+        <AppText variant="title" style={styles.issue} numberOfLines={2}>
           {order.issue_description}
-        </Text>
+        </AppText>
 
         <View style={styles.metaRow}>
-          <Ionicons name="car-outline" size={13} color={Brand.textMuted} />
-          <Text style={styles.metaText} numberOfLines={1}>
+          <Ionicons name="car-outline" size={14} color={theme.colors.textMuted} />
+          <AppText variant="caption" tone="secondary" style={styles.flexCopy} numberOfLines={1}>
             {vehicle || 'Kendaraan tidak dicantumkan'}
-          </Text>
+          </AppText>
         </View>
 
         <View style={styles.cardBottom}>
           {order.price_amount != null ? (
-            <View>
-              <Text style={styles.priceLabel}>BIAYA</Text>
-              <Money value={order.price_amount} size="sm" color={Brand.text} />
+            <View style={styles.priceWrap}>
+              <AppText variant="overline" tone="muted">
+                BIAYA
+              </AppText>
+              <Money value={order.price_amount} size="sm" color={theme.colors.textPrimary} />
             </View>
           ) : (
-            <Text style={styles.priceMuted}>Belum ada tagihan</Text>
+            <AppText variant="caption" tone="muted">
+              Biaya panggil {formatTime(order.created_at) ? 'pasti aktif' : ''}
+            </AppText>
           )}
-          <Ionicons name="arrow-forward" size={15} color={Brand.textMuted} />
+          <Ionicons name="arrow-forward" size={16} color={theme.colors.textMuted} />
         </View>
 
         {pendingConfirmation ? (
           <View style={styles.pendingRow}>
-            <Ionicons name="person-add-outline" size={13} color={Brand.amber} />
-            <Text style={styles.pendingText} numberOfLines={1}>
+            <Ionicons name="person-add-outline" size={14} color={theme.colors.statusWarningFg} />
+            <AppText variant="caption" style={styles.flexCopy} numberOfLines={1}>
               {order.mechanic_name ?? 'Montir'} menunggu konfirmasimu
-            </Text>
-            <Text style={styles.pendingAction}>Konfirmasi</Text>
+            </AppText>
+            <AppText variant="label" tone="warning">
+              Konfirmasi
+            </AppText>
           </View>
         ) : null}
       </View>
@@ -297,80 +330,101 @@ function OrderRow({
   );
 }
 
-const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: Brand.background },
-  content: { paddingHorizontal: ScreenPadding, paddingBottom: Space.xxxl },
-  summary: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: Brand.surface,
-    borderRadius: Radius.lg,
-    borderWidth: 1,
-    borderColor: Brand.border,
-    paddingVertical: Space.md,
-    marginTop: Space.xs,
-    marginBottom: Space.md,
+const createStyles = (theme: AppTheme) => ({
+  screen: {
+    flex: 1,
+    backgroundColor: theme.colors.bgCanvas,
   },
-  summaryItem: { flex: 1, alignItems: 'center' },
-  summaryValue: { ...Type.h2, color: Brand.text },
-  summaryLabel: { ...Type.meta, color: Brand.textMuted, marginTop: 1 },
-  summaryDivider: { width: 1, height: 26, backgroundColor: Brand.divider },
-  segmented: { marginBottom: Space.xs },
-  group: { marginTop: Space.lg },
+  content: {
+    paddingHorizontal: theme.spacing.screenPadding,
+    paddingBottom: theme.spacing.xxxl,
+  },
+  listHeader: {
+    gap: theme.spacing.md,
+    marginTop: theme.spacing.xs,
+    marginBottom: theme.spacing.xs,
+  },
+  summary: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    paddingVertical: theme.spacing.md,
+  },
+  summaryItem: {
+    flex: 1,
+    alignItems: 'center' as const,
+    gap: theme.spacing.xxs,
+  },
+  summaryDivider: {
+    width: 1,
+    height: 28,
+    backgroundColor: theme.colors.borderSubtle,
+  },
+  segmented: {
+    marginBottom: theme.spacing.xs,
+  },
   groupLabel: {
-    ...Type.micro,
-    color: Brand.textMuted,
-    marginBottom: Space.sm,
-    textTransform: 'uppercase',
+    marginTop: theme.spacing.lg,
+    marginBottom: theme.spacing.sm,
+    textTransform: 'uppercase' as const,
   },
   card: {
-    flexDirection: 'row',
-    backgroundColor: Brand.surface,
-    borderRadius: Radius.lg,
+    flexDirection: 'row' as const,
+    backgroundColor: theme.colors.bgSurface,
+    borderRadius: theme.radii.lg,
+    borderCurve: theme.components.card.borderCurve,
     borderWidth: 1,
-    borderColor: Brand.border,
-    marginBottom: Space.md,
-    overflow: 'hidden',
+    borderColor: theme.colors.borderSubtle,
+    marginBottom: theme.spacing.md,
+    overflow: 'hidden' as const,
   },
-  rail: { width: 3 },
-  badgeRow: { marginTop: Space.sm },
-  cardBody: { flex: 1, padding: Space.lg },
+  rail: { width: 4 },
+  badgeRow: {
+    flexDirection: 'row' as const,
+    flexWrap: 'wrap' as const,
+    gap: theme.spacing.xs,
+    marginTop: theme.spacing.xs,
+  },
+  cardBody: {
+    flex: 1,
+    padding: theme.spacing.lg,
+  },
   pressed: { opacity: 0.78 },
-  cardTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  chip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: Radius.pill,
+  cardTop: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    justifyContent: 'space-between' as const,
+    gap: theme.spacing.sm,
   },
-  statusText: { ...Type.micro, fontSize: 9.5, letterSpacing: 0.2 },
-  time: { ...Type.meta, color: Brand.textMuted },
-  issue: { ...Type.bodyStrong, color: Brand.text, marginTop: Space.md, lineHeight: 20 },
-  metaRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: Space.sm },
-  metaText: { flex: 1, ...Type.meta, color: Brand.textSecondary },
+  issue: {
+    marginTop: theme.spacing.md,
+  },
+  metaRow: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: theme.spacing.xs,
+    marginTop: theme.spacing.sm,
+  },
+  flexCopy: { flex: 1 },
   cardBottom: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginTop: Space.md,
-    paddingTop: Space.md,
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    justifyContent: 'space-between' as const,
+    marginTop: theme.spacing.md,
+    paddingTop: theme.spacing.md,
     borderTopWidth: 1,
-    borderTopColor: Brand.divider,
+    borderTopColor: theme.colors.borderSubtle,
   },
-  priceLabel: { ...Type.micro, color: Brand.textMuted, marginBottom: 1 },
-  priceMuted: { ...Type.meta, color: Brand.textMuted },
+  priceWrap: {
+    gap: theme.spacing.xxs,
+  },
   pendingRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 5,
-    backgroundColor: Brand.amberSoft,
-    borderRadius: Radius.xs,
-    paddingHorizontal: Space.sm,
-    paddingVertical: 7,
-    marginTop: Space.sm,
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: theme.spacing.xs,
+    backgroundColor: theme.colors.statusWarningBg,
+    borderRadius: theme.radii.xs,
+    paddingHorizontal: theme.spacing.sm,
+    paddingVertical: theme.spacing.xs,
+    marginTop: theme.spacing.sm,
   },
-  pendingText: { flex: 1, fontSize: 11, fontWeight: '600', color: Brand.text },
-  pendingAction: { fontSize: 11, fontWeight: '800', color: Brand.amber },
 });

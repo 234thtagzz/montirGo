@@ -1,6 +1,9 @@
-import type { OrderStatus } from '@/features/service-request/status';
+import type { OrderStatus, QuoteStatus } from '@/features/service-request/status';
 
 export type VehicleType = 'motor' | 'mobil' | 'lainnya';
+export type CalloutFeeTier = 'motor' | 'mobil' | 'derek';
+export type InvoiceItemType = 'callout_fee' | 'service' | 'parts' | 'addon';
+export type { QuoteStatus };
 
 export interface ClientVehicle {
   id: string;
@@ -41,6 +44,17 @@ export interface ClientOrder {
   route_distance_m?: number | null;
   route_duration_s?: number | null;
   route_updated_at?: string | null;
+  /** Biaya panggil pasti berdasarkan tier kendaraan. */
+  callout_fee_tier: CalloutFeeTier;
+  callout_fee_amount: number;
+  /** Sub-status Digital Approval di dalam tahap `arrived`. */
+  quote_status: QuoteStatus;
+  quote_submitted_at: string | null;
+  quote_approved_at: string | null;
+  quote_expires_at: string | null;
+  quote_revision_note: string | null;
+  quote_photo_paths: string[];
+  rejected_quote_snapshot: unknown | null;
   vehicle_type: string | null;
   vehicle_brand: string | null;
   vehicle_model: string | null;
@@ -60,6 +74,11 @@ export interface OrderInvoiceItem {
   mechanic_id?: string;
   description: string;
   amount: number;
+  item_type: InvoiceItemType;
+  is_locked: boolean;
+  approved_at: string | null;
+  voided_at: string | null;
+  quote_photo_paths: string[];
   created_at: string;
   updated_at?: string;
 }
@@ -109,11 +128,38 @@ export interface MechanicAssignmentProfile {
   certifications: string[];
   /** Path foto utama bengkel di bucket privat `workshop-photos`. */
   workshop_photo: string | null;
+  vehicle_label: string | null;
+  vehicle_plate: string | null;
   rating_avg: number;
   rating_count: number;
   total_jobs: number;
   is_verified: boolean;
   verified_at: string | null;
+}
+
+/** Identitas & kendaraan montir pasca-penugasan dari `assigned_order_mechanic_view`. */
+export interface AssignedOrderMechanic {
+  request_id: string;
+  mechanic_id: string;
+  full_name: string | null;
+  avatar_url: string | null;
+  phone_number: string | null;
+  workshop_name: string | null;
+  workshop_address: string | null;
+  vehicle_label: string | null;
+  vehicle_plate: string | null;
+  rating_avg: number;
+  rating_count: number;
+  total_jobs: number;
+  is_verified: boolean;
+}
+
+export interface PlatformPricingAndSupport {
+  callout_fee_motor: number;
+  callout_fee_mobil: number;
+  callout_fee_derek: number;
+  quote_expire_minutes: number;
+  cs_whatsapp_number: string | null;
 }
 
 /** Keputusan client pada layar konfirmasi montir. */
@@ -149,6 +195,7 @@ export interface MechanicLocationSnapshot {
 export interface CreateServiceRequestInput {
   clientId: string;
   vehicleId?: string | null;
+  calloutFeeTier?: CalloutFeeTier | null;
   issueDescription: string;
   symptoms?: string | null;
   lat: number;

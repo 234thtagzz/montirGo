@@ -1,7 +1,10 @@
 import type { ReactNode } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { View } from 'react-native';
+import { Badge } from '@/components/ui/badge';
 import { Ionicons } from '@/components/ui/icon';
-import { Brand, Radius, Space } from '@/constants/brand';
+import { Surface } from '@/components/ui/surface';
+import { AppText } from '@/components/ui/text';
+import { useAppTheme, useThemedStyles, type AppTheme } from '@/theme';
 import {
   formatVehicleName,
   getVehicleTypeMeta,
@@ -16,28 +19,13 @@ interface VehicleProfileCardProps {
   year?: number | null;
   plate?: string | null;
   notes?: string | null;
-  /** Label kecil di atas nama kendaraan. */
   title?: string;
-  /** `full` untuk layar detail (foto besar), `compact` untuk ringkasan/form. */
   variant?: 'full' | 'compact';
-  /** Aksi tambahan, mis. tombol tambah/ganti foto. */
   footer?: ReactNode;
 }
 
-function TypeBadge({ type }: { type?: string | null }) {
-  const meta = getVehicleTypeMeta(type);
-  return (
-    <View style={[styles.typeBadge, { backgroundColor: meta.background }]}>
-      <Ionicons name={meta.icon} size={12} color={meta.color} />
-      <Text style={[styles.typeText, { color: meta.color }]}>{meta.label}</Text>
-    </View>
-  );
-}
-
 /**
- * Ringkasan kendaraan (jenis + foto + identitas) yang bisa dipakai di sisi
- * client maupun montir. Montir memakai kartu ini untuk menganalisis kendaraan
- * sebelum/sesudah menerima order.
+ * Ringkasan kendaraan (jenis + foto + identitas) dengan semantic tokens.
  */
 export function VehicleProfileCard({
   photo,
@@ -51,53 +39,76 @@ export function VehicleProfileCard({
   variant = 'full',
   footer,
 }: VehicleProfileCardProps) {
+  const { theme } = useAppTheme();
+  const styles = useThemedStyles(createStyles);
   const meta = getVehicleTypeMeta(type);
+  const tonePalette = theme.tones[meta.tone];
   const name = formatVehicleName(brand, model, year);
 
   if (variant === 'compact') {
     return (
-      <View style={styles.compactCard}>
-        <VehiclePhoto value={photo} height={78} style={styles.compactPhoto} emptyLabel={null} />
+      <Surface variant="default" padding="sm" style={styles.compactCard}>
+        <VehiclePhoto value={photo} height={80} style={styles.compactPhoto} emptyLabel={null} />
         <View style={styles.compactCopy}>
           <View style={styles.compactTop}>
-            <TypeBadge type={type} />
-            {year ? <Text style={styles.compactYear}>{year}</Text> : null}
+            <Badge label={meta.label} tone={meta.tone} icon={meta.icon} size="sm" />
+            {year ? (
+              <AppText variant="caption" tone="muted" style={theme.tabularNums}>
+                {year}
+              </AppText>
+            ) : null}
           </View>
-          <Text style={styles.compactName} numberOfLines={1}>
+          <AppText variant="label" numberOfLines={1}>
             {name || 'Kendaraan tidak dicantumkan'}
-          </Text>
-          {plate ? <Text style={styles.compactPlate}>{plate}</Text> : null}
+          </AppText>
+          {plate ? (
+            <AppText variant="caption" tone="secondary">
+              {plate}
+            </AppText>
+          ) : null}
           {notes ? (
-            <Text style={styles.compactNotes} numberOfLines={1}>
+            <AppText variant="caption" tone="muted" numberOfLines={1}>
               {notes}
-            </Text>
+            </AppText>
           ) : null}
           {footer}
         </View>
-      </View>
+      </Surface>
     );
   }
 
   return (
-    <View style={styles.card}>
+    <Surface variant="default" padding="none" style={styles.card}>
       <VehiclePhoto value={photo} height={172} />
       <View style={styles.body}>
         <View style={styles.headerRow}>
-          <TypeBadge type={type} />
-          {title ? <Text style={styles.title}>{title}</Text> : null}
-          {year ? <Text style={styles.year}>{year}</Text> : null}
+          <Badge label={meta.label} tone={meta.tone} icon={meta.icon} size="sm" />
+          {title ? (
+            <AppText variant="caption" tone="muted" style={styles.flexCopy}>
+              {title}
+            </AppText>
+          ) : null}
+          {year ? (
+            <AppText variant="caption" tone="muted" style={theme.tabularNums}>
+              {year}
+            </AppText>
+          ) : null}
         </View>
 
-        <Text style={styles.name}>{name || 'Kendaraan tidak dicantumkan'}</Text>
+        <AppText variant="title">{name || 'Kendaraan tidak dicantumkan'}</AppText>
 
         <View style={styles.metaRow}>
-          <Ionicons name={meta.icon} size={13} color={meta.color} />
-          <Text style={styles.metaText}>{meta.label}</Text>
+          <Ionicons name={meta.icon} size={14} color={tonePalette.fg} />
+          <AppText variant="caption" tone="secondary">
+            {meta.label}
+          </AppText>
           {plate ? (
             <>
               <View style={styles.dot} />
               <View style={styles.plate}>
-                <Text style={styles.plateText}>{plate}</Text>
+                <AppText variant="caption" style={styles.plateText}>
+                  {plate}
+                </AppText>
               </View>
             </>
           ) : null}
@@ -105,111 +116,78 @@ export function VehicleProfileCard({
 
         {notes ? (
           <View style={styles.notesBox}>
-            <Ionicons name="create-outline" size={13} color={Brand.textMuted} />
-            <Text style={styles.notes}>{notes}</Text>
+            <Ionicons name="create-outline" size={14} color={theme.colors.textMuted} />
+            <AppText variant="caption" tone="secondary" style={styles.flexCopy}>
+              {notes}
+            </AppText>
           </View>
         ) : null}
 
         {footer}
       </View>
-    </View>
+    </Surface>
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (theme: AppTheme) => ({
   card: {
-    backgroundColor: Brand.surface,
-    borderRadius: Radius.lg,
-    borderWidth: 1,
-    borderColor: Brand.divider,
-    overflow: 'hidden',
+    overflow: 'hidden' as const,
   },
-  body: { padding: Space.md, gap: Space.xs },
+  body: {
+    padding: theme.spacing.md,
+    gap: theme.spacing.xs,
+  },
   headerRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Space.sm,
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: theme.spacing.sm,
   },
-  typeBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: Radius.pill,
-    alignSelf: 'flex-start',
-  },
-  typeText: { fontSize: 10.5, fontWeight: '700' },
-  title: {
-    flex: 1,
-    fontSize: 11,
-    fontWeight: '600',
-    color: Brand.textMuted,
-  },
-  year: { fontSize: 11, fontWeight: '600', color: Brand.textMuted },
-  name: { fontSize: 15.5, fontWeight: '700', color: Brand.text, marginTop: 2 },
+  flexCopy: { flex: 1 },
   metaRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 5,
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: theme.spacing.xs,
     marginTop: 2,
-    flexWrap: 'wrap',
+    flexWrap: 'wrap' as const,
   },
-  metaText: { fontSize: 11.5, color: Brand.textSecondary },
   dot: {
     width: 3,
     height: 3,
     borderRadius: 1.5,
-    backgroundColor: Brand.textMuted,
-    marginHorizontal: 2,
+    backgroundColor: theme.colors.textMuted,
   },
   plate: {
-    backgroundColor: Brand.background,
-    borderRadius: Radius.sm,
-    paddingHorizontal: 7,
-    paddingVertical: 2,
+    backgroundColor: theme.colors.bgSurfaceSubtle,
+    borderRadius: theme.radii.sm,
+    paddingHorizontal: theme.spacing.sm,
+    paddingVertical: theme.spacing.xxs,
     borderWidth: 1,
-    borderColor: Brand.border,
+    borderColor: theme.colors.borderDefault,
   },
   plateText: {
-    fontSize: 10.5,
-    fontWeight: '700',
-    color: Brand.text,
+    fontFamily: theme.fontFamily.bold,
     letterSpacing: 0.5,
   },
   notesBox: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: 5,
-    marginTop: Space.xs,
+    flexDirection: 'row' as const,
+    alignItems: 'flex-start' as const,
+    gap: theme.spacing.xs,
+    marginTop: theme.spacing.xxs,
   },
-  notes: {
-    flex: 1,
-    fontSize: 11,
-    color: Brand.textSecondary,
-    lineHeight: 16,
-  },
-
   compactCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Space.md,
-    backgroundColor: Brand.surface,
-    borderRadius: Radius.lg,
-    borderWidth: 1,
-    borderColor: Brand.divider,
-    padding: Space.sm,
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: theme.spacing.md,
   },
   compactPhoto: { width: 96 },
-  compactCopy: { flex: 1, gap: 2 },
-  compactTop: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: Space.sm,
+  compactCopy: {
+    flex: 1,
+    gap: theme.spacing.xxs,
   },
-  compactYear: { fontSize: 10.5, color: Brand.textMuted, fontWeight: '600' },
-  compactName: { fontSize: 13.5, fontWeight: '700', color: Brand.text },
-  compactPlate: { fontSize: 11, color: Brand.textSecondary, fontWeight: '600' },
-  compactNotes: { fontSize: 10.5, color: Brand.textMuted },
+  compactTop: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    justifyContent: 'space-between' as const,
+    gap: theme.spacing.sm,
+  },
 });

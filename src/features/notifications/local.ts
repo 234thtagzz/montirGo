@@ -6,7 +6,7 @@
 // development/production.
 import * as Notifications from 'expo-notifications';
 import { Platform } from 'react-native';
-import { Brand } from '@/constants/brand';
+import { lightTheme } from '@/theme';
 
 export const REQUESTS_CHANNEL_ID = 'requests';
 export const ORDERS_CHANNEL_ID = 'orders';
@@ -53,7 +53,7 @@ export async function prepareNotifications(): Promise<boolean> {
       description: 'Pemberitahuan saat ada request baru di sekitarmu.',
       importance: ANDROID_IMPORTANCE_HIGH as Notifications.AndroidImportance,
       vibrationPattern: [0, 250, 250, 250],
-      lightColor: Brand.primary,
+      lightColor: lightTheme.colors.actionPrimaryAltBg,
       sound: ALERT_SOUND,
     }).catch(() => {
       // Channel gagal dibuat — notifikasi tetap memakai channel bawaan sistem.
@@ -64,7 +64,7 @@ export async function prepareNotifications(): Promise<boolean> {
       description: 'Pemberitahuan status pesanan dan konfirmasi montir.',
       importance: ANDROID_IMPORTANCE_HIGH as Notifications.AndroidImportance,
       vibrationPattern: [0, 250, 250, 250],
-      lightColor: Brand.primary,
+      lightColor: lightTheme.colors.actionPrimaryAltBg,
       sound: ALERT_SOUND,
     }).catch(() => {
       // Channel gagal dibuat — notifikasi tetap memakai channel bawaan sistem.

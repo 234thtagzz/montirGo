@@ -6,9 +6,22 @@ import {
   type RawAiAnalysis,
 } from '@/features/service-request/ai';
 import type {
-  ActivityItem, EarningsSummary, IncomingOrder, IncomingRequestDetail, MechanicLocationPoint,
-  MechanicOrderDetail, MechanicProfile, MechanicProfilePatch, MechanicReview, MyOrder,
-  OrderInvoiceItem, OrderStatus, OrderStatusEvent,
+  ActivityItem,
+  CalloutFeeTier,
+  EarningsSummary,
+  IncomingOrder,
+  IncomingRequestDetail,
+  MechanicLocationPoint,
+  MechanicOrderDetail,
+  MechanicProfile,
+  MechanicProfilePatch,
+  MechanicReview,
+  MyOrder,
+  OrderInvoiceItem,
+  OrderStatus,
+  OrderStatusEvent,
+  QuoteStatus,
+  RejectedQuoteSnapshot,
 } from './types';
 
 export * from './types';
@@ -210,6 +223,7 @@ export async function listMyOrders(onlyActive = false): Promise<MyOrder[]> {
     .from('service_requests')
     .select(
       'id, issue_description, symptoms, address, contact_phone, status, price_amount, created_at, ' +
+        'callout_fee_tier, callout_fee_amount, quote_status, assignment_expires_at, ' +
         'vehicles (type, brand, model), ' +
         'client:profiles!service_requests_client_id_fkey (full_name, phone_number)',
     )
@@ -232,6 +246,10 @@ export async function listMyOrders(onlyActive = false): Promise<MyOrder[]> {
     vehicle_model: (r.vehicles as { model?: string } | null)?.model ?? null,
     client_name: (r.client as { full_name?: string } | null)?.full_name ?? null,
     client_phone: (r.client as { phone_number?: string } | null)?.phone_number ?? null,
+    callout_fee_tier: ((r.callout_fee_tier as CalloutFeeTier | null) ?? 'motor'),
+    callout_fee_amount: r.callout_fee_amount == null ? null : Number(r.callout_fee_amount),
+    quote_status: ((r.quote_status as QuoteStatus | null) ?? 'draft'),
+    assignment_expires_at: (r.assignment_expires_at as string | null) ?? null,
   }));
 }
 
@@ -258,6 +276,8 @@ export async function getMyOrder(id: string): Promise<MechanicOrderDetail | null
       'id, issue_description, symptoms, address, lat, lng, contact_phone, additional_notes, status, ' +
         'price_amount, payment_method, created_at, updated_at, accepted_at, arrived_at, ' +
         'assignment_requested_at, assignment_expires_at, ' +
+        'callout_fee_tier, callout_fee_amount, quote_status, quote_submitted_at, quote_expires_at, ' +
+        'quote_approved_at, quote_revision_note, quote_photo_paths, rejected_quote_snapshot, ' +
         'vehicles (type, brand, model, year, license_plate, photo_url), ' +
         'client:profiles!service_requests_client_id_fkey (full_name, phone_number)',
     )
@@ -285,6 +305,18 @@ export async function getMyOrder(id: string): Promise<MechanicOrderDetail | null
     arrived_at: (r.arrived_at as string | null) ?? null,
     assignment_requested_at: (r.assignment_requested_at as string | null) ?? null,
     assignment_expires_at: (r.assignment_expires_at as string | null) ?? null,
+    callout_fee_tier: ((r.callout_fee_tier as CalloutFeeTier | null) ?? 'motor'),
+    callout_fee_amount: r.callout_fee_amount == null ? null : Number(r.callout_fee_amount),
+    quote_status: ((r.quote_status as QuoteStatus | null) ?? 'draft'),
+    quote_submitted_at: (r.quote_submitted_at as string | null) ?? null,
+    quote_expires_at: (r.quote_expires_at as string | null) ?? null,
+    quote_approved_at: (r.quote_approved_at as string | null) ?? null,
+    quote_revision_note: (r.quote_revision_note as string | null) ?? null,
+    quote_photo_paths: Array.isArray(r.quote_photo_paths)
+      ? (r.quote_photo_paths as string[])
+      : [],
+    rejected_quote_snapshot:
+      (r.rejected_quote_snapshot as RejectedQuoteSnapshot | null) ?? null,
     vehicle_type: (r.vehicles as { type?: string } | null)?.type ?? null,
     vehicle_brand: (r.vehicles as { brand?: string } | null)?.brand ?? null,
     vehicle_model: (r.vehicles as { model?: string } | null)?.model ?? null,
@@ -443,6 +475,14 @@ export async function cancelOrderAsMechanic(
   });
   if (error) {
     const code = (error.message ?? '').trim();
+    if (code.includes('CANCEL_REASON_REQUIRED')) {
+      throw new Error('Pilih atau tulis alasan pembatalan setelah tiba di lokasi.');
+    }
+    if (code.includes('QUOTE_APPROVAL_PENDING')) {
+      throw new Error(
+        'Client masih meninjau estimasi. Kamu bisa membatalkan setelah batas waktu respons habis atau tarik estimasi dulu.',
+      );
+    }
     if (code.includes('CANNOT_CANCEL_AT_STAGE')) {
       throw new Error('Order pada tahap ini sudah tidak dapat dibatalkan.');
     }
@@ -452,28 +492,49 @@ export async function cancelOrderAsMechanic(
   return { returnedToPool: row?.status === 'requested' };
 }
 
-// ---------- Tagihan terperinci ----------
+// ---------- Tagihan terperinci & Digital Approval ----------
 
 const INVOICE_ITEM_SELECT =
-  'id, request_id, mechanic_id, description, amount, created_at, updated_at';
+  'id, request_id, mechanic_id, description, amount, item_type, is_locked, approved_at, voided_at, quote_photo_paths, created_at, updated_at';
 
 /** Semua baris tagihan milik satu order, urut sesuai urutan dibuat. */
 export async function listOrderInvoiceItems(
   requestId: string,
+  options?: { includeVoided?: boolean },
 ): Promise<OrderInvoiceItem[]> {
-  const { data, error } = await supabase
+  let query = supabase
     .from('order_invoice_items')
     .select(INVOICE_ITEM_SELECT)
-    .eq('request_id', requestId)
-    .order('created_at', { ascending: true });
+    .eq('request_id', requestId);
+
+  if (!options?.includeVoided) {
+    query = query.is('voided_at', null);
+  }
+
+  const { data, error } = await query.order('created_at', { ascending: true });
   if (error) throw error;
-  return (data ?? []) as OrderInvoiceItem[];
+  return ((data ?? []) as Record<string, unknown>[]).map((row) => ({
+    id: row.id as string,
+    request_id: row.request_id as string,
+    mechanic_id: row.mechanic_id as string | undefined,
+    description: row.description as string,
+    amount: Number(row.amount),
+    item_type: (row.item_type as OrderInvoiceItem['item_type']) ?? 'service',
+    is_locked: Boolean(row.is_locked),
+    approved_at: (row.approved_at as string | null) ?? null,
+    voided_at: (row.voided_at as string | null) ?? null,
+    quote_photo_paths: Array.isArray(row.quote_photo_paths)
+      ? (row.quote_photo_paths as string[])
+      : [],
+    created_at: row.created_at as string,
+    updated_at: row.updated_at as string | undefined,
+  }));
 }
 
-/** Montir menambah satu baris deskripsi + nominal sebelum mengirim tagihan. */
+/** Montir menambah satu baris jasa atau suku cadang pada draf estimasi. */
 export async function addOrderInvoiceItem(
   requestId: string,
-  input: { description: string; amount: number },
+  input: { description: string; amount: number; itemType?: 'service' | 'parts' },
 ): Promise<OrderInvoiceItem> {
   const mechanicId = await getMyId();
   const description = input.description.trim();
@@ -489,14 +550,21 @@ export async function addOrderInvoiceItem(
       mechanic_id: mechanicId,
       description,
       amount: Math.round(input.amount),
+      item_type: input.itemType ?? 'service',
     })
     .select(INVOICE_ITEM_SELECT)
     .single();
   if (error) throw error;
-  return data as OrderInvoiceItem;
+  return {
+    ...(data as unknown as OrderInvoiceItem),
+    amount: Number((data as { amount: number }).amount),
+    quote_photo_paths: Array.isArray((data as { quote_photo_paths?: unknown }).quote_photo_paths)
+      ? ((data as { quote_photo_paths: string[] }).quote_photo_paths)
+      : [],
+  };
 }
 
-/** Hapus satu baris selama tagihan belum dikirim. */
+/** Hapus satu baris selama tagihan belum disetujui/dikunci. */
 export async function deleteOrderInvoiceItem(itemId: string): Promise<void> {
   const { error } = await supabase
     .from('order_invoice_items')
@@ -509,24 +577,79 @@ const INVOICE_ERROR_MESSAGES: Record<string, string> = {
   UNAUTHORIZED: 'Sesi berakhir. Silakan login kembali.',
   REQUEST_NOT_FOUND: 'Order tidak ditemukan.',
   NOT_YOUR_ORDER: 'Order ini bukan milikmu.',
-  INVALID_STATUS: 'Tagihan bisa dikirim setelah kamu tiba di lokasi client.',
+  INVALID_STATUS: 'Aksi ini hanya tersedia setelah kamu tiba di lokasi client.',
+  INVALID_QUOTE_STATUS: 'Status estimasi sudah berubah. Muat ulang halaman.',
+  QUOTE_NOT_APPROVED: 'Client belum menyetujui estimasi biaya. Kirim estimasi terlebih dahulu.',
+  CALLOUT_ONLY_LOCKED: 'Order biaya panggil saja terkunci dan tidak dapat dibuka ulang.',
+  TOO_MANY_QUOTE_PHOTOS: 'Maksimal 3 foto bukti kerusakan.',
+  INVALID_QUOTE_PHOTO_PATH: 'Path foto bukti kerusakan tidak valid.',
   ALREADY_PAID: 'Order ini sudah dibayar.',
   NO_ITEMS: 'Tambahkan minimal satu baris keterangan dan harga.',
   INVALID_PRICE: 'Total tagihan di luar batas yang diizinkan.',
 };
 
+function mapRpcError(message: string | null | undefined, fallback: string): Error {
+  const raw = (message ?? '').trim();
+  for (const [code, label] of Object.entries(INVOICE_ERROR_MESSAGES)) {
+    if (raw.includes(code)) return new Error(label);
+  }
+  return new Error(raw || fallback);
+}
+
+/** Mengirim estimasi biaya beserta foto opsional untuk persetujuan client. */
+export async function submitOrderQuote(
+  requestId: string,
+  photoPaths?: string[] | null,
+): Promise<void> {
+  const { error } = await supabase.rpc('submit_order_quote', {
+    p_request_id: requestId,
+    p_photo_paths: photoPaths ?? null,
+  });
+  if (error) throw mapRpcError(error.message, 'Gagal mengirim estimasi ke client.');
+}
+
+/** Menarik estimasi yang masih pending agar montir dapat merevisinya. */
+export async function withdrawOrderQuote(requestId: string): Promise<void> {
+  const { error } = await supabase.rpc('withdraw_order_quote', {
+    p_request_id: requestId,
+  });
+  if (error) throw mapRpcError(error.message, 'Gagal menarik estimasi.');
+}
+
+/** Mengajukan biaya tambahan di tengah perbaikan setelah estimasi awal disetujui. */
+export async function requestQuoteAddon(
+  requestId: string,
+  input: {
+    description: string;
+    amount: number;
+    itemType?: 'service' | 'parts' | 'addon';
+    photoPaths?: string[] | null;
+  },
+): Promise<void> {
+  const description = input.description.trim();
+  if (!description) throw new Error('Keterangan tambahan wajib diisi.');
+  if (!Number.isFinite(input.amount) || input.amount <= 0) {
+    throw new Error('Nominal tambahan harus lebih dari 0.');
+  }
+  const { error } = await supabase.rpc('request_quote_addon', {
+    p_request_id: requestId,
+    p_description: description,
+    p_amount: Math.round(input.amount),
+    p_item_type: input.itemType ?? 'addon',
+    p_photo_paths: input.photoPaths ?? null,
+  });
+  if (error) throw mapRpcError(error.message, 'Gagal mengajukan biaya tambahan.');
+}
+
 /**
- * Montir mengirim tagihan terperinci. Server menjumlahkan seluruh baris,
+ * Montir mengirim tagihan terperinci. Server menjumlahkan seluruh baris yang disetujui,
  * memvalidasi batas harga, lalu memindahkan order ke status `payment`.
  */
 export async function sendOrderInvoice(requestId: string): Promise<void> {
   const { error } = await supabase.rpc('finalize_order_invoice', {
     p_request_id: requestId,
   });
-  if (error) {
-    const code = (error.message ?? '').trim();
-    throw new Error(INVOICE_ERROR_MESSAGES[code] ?? code ?? 'Gagal mengirim tagihan.');
-  }
+  if (error) throw mapRpcError(error.message, 'Gagal mengirim tagihan.');
 }
 
 /** Membuka kembali tagihan (`payment -> arrived`) untuk revisi sebelum dibayar. */
@@ -539,7 +662,7 @@ export async function reopenOrderInvoice(requestId: string): Promise<void> {
     if (code.includes('ALREADY_PAID')) {
       throw new Error('Tagihan tidak bisa direvisi karena pembayaran sudah lunas.');
     }
-    throw new Error(INVOICE_ERROR_MESSAGES[code] ?? (code || 'Gagal membuka ulang tagihan.'));
+    throw mapRpcError(error.message, 'Gagal membuka ulang tagihan.');
   }
 }
 

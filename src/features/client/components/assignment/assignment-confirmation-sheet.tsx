@@ -1,23 +1,23 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import {
   ActivityIndicator,
-  Alert,
   Modal,
   Pressable,
   ScrollView,
-  StyleSheet,
-  Text,
   View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Image } from 'expo-image';
 import { Avatar } from '@/components/ui/avatar';
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Ionicons } from '@/components/ui/icon';
-import { Brand, Radius, Space, Tabular, Type } from '@/constants/brand';
+import { ConfirmSheet } from '@/components/ui/confirm-sheet';
+import { Ionicons, type IconName } from '@/components/ui/icon';
+import { AppText } from '@/components/ui/text';
+import { useToast } from '@/components/ui/toast';
 import {
-  listMechanicReviews,
   getMechanicAssignmentProfile,
+  listMechanicReviews,
   respondToAssignment,
   type AssignmentDecision,
   type ClientOrder,
@@ -26,14 +26,13 @@ import {
 } from '@/features/client/service';
 import { forgetWorkshopPhotoUrl, resolveWorkshopPhotoUrls } from '@/features/mechanic/photo';
 import { formatSpecializations } from '@/features/mechanic/specializations';
+import { useAppTheme, useThemedStyles, type AppTheme } from '@/theme';
 import { formatDateTime } from '@/utils/format';
 
 interface AssignmentConfirmationSheetProps {
   visible: boolean;
   order: ClientOrder;
-  /** Dipanggil setelah keputusan berhasil disimpan ke database. */
   onResolved: (decision: AssignmentDecision) => Promise<void> | void;
-  /** Muat ulang pesanan bila pengajuan sudah kedaluwarsa. */
   onRefresh: () => void;
 }
 
@@ -45,12 +44,7 @@ function formatRemaining(ms: number): string {
 }
 
 /**
- * Lembar konfirmasi montir di sisi client.
- *
- * Client melihat ringkasan identitas, rating, ulasan, dan bengkel montir
- * sebelum order boleh berlanjut ke status `mechanic_accepted`. Lembar ini
- * sengaja tidak bisa ditutup lewat backdrop: client harus memilih salah satu
- * keputusan, atau menunggu pengajuan kedaluwarsa.
+ * Lembar konfirmasi montir di sisi client (menampilkan kendaraan & plat nomor montir pasca-penugasan).
  */
 export function AssignmentConfirmationSheet({
   visible,
@@ -58,7 +52,11 @@ export function AssignmentConfirmationSheet({
   onResolved,
   onRefresh,
 }: AssignmentConfirmationSheetProps) {
+  const { theme } = useAppTheme();
+  const styles = useThemedStyles(createStyles);
+  const { showToast } = useToast();
   const insets = useSafeAreaInsets();
+
   const [profile, setProfile] = useState<MechanicAssignmentProfile | null>(null);
   const [reviews, setReviews] = useState<ClientReview[]>([]);
   const [photoUrl, setPhotoUrl] = useState<string | null>(null);
@@ -66,6 +64,7 @@ export function AssignmentConfirmationSheet({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [responding, setResponding] = useState<AssignmentDecision | null>(null);
+  const [confirmMode, setConfirmMode] = useState<'reject' | 'reject_and_cancel' | null>(null);
   const [now, setNow] = useState(0);
 
   const mechanicId = order.mechanic_id;
@@ -105,7 +104,6 @@ export function AssignmentConfirmationSheet({
 
   useEffect(() => {
     if (!visible) return;
-    // Ditunda satu tick agar pemuatan tidak memicu setState di badan effect.
     const start = setTimeout(() => {
       void load();
     }, 0);
@@ -135,50 +133,31 @@ export function AssignmentConfirmationSheet({
     () => (profile?.skills ?? []).filter(Boolean).join(' · '),
     [profile?.skills],
   );
+  const vehicleInfo = useMemo(
+    () =>
+      [profile?.vehicle_label?.trim(), profile?.vehicle_plate?.trim()]
+        .filter(Boolean)
+        .join(' · '),
+    [profile?.vehicle_label, profile?.vehicle_plate],
+  );
 
   const runDecision = async (decision: AssignmentDecision) => {
     if (responding || expired) return;
+    setConfirmMode(null);
     setResponding(decision);
     try {
       await respondToAssignment(order.id, decision);
       await onResolved(decision);
     } catch (e) {
-      Alert.alert('Gagal', e instanceof Error ? e.message : 'Coba lagi.');
-      // Status mungkin sudah berubah di server (mis. kedaluwarsa/ ditolak).
+      showToast({
+        tone: 'danger',
+        title: 'Gagal menyimpan keputusan',
+        message: e instanceof Error ? e.message : 'Coba lagi.',
+      });
       onRefresh();
     } finally {
       setResponding(null);
     }
-  };
-
-  const confirmReject = () => {
-    Alert.alert(
-      'Tolak montir ini?',
-      'Pesanan akan dibuka kembali agar montir lain bisa mengajukan diri.',
-      [
-        { text: 'Batal', style: 'cancel' },
-        {
-          text: 'Tolak montir',
-          style: 'destructive',
-          onPress: () => void runDecision('reject'),
-        },
-      ],
-    );
-  };
-
-  const confirmCancel = () => {
-    Alert.alert(
-      'Tolak & batalkan pesanan?',
-      'Pesanan akan dibatalkan dan tidak bisa dilanjutkan.',
-      [
-        { text: 'Batal', style: 'cancel' },
-        {
-          text: 'Batalkan pesanan',
-          style: 'destructive',
-          onPress: () => void runDecision('reject_and_cancel'),
-        },
-      ],
-    );
   };
 
   return (
@@ -192,40 +171,44 @@ export function AssignmentConfirmationSheet({
       }}
     >
       <View style={styles.backdrop}>
-        <View style={[styles.sheet, { paddingBottom: Math.max(insets.bottom, Space.lg) }]}>
+        <View style={[styles.sheet, { paddingBottom: Math.max(insets.bottom, theme.spacing.lg) }]}>
           <View style={styles.handle} />
 
           <View style={styles.header}>
             <View style={styles.headerCopy}>
-              <Text style={styles.eyebrow}>KONFIRMASI MONTIR</Text>
-              <Text style={styles.title}>Montir ingin menangani pesananmu</Text>
-              <Text style={styles.orderId}>#{order.id.slice(0, 8).toUpperCase()}</Text>
+              <AppText variant="overline" tone="info">
+                KONFIRMASI MONTIR
+              </AppText>
+              <AppText variant="h2">Montir ingin menangani pesananmu</AppText>
+              <AppText variant="caption" tone="muted" style={theme.tabularNums}>
+                #{order.id.slice(0, 8).toUpperCase()}
+              </AppText>
             </View>
             {remainingMs != null ? (
-              <View style={[styles.countdown, expired && styles.countdownExpired]}>
-                <Ionicons
-                  name={expired ? 'alert-circle-outline' : 'time-outline'}
-                  size={13}
-                  color={expired ? Brand.red : Brand.amber}
-                />
-                <Text style={[styles.countdownText, expired && styles.countdownTextExpired]}>
-                  {expired ? 'Kedaluwarsa' : formatRemaining(remainingMs)}
-                </Text>
-              </View>
+              <Badge
+                label={expired ? 'Kedaluwarsa' : formatRemaining(remainingMs)}
+                tone={expired ? 'danger' : 'warning'}
+                icon={expired ? 'alert-circle-outline' : 'time-outline'}
+                size="sm"
+              />
             ) : null}
           </View>
 
           {loading ? (
             <View style={styles.stateBox}>
-              <ActivityIndicator color={Brand.primary} />
-              <Text style={styles.stateText}>Memuat profil montir…</Text>
+              <ActivityIndicator color={theme.colors.actionPrimaryAltBg} />
+              <AppText variant="caption" tone="secondary">
+                Memuat profil montir…
+              </AppText>
             </View>
           ) : error ? (
             <View style={styles.stateBox}>
-              <Ionicons name="cloud-offline-outline" size={28} color={Brand.textMuted} />
-              <Text style={styles.stateTitle}>Profil gagal dimuat</Text>
-              <Text style={styles.stateText}>{error}</Text>
-              <Button label="Coba Lagi" variant="secondary" compact onPress={load} />
+              <Ionicons name="cloud-offline-outline" size={28} color={theme.colors.textMuted} />
+              <AppText variant="title">Profil gagal dimuat</AppText>
+              <AppText variant="caption" tone="secondary" style={styles.center}>
+                {error}
+              </AppText>
+              <Button label="Coba Lagi" variant="secondary" compact onPress={() => void load()} />
             </View>
           ) : profile ? (
             <ScrollView
@@ -234,38 +217,24 @@ export function AssignmentConfirmationSheet({
               showsVerticalScrollIndicator={false}
             >
               <View style={styles.identityCard}>
-                <View style={styles.identityAvatar}>
-                  <Avatar
-                    name={profile.full_name ?? 'Montir'}
-                    uri={profile.avatar_url}
-                    size={52}
-                  />
-                </View>
+                <Avatar
+                  name={profile.full_name ?? 'Montir'}
+                  uri={profile.avatar_url}
+                  size={52}
+                />
                 <View style={styles.identityCopy}>
-                  <Text style={styles.identityEyebrow}>MONTIR YANG MENGAJUKAN DIRI</Text>
-                  <Text style={styles.name} numberOfLines={1}>
+                  <AppText variant="overline" tone="muted">
+                    MONTIR YANG MENGAJUKAN DIRI
+                  </AppText>
+                  <AppText variant="h2" numberOfLines={1}>
                     {profile.full_name?.trim() || 'Montir MontirGo'}
-                  </Text>
-                  <View
-                    style={[
-                      styles.verifyBadge,
-                      profile.is_verified ? styles.verifyOk : styles.verifyPending,
-                    ]}
-                  >
-                    <Ionicons
-                      name={profile.is_verified ? 'shield-checkmark' : 'alert-circle-outline'}
-                      size={11}
-                      color={profile.is_verified ? Brand.volt : '#FCD34D'}
-                    />
-                    <Text
-                      style={[
-                        styles.verifyText,
-                        { color: profile.is_verified ? Brand.volt : '#FCD34D' },
-                      ]}
-                    >
-                      {profile.is_verified ? 'Terverifikasi' : 'Belum verifikasi'}
-                    </Text>
-                  </View>
+                  </AppText>
+                  <Badge
+                    label={profile.is_verified ? 'Terverifikasi' : 'Belum verifikasi'}
+                    tone={profile.is_verified ? 'success' : 'warning'}
+                    icon={profile.is_verified ? 'shield-checkmark' : 'alert-circle-outline'}
+                    size="sm"
+                  />
                 </View>
               </View>
 
@@ -274,27 +243,36 @@ export function AssignmentConfirmationSheet({
                   value={Number(profile.rating_avg ?? 0).toFixed(1)}
                   label="Rating"
                   icon="star"
-                  color={Brand.amber}
+                  color={theme.colors.statusWarningFg}
                 />
                 <Stat
                   value={String(profile.rating_count ?? 0)}
                   label="Ulasan"
                   icon="chatbubble-ellipses-outline"
-                  color={Brand.primary}
+                  color={theme.colors.statusInfoFg}
                 />
                 <Stat
                   value={String(profile.total_jobs ?? 0)}
                   label="Job selesai"
                   icon="checkmark-done-outline"
-                  color={Brand.green}
+                  color={theme.colors.statusSuccessFg}
                 />
               </View>
 
               {profile.bio?.trim() ? (
-                <Text style={styles.bio}>{profile.bio.trim()}</Text>
+                <AppText variant="body" tone="secondary" style={styles.bio}>
+                  {profile.bio.trim()}
+                </AppText>
               ) : null}
 
-              <Section icon="person-outline" title="Data montir">
+              <Section icon="person-outline" title="Data & kendaraan montir">
+                {vehicleInfo ? (
+                  <InfoRow
+                    icon="car-outline"
+                    label="Kendaraan operasional"
+                    value={vehicleInfo}
+                  />
+                ) : null}
                 {profile.experience_years ? (
                   <InfoRow
                     icon="briefcase-outline"
@@ -317,13 +295,14 @@ export function AssignmentConfirmationSheet({
                     value={profile.certifications.join('\n')}
                   />
                 ) : null}
-                {!profile.experience_years &&
+                {!vehicleInfo &&
+                !profile.experience_years &&
                 !specialization &&
                 !skills &&
                 !profile.certifications?.length ? (
-                  <Text style={styles.muted}>
-                    Montir belum melengkapi pengalaman dan keahliannya.
-                  </Text>
+                  <AppText variant="caption" tone="secondary">
+                    Montir belum melengkapi detail pengalaman dan kendaraannya.
+                  </AppText>
                 ) : null}
               </Section>
 
@@ -349,20 +328,19 @@ export function AssignmentConfirmationSheet({
                     }}
                   />
                 ) : null}
-                <Text style={styles.workshopName}>
+                <AppText variant="label">
                   {profile.workshop_name?.trim() || 'Montir panggilan'}
-                </Text>
-                <Text style={styles.workshopAddress}>
+                </AppText>
+                <AppText variant="caption" tone="secondary">
                   {profile.workshop_address?.trim() || 'Belum mengisi alamat bengkel'}
-                </Text>
+                </AppText>
               </Section>
 
               <Section icon="chatbubbles-outline" title="Ulasan client">
                 {reviews.length === 0 ? (
-                  <Text style={styles.muted}>
-                    Belum ada ulasan. Rating akan muncul setelah client mengulas pesanan
-                    yang sudah lunas.
-                  </Text>
+                  <AppText variant="caption" tone="secondary">
+                    Belum ada ulasan. Rating muncul setelah client mengulas pesanan yang lunas.
+                  </AppText>
                 ) : (
                   reviews.map((review) => <ReviewRow key={review.id} review={review} />)
                 )}
@@ -370,20 +348,20 @@ export function AssignmentConfirmationSheet({
             </ScrollView>
           ) : (
             <View style={styles.stateBox}>
-              <Ionicons name="person-outline" size={28} color={Brand.textMuted} />
-              <Text style={styles.stateTitle}>Profil montir tidak tersedia</Text>
-              <Text style={styles.stateText}>
+              <Ionicons name="person-outline" size={28} color={theme.colors.textMuted} />
+              <AppText variant="title">Profil montir tidak tersedia</AppText>
+              <AppText variant="caption" tone="secondary" style={styles.center}>
                 Montir mungkin sudah tidak terhubung dengan pesanan ini.
-              </Text>
+              </AppText>
             </View>
           )}
 
           {expired ? (
             <View style={styles.expiredBox}>
-              <Ionicons name="time-outline" size={16} color={Brand.red} />
-              <Text style={styles.expiredText}>
+              <Ionicons name="time-outline" size={18} color={theme.colors.statusDangerFg} />
+              <AppText variant="caption" tone="danger" style={styles.flexCopy}>
                 Waktu konfirmasi habis. Pesanan akan kembali mencari montir.
-              </Text>
+              </AppText>
               <Button label="Muat Ulang" variant="secondary" compact onPress={onRefresh} />
             </View>
           ) : (
@@ -391,6 +369,7 @@ export function AssignmentConfirmationSheet({
               <Button
                 label="Konfirmasi Montir"
                 icon="checkmark-circle-outline"
+                size="cta"
                 loading={responding === 'accept'}
                 disabled={loading || !!error || !profile || responding !== null}
                 onPress={() => void runDecision('accept')}
@@ -401,25 +380,51 @@ export function AssignmentConfirmationSheet({
                 variant="ghost"
                 loading={responding === 'reject'}
                 disabled={loading || !!error || responding !== null}
-                onPress={confirmReject}
+                onPress={() => setConfirmMode('reject')}
               />
               <Pressable
                 accessibilityRole="button"
                 accessibilityLabel="Tolak dan batalkan pesanan"
                 disabled={loading || !!error || responding !== null}
-                onPress={confirmCancel}
+                onPress={() => setConfirmMode('reject_and_cancel')}
                 style={({ pressed }) => [styles.cancelLink, pressed && styles.pressed]}
               >
-                <Text style={styles.cancelText}>
+                <AppText variant="label" tone="danger">
                   {responding === 'reject_and_cancel'
                     ? 'Membatalkan pesanan…'
                     : 'Tolak & batalkan pesanan'}
-                </Text>
+                </AppText>
               </Pressable>
             </View>
           )}
         </View>
       </View>
+
+      <ConfirmSheet
+        visible={confirmMode === 'reject'}
+        destructive
+        loading={responding === 'reject'}
+        icon="refresh-outline"
+        title="Tolak montir ini?"
+        message="Pesanan akan dibuka kembali agar montir lain bisa mengajukan diri."
+        confirmLabel="Tolak montir"
+        cancelLabel="Kembali"
+        onConfirm={() => void runDecision('reject')}
+        onCancel={() => setConfirmMode(null)}
+      />
+
+      <ConfirmSheet
+        visible={confirmMode === 'reject_and_cancel'}
+        destructive
+        loading={responding === 'reject_and_cancel'}
+        icon="close-circle-outline"
+        title="Tolak & batalkan pesanan?"
+        message="Pesanan akan dibatalkan dan tidak bisa dilanjutkan."
+        confirmLabel="Batalkan pesanan"
+        cancelLabel="Kembali"
+        onConfirm={() => void runDecision('reject_and_cancel')}
+        onCancel={() => setConfirmMode(null)}
+      />
     </Modal>
   );
 }
@@ -435,13 +440,19 @@ function Stat({
   icon: 'star' | 'chatbubble-ellipses-outline' | 'checkmark-done-outline';
   color: string;
 }) {
+  const { theme } = useAppTheme();
+  const styles = useThemedStyles(createStyles);
   return (
     <View style={styles.stat}>
       <View style={styles.statLabelRow}>
-        <Ionicons name={icon} size={11} color={color} />
-        <Text style={styles.statLabel}>{label}</Text>
+        <Ionicons name={icon} size={13} color={color} />
+        <AppText variant="caption" tone="secondary">
+          {label}
+        </AppText>
       </View>
-      <Text style={[styles.statValue, Tabular]}>{value}</Text>
+      <AppText variant="title" style={theme.tabularNums}>
+        {value}
+      </AppText>
     </View>
   );
 }
@@ -455,13 +466,15 @@ function Section({
   title: string;
   children: ReactNode;
 }) {
+  const { theme } = useAppTheme();
+  const styles = useThemedStyles(createStyles);
   return (
     <View style={styles.sectionBlock}>
       <View style={styles.sectionHeader}>
         <View style={styles.sectionIcon}>
-          <Ionicons name={icon} size={14} color={Brand.primary} />
+          <Ionicons name={icon} size={15} color={theme.colors.statusInfoFg} />
         </View>
-        <Text style={styles.sectionTitle}>{title}</Text>
+        <AppText variant="label">{title}</AppText>
       </View>
       <View style={styles.sectionCard}>{children}</View>
     </View>
@@ -473,218 +486,206 @@ function InfoRow({
   label,
   value,
 }: {
-  icon: 'briefcase-outline' | 'car-sport-outline' | 'construct-outline' | 'ribbon-outline';
+  icon: IconName;
   label: string;
   value: string;
 }) {
+  const { theme } = useAppTheme();
+  const styles = useThemedStyles(createStyles);
   return (
     <View style={styles.infoRow}>
-      <Ionicons name={icon} size={14} color={Brand.textMuted} style={styles.infoIcon} />
-      <View style={styles.infoCopy}>
-        <Text style={styles.infoLabel}>{label}</Text>
-        <Text style={styles.infoValue}>{value}</Text>
+      <Ionicons name={icon} size={15} color={theme.colors.textMuted} style={styles.infoIcon} />
+      <View style={styles.flexCopy}>
+        <AppText variant="caption" tone="muted">
+          {label}
+        </AppText>
+        <AppText variant="body">{value}</AppText>
       </View>
     </View>
   );
 }
 
 function ReviewRow({ review }: { review: ClientReview }) {
+  const { theme } = useAppTheme();
+  const styles = useThemedStyles(createStyles);
   return (
     <View style={styles.reviewRow}>
       <View style={styles.reviewTop}>
-        <Text style={styles.reviewName} numberOfLines={1}>
+        <AppText variant="label" numberOfLines={1} style={styles.flexCopy}>
           {review.reviewer_name ?? 'Client MontirGo'}
-        </Text>
+        </AppText>
         <View style={styles.stars}>
           {Array.from({ length: 5 }).map((_, index) => (
             <Ionicons
               key={index}
               name={index < review.rating ? 'star' : 'star-outline'}
-              size={11}
-              color={Brand.amber}
+              size={12}
+              color={theme.colors.statusWarningFg}
             />
           ))}
         </View>
       </View>
-      <Text style={styles.reviewDate}>{formatDateTime(review.created_at)}</Text>
+      <AppText variant="caption" tone="muted">
+        {formatDateTime(review.created_at)}
+      </AppText>
       {review.comment ? (
-        <Text style={styles.reviewComment} numberOfLines={4}>
+        <AppText variant="caption" tone="secondary" numberOfLines={4}>
           {review.comment}
-        </Text>
+        </AppText>
       ) : null}
     </View>
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (theme: AppTheme) => ({
   backdrop: {
     flex: 1,
-    backgroundColor: 'rgba(17, 24, 39, 0.55)',
-    justifyContent: 'flex-end',
+    backgroundColor: theme.colors.overlayScrim,
+    justifyContent: 'flex-end' as const,
   },
   sheet: {
-    maxHeight: '92%',
-    backgroundColor: Brand.background,
-    borderTopLeftRadius: Radius.xl,
-    borderTopRightRadius: Radius.xl,
-    paddingTop: Space.sm,
-    paddingHorizontal: Space.lg,
+    maxHeight: '92%' as const,
+    backgroundColor: theme.colors.bgCanvas,
+    borderTopLeftRadius: theme.components.sheet.radius,
+    borderTopRightRadius: theme.components.sheet.radius,
+    paddingTop: theme.spacing.sm,
+    paddingHorizontal: theme.spacing.screenPadding,
   },
   handle: {
-    alignSelf: 'center',
-    width: 42,
+    alignSelf: 'center' as const,
+    width: 44,
     height: 4,
     borderRadius: 2,
-    backgroundColor: Brand.border,
-    marginBottom: Space.md,
+    backgroundColor: theme.components.sheet.handleColor,
+    marginBottom: theme.spacing.md,
   },
   header: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: Space.md,
-    marginBottom: Space.md,
+    flexDirection: 'row' as const,
+    alignItems: 'flex-start' as const,
+    gap: theme.spacing.md,
+    marginBottom: theme.spacing.md,
   },
-  headerCopy: { flex: 1 },
-  eyebrow: { ...Type.micro, color: Brand.primary },
-  title: { ...Type.h2, fontSize: 17, color: Brand.text, marginTop: 3 },
-  orderId: { fontSize: 10.5, color: Brand.textMuted, marginTop: 3, fontWeight: '600', letterSpacing: 0.4 },
-  countdown: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    backgroundColor: Brand.amberSoft,
-    paddingHorizontal: Space.sm,
-    paddingVertical: 6,
-    borderRadius: Radius.pill,
+  headerCopy: {
+    flex: 1,
+    gap: theme.spacing.xxs,
   },
-  countdownExpired: { backgroundColor: Brand.redSoft },
-  countdownText: { fontSize: 11.5, fontWeight: '800', color: Brand.amber },
-  countdownTextExpired: { color: Brand.red },
   scroll: { flexShrink: 1 },
-  scrollContent: { paddingBottom: Space.md },
+  scrollContent: {
+    paddingBottom: theme.spacing.md,
+    gap: theme.spacing.md,
+  },
   stateBox: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: Space.sm,
-    paddingVertical: Space.xxl,
-    paddingHorizontal: Space.lg,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+    gap: theme.spacing.sm,
+    paddingVertical: theme.spacing.xxl,
+    paddingHorizontal: theme.spacing.lg,
   },
-  stateTitle: { fontSize: 14, fontWeight: '700', color: Brand.text },
-  stateText: { fontSize: 12, color: Brand.textSecondary, textAlign: 'center', lineHeight: 18 },
+  center: { textAlign: 'center' as const },
   identityCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Space.md,
-    backgroundColor: Brand.ink,
-    borderRadius: Radius.lg,
-    padding: Space.lg,
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: theme.spacing.md,
+    backgroundColor: theme.colors.bgSurface,
+    borderRadius: theme.radii.lg,
+    borderWidth: 1,
+    borderColor: theme.colors.borderSubtle,
+    padding: theme.spacing.lg,
   },
-  identityAvatar: {
-    borderRadius: Radius.pill,
-    borderWidth: 1.5,
-    borderColor: 'rgba(255,255,255,0.2)',
-    padding: 2,
+  identityCopy: {
+    flex: 1,
+    gap: theme.spacing.xs,
   },
-  identityCopy: { flex: 1 },
-  identityEyebrow: { ...Type.micro, fontSize: 8.5, color: Brand.inkMuted },
-  name: { ...Type.h2, color: Brand.white, marginTop: 2 },
-  verifyBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    alignSelf: 'flex-start',
-    gap: 4,
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: Radius.pill,
-    marginTop: 6,
+  statsRow: {
+    flexDirection: 'row' as const,
+    gap: theme.spacing.sm,
   },
-  verifyOk: { backgroundColor: 'rgba(201,241,88,0.12)' },
-  verifyPending: { backgroundColor: 'rgba(252,211,77,0.12)' },
-  verifyText: { fontSize: 10, fontWeight: '700' },
-  statsRow: { flexDirection: 'row', gap: Space.sm, marginTop: Space.md },
   stat: {
     flex: 1,
-    backgroundColor: Brand.surface,
-    borderRadius: Radius.md,
-    padding: Space.md,
+    backgroundColor: theme.colors.bgSurface,
+    borderRadius: theme.radii.md,
+    padding: theme.spacing.md,
     borderWidth: 1,
-    borderColor: Brand.divider,
+    borderColor: theme.colors.borderSubtle,
+    gap: theme.spacing.xxs,
   },
-  statLabelRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  statLabel: { fontSize: 10, color: Brand.textSecondary, fontWeight: '600' },
-  statValue: { fontSize: 16, fontWeight: '800', color: Brand.text, marginTop: 4 },
+  statLabelRow: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: theme.spacing.xs,
+  },
   bio: {
-    fontSize: 12,
-    lineHeight: 18,
-    color: Brand.textSecondary,
-    marginTop: Space.md,
     paddingHorizontal: 2,
   },
-  sectionBlock: { marginTop: Space.lg },
+  sectionBlock: {
+    gap: theme.spacing.xs,
+  },
   sectionHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Space.sm,
-    marginBottom: Space.sm,
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: theme.spacing.sm,
   },
   sectionIcon: {
-    width: 26,
-    height: 26,
-    borderRadius: Radius.sm,
-    backgroundColor: Brand.primarySoft,
-    alignItems: 'center',
-    justifyContent: 'center',
+    width: 28,
+    height: 28,
+    borderRadius: theme.radii.sm,
+    backgroundColor: theme.colors.statusInfoBg,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
   },
-  sectionTitle: { fontSize: 13, fontWeight: '800', color: Brand.text },
   sectionCard: {
-    backgroundColor: Brand.surface,
-    borderRadius: Radius.lg,
+    backgroundColor: theme.colors.bgSurface,
+    borderRadius: theme.radii.lg,
     borderWidth: 1,
-    borderColor: Brand.divider,
-    padding: Space.md,
+    borderColor: theme.colors.borderSubtle,
+    padding: theme.spacing.md,
+    gap: theme.spacing.sm,
   },
-  infoRow: { flexDirection: 'row', gap: Space.sm, paddingVertical: 5 },
+  infoRow: {
+    flexDirection: 'row' as const,
+    gap: theme.spacing.sm,
+    paddingVertical: theme.spacing.xxs,
+  },
   infoIcon: { marginTop: 2 },
-  infoCopy: { flex: 1 },
-  infoLabel: { fontSize: 10.5, color: Brand.textMuted, fontWeight: '600' },
-  infoValue: { fontSize: 12, color: Brand.text, lineHeight: 17, marginTop: 1 },
-  muted: { fontSize: 11.5, color: Brand.textSecondary, lineHeight: 17 },
+  flexCopy: { flex: 1 },
   workshopPhoto: {
-    width: '100%',
+    width: '100%' as const,
     height: 132,
-    borderRadius: Radius.md,
-    backgroundColor: Brand.background,
-    marginBottom: Space.sm,
+    borderRadius: theme.radii.md,
+    backgroundColor: theme.colors.bgSurfaceSubtle,
   },
-  workshopName: { fontSize: 13, fontWeight: '700', color: Brand.text },
-  workshopAddress: { fontSize: 11.5, color: Brand.textSecondary, marginTop: 2, lineHeight: 17 },
   reviewRow: {
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: Brand.divider,
-    paddingVertical: Space.sm,
+    borderBottomWidth: 1,
+    borderBottomColor: theme.colors.borderSubtle,
+    paddingVertical: theme.spacing.sm,
+    gap: theme.spacing.xxs,
   },
   reviewTop: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: Space.sm,
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    justifyContent: 'space-between' as const,
+    gap: theme.spacing.sm,
   },
-  reviewName: { flex: 1, fontSize: 12, fontWeight: '700', color: Brand.text },
-  stars: { flexDirection: 'row', gap: 1 },
-  reviewDate: { fontSize: 9.5, color: Brand.textMuted, marginTop: 2 },
-  reviewComment: { fontSize: 11.5, color: Brand.textSecondary, lineHeight: 17, marginTop: 4 },
+  stars: { flexDirection: 'row' as const, gap: 2 },
   expiredBox: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Space.sm,
-    backgroundColor: Brand.redSoft,
-    borderRadius: Radius.md,
-    padding: Space.md,
-    marginTop: Space.sm,
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: theme.spacing.sm,
+    backgroundColor: theme.colors.statusDangerBg,
+    borderWidth: 1,
+    borderColor: theme.colors.statusDangerBorder,
+    borderRadius: theme.radii.md,
+    padding: theme.spacing.md,
+    marginTop: theme.spacing.sm,
   },
-  expiredText: { flex: 1, fontSize: 11.5, color: Brand.red, lineHeight: 16 },
-  actions: { gap: Space.sm, marginTop: Space.sm },
-  cancelLink: { alignItems: 'center', paddingVertical: Space.sm },
-  cancelText: { fontSize: 12.5, fontWeight: '700', color: Brand.red },
-  pressed: { opacity: 0.7 },
+  actions: {
+    gap: theme.spacing.sm,
+    marginTop: theme.spacing.sm,
+  },
+  cancelLink: {
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+    minHeight: theme.touchTarget.min,
+  },
+  pressed: { opacity: 0.78 },
 });

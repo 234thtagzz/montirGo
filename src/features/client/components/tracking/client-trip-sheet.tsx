@@ -1,17 +1,20 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Pressable, StyleSheet, Text, View, type LayoutChangeEvent } from 'react-native';
-import { Gesture, GestureDetector } from 'react-native-gesture-handler';
+import { Pressable, View, type LayoutChangeEvent } from 'react-native';
+import { GestureDetector, usePanGesture } from 'react-native-gesture-handler';
 import Animated, {
-  runOnJS,
   useAnimatedStyle,
+  useReducedMotion,
   useSharedValue,
   withSpring,
 } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { scheduleOnRN } from 'react-native-worklets';
 import { Avatar } from '@/components/ui/avatar';
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Ionicons } from '@/components/ui/icon';
-import { Brand, CardShadow, Radius, Space, Tabular, Type } from '@/constants/brand';
+import { AppText } from '@/components/ui/text';
+import { useAppTheme, useThemedStyles, type AppTheme } from '@/theme';
 
 interface ClientTripSheetProps {
   mechanicName: string | null;
@@ -21,24 +24,16 @@ interface ClientTripSheetProps {
   etaLabel: string;
   distanceLabel: string;
   arrivalClock: string | null;
-  /** true = belum ada sinyal GPS montir. */
   waiting: boolean;
-  /** true = titik terakhir sudah lebih dari ±45 detik. */
   stale: boolean;
   onWhatsApp: () => void;
   onCall: () => void;
   onOpenDetail: () => void;
-  /** Tinggi sheet yang terlihat (ikut berubah saat dilipat) — untuk padding peta. */
   onHeightChange?: (height: number) => void;
 }
 
 const STEPS = ['Diterima', 'Berangkat', 'Tiba', 'Tagihan'] as const;
-/** Di layar client, perjalanan selalu berada di langkah "Berangkat". */
 const ACTIVE_STEP = 1;
-
-/** Pegas snap saat sheet dilepas / diketuk. */
-const SHEET_SPRING = { damping: 24, stiffness: 240, mass: 0.7 };
-/** Ambang kecepatan (px/detik) untuk menentukan arah lipat saat jari dilepas. */
 const FLING_VELOCITY = 600;
 
 function stepState(index: number): 'done' | 'active' | 'next' {
@@ -48,10 +43,7 @@ function stepState(index: number): 'done' | 'active' | 'next' {
 }
 
 /**
- * Kartu bawah layar perjalanan versi client.
- *
- * Struktur & gesturnya sama dengan `TripSheet` milik montir (bisa dilipat), isinya
- * disesuaikan: identitas montir, ETA/jarak/jam tiba, dan aksi chat/telepon.
+ * Kartu bawah layar perjalanan client (Reanimated 4 + RNGH v3 + semantic tokens).
  */
 export function ClientTripSheet({
   mechanicName,
@@ -68,7 +60,11 @@ export function ClientTripSheet({
   onOpenDetail,
   onHeightChange,
 }: ClientTripSheetProps) {
+  const { theme } = useAppTheme();
+  const styles = useThemedStyles(createStyles);
   const insets = useSafeAreaInsets();
+  const reduceMotion = useReducedMotion();
+
   const [collapsed, setCollapsed] = useState(false);
   const [sheetHeight, setSheetHeight] = useState(0);
   const [peekHeight, setPeekHeight] = useState(0);
@@ -77,9 +73,10 @@ export function ClientTripSheet({
   const gestureStartY = useSharedValue(0);
 
   const isLive = !waiting;
-  const bottomGap = insets.bottom + Space.md;
+  const bottomGap = insets.bottom + theme.spacing.md;
   const collapsedOffset = Math.max(0, sheetHeight - peekHeight - bottomGap);
   const chipLabel = waiting ? 'Menunggu' : stale ? 'Terakhir' : 'Live';
+  const chipTone = waiting || stale ? 'warning' : 'success';
 
   const handleSheetLayout = useCallback((event: LayoutChangeEvent) => {
     const next = Math.round(event.nativeEvent.layout.height);
@@ -91,45 +88,34 @@ export function ClientTripSheet({
     setPeekHeight((prev) => (prev === next ? prev : next));
   }, []);
 
-  // Sama seperti sheet montir: geser/ketuk grabber untuk melipat.
-  const panGesture = Gesture.Pan()
-    .activeOffsetY([-6, 6])
-    .failOffsetX([-28, 28])
-    .onStart(() => {
-      gestureStartY.value = translateY.value;
-    })
-    .onUpdate((event) => {
-      const next = gestureStartY.value + event.translationY;
-      translateY.value = Math.min(Math.max(next, 0), collapsedOffset);
-    })
-    .onEnd((event) => {
+  const panGesture = usePanGesture({
+    activeOffsetY: [-6, 6],
+    failOffsetX: [-28, 28],
+    onBegin: () => {
+      gestureStartY.set(translateY.get());
+    },
+    onUpdate: (event) => {
+      const next = gestureStartY.get() + event.translationY;
+      translateY.set(Math.min(Math.max(next, 0), collapsedOffset));
+    },
+    onDeactivate: (event) => {
       let target = 0;
       if (event.velocityY > FLING_VELOCITY) {
         target = collapsedOffset;
       } else if (event.velocityY < -FLING_VELOCITY) {
         target = 0;
       } else {
-        target = translateY.value > collapsedOffset * 0.45 ? collapsedOffset : 0;
+        target = translateY.get() > collapsedOffset * 0.45 ? collapsedOffset : 0;
       }
-      translateY.value = withSpring(target, SHEET_SPRING);
-      runOnJS(setCollapsed)(target > 0);
-    });
-
-  const tapGesture = Gesture.Tap()
-    .maxDuration(500)
-    .onEnd(() => {
-      const target = translateY.value > collapsedOffset / 2 ? 0 : collapsedOffset;
-      translateY.value = withSpring(target, SHEET_SPRING);
-      runOnJS(setCollapsed)(target > 0);
-    });
-
-  const dragGesture = Gesture.Race(panGesture, tapGesture);
+      translateY.set(reduceMotion ? target : withSpring(target, theme.motion.spring));
+      scheduleOnRN(setCollapsed, target > 0);
+    },
+  });
 
   useEffect(() => {
-    translateY.value = withSpring(collapsed ? collapsedOffset : 0, SHEET_SPRING);
-    // `translateY` adalah shared value stabil, aman tidak dimasukkan sebagai dep.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [collapsed, collapsedOffset]);
+    const target = collapsed ? collapsedOffset : 0;
+    translateY.set(reduceMotion ? target : withSpring(target, theme.motion.spring));
+  }, [collapsed, collapsedOffset, reduceMotion, theme.motion.spring, translateY]);
 
   const visibleHeight = collapsed ? sheetHeight - collapsedOffset : sheetHeight;
   useEffect(() => {
@@ -142,110 +128,102 @@ export function ClientTripSheet({
   }, []);
 
   const animatedStyle = useAnimatedStyle(() => ({
-    transform: [{ translateY: translateY.value }],
+    transform: [{ translateY: translateY.get() }],
   }));
 
   return (
     <Animated.View
       onLayout={handleSheetLayout}
-      style={[styles.sheet, { paddingBottom: bottomGap }, animatedStyle]}
+      style={[styles.sheet, theme.elevation.sheet, { paddingBottom: bottomGap }, animatedStyle]}
     >
       <View onLayout={handlePeekLayout} style={styles.peek}>
-        <GestureDetector gesture={dragGesture}>
+        <GestureDetector gesture={panGesture}>
           <View style={styles.dragArea}>
-            <View
-              accessible
+            <Pressable
               accessibilityRole="button"
               accessibilityLabel={
                 collapsed ? 'Perluas panel perjalanan' : 'Ringkas panel perjalanan'
               }
-              accessibilityHint="Geser ke bawah untuk meringkas, ke atas untuk memperluas"
+              accessibilityHint="Ketuk atau geser ke bawah untuk meringkas, ke atas untuk memperluas"
               accessibilityState={{ expanded: !collapsed }}
-              onAccessibilityTap={toggleCollapsed}
+              onPress={toggleCollapsed}
               style={styles.grabberArea}
             >
               <View style={styles.grabber} />
               <Ionicons
                 name={collapsed ? 'chevron-up' : 'chevron-down'}
-                size={14}
-                color={Brand.textMuted}
+                size={15}
+                color={theme.colors.textMuted}
               />
-            </View>
+            </Pressable>
 
             <View style={styles.headerRow}>
-              <Avatar name={mechanicName ?? 'Montir'} uri={mechanicAvatar} size={42} />
+              <Avatar name={mechanicName ?? 'Montir'} uri={mechanicAvatar} size={44} />
               <View style={styles.headerCopy}>
-                <Text style={styles.headerEyebrow}>MONTIRMU</Text>
-                <Text numberOfLines={1} style={styles.name}>
+                <AppText variant="overline" tone="muted">
+                  MONTIRMU
+                </AppText>
+                <AppText variant="title" numberOfLines={1}>
                   {mechanicName ?? 'Montir MontirGo'}
-                </Text>
-                <Text numberOfLines={1} style={styles.meta}>
+                </AppText>
+                <AppText variant="caption" tone="secondary" numberOfLines={1}>
                   Menuju lokasimu
-                </Text>
+                </AppText>
               </View>
-              <View
-                style={[
-                  styles.liveChip,
-                  (waiting || stale) && styles.liveChipMuted,
-                ]}
-              >
-                <View
-                  style={[
-                    styles.liveDot,
-                    (waiting || stale) && styles.liveDotMuted,
-                  ]}
-                />
-                <Text
-                  style={[
-                    styles.liveText,
-                    (waiting || stale) && styles.liveTextMuted,
-                  ]}
-                >
-                  {chipLabel}
-                </Text>
-              </View>
+              <Badge label={chipLabel} tone={chipTone} dot size="sm" />
             </View>
           </View>
         </GestureDetector>
 
         <View style={styles.metricsRow}>
           <View style={styles.metric}>
-            <Text style={[styles.metricValue, Tabular]}>{isLive ? etaLabel : '—'}</Text>
-            <Text style={styles.metricLabel}>{isLive ? 'sisa waktu' : 'menunggu posisi'}</Text>
+            <AppText variant="title" style={theme.tabularNums}>
+              {isLive ? etaLabel : '—'}
+            </AppText>
+            <AppText variant="caption" tone="muted">
+              {isLive ? 'sisa waktu' : 'menunggu posisi'}
+            </AppText>
           </View>
           <View style={styles.metricDivider} />
           <View style={styles.metric}>
-            <Text style={[styles.metricValue, Tabular]}>
+            <AppText variant="title" style={theme.tabularNums}>
               {isLive ? distanceLabel : '—'}
-            </Text>
-            <Text style={styles.metricLabel}>jarak</Text>
+            </AppText>
+            <AppText variant="caption" tone="muted">
+              jarak
+            </AppText>
           </View>
           <View style={styles.metricDivider} />
           <View style={styles.metric}>
-            <Text style={[styles.metricValue, Tabular]}>{arrivalClock ?? '—'}</Text>
-            <Text style={styles.metricLabel}>perkiraan tiba</Text>
+            <AppText variant="title" style={theme.tabularNums}>
+              {arrivalClock ?? '—'}
+            </AppText>
+            <AppText variant="caption" tone="muted">
+              perkiraan tiba
+            </AppText>
           </View>
         </View>
 
         {waiting ? (
           <View style={styles.notice}>
-            <Ionicons name="navigate-outline" size={16} color={Brand.amber} />
-            <Text style={styles.noticeText}>
+            <Ionicons name="navigate-outline" size={16} color={theme.colors.statusWarningFg} />
+            <AppText variant="caption" tone="warning" style={styles.flexCopy}>
               Menunggu sinyal GPS montir. Posisi muncul otomatis saat montir bergerak.
-            </Text>
+            </AppText>
           </View>
         ) : null}
 
         <Button
           label="Chat Montir"
           icon="logo-whatsapp"
+          variant="whatsapp"
+          size="cta"
           disabled={!phone}
           onPress={onWhatsApp}
           style={styles.cta}
         />
       </View>
 
-      {/* Detail — ikut tergeser ke bawah layar saat sheet dilipat. */}
       <View
         accessibilityElementsHidden={collapsed}
         importantForAccessibility={collapsed ? 'no-hide-descendants' : 'auto'}
@@ -253,10 +231,10 @@ export function ClientTripSheet({
       >
         {address ? (
           <View style={styles.addressRow}>
-            <Ionicons name="home" size={16} color={Brand.primary} />
-            <Text numberOfLines={2} style={styles.address}>
+            <Ionicons name="home" size={16} color={theme.colors.statusInfoFg} />
+            <AppText variant="caption" numberOfLines={2} style={styles.flexCopy}>
               {address}
-            </Text>
+            </AppText>
           </View>
         ) : null}
 
@@ -273,12 +251,15 @@ export function ClientTripSheet({
                   ]}
                 >
                   {state === 'done' ? (
-                    <Ionicons name="checkmark" size={10} color={Brand.white} />
+                    <Ionicons name="checkmark" size={10} color={theme.colors.actionPrimaryFg} />
                   ) : null}
                 </View>
-                <Text style={[styles.stepLabel, state !== 'next' && styles.stepLabelActive]}>
+                <AppText
+                  variant="caption"
+                  tone={state !== 'next' ? 'primary' : 'muted'}
+                >
                   {label}
-                </Text>
+                </AppText>
                 {index < STEPS.length - 1 ? (
                   <View style={[styles.stepLine, state === 'done' && styles.stepLineDone]} />
                 ) : null}
@@ -300,10 +281,12 @@ export function ClientTripSheet({
               pressed && styles.pressed,
             ]}
           >
-            <View style={[styles.iconWrap, { backgroundColor: Brand.primarySoft }]}>
-              <Ionicons name="call" size={19} color={Brand.primary} />
+            <View style={[styles.iconWrap, { backgroundColor: theme.colors.statusInfoBg }]}>
+              <Ionicons name="call" size={20} color={theme.colors.statusInfoFg} />
             </View>
-            <Text style={styles.actionLabel}>Telepon</Text>
+            <AppText variant="caption" tone="secondary">
+              Telepon
+            </AppText>
           </Pressable>
 
           <Pressable
@@ -312,10 +295,12 @@ export function ClientTripSheet({
             onPress={onOpenDetail}
             style={({ pressed }) => [styles.action, pressed && styles.pressed]}
           >
-            <View style={[styles.iconWrap, { backgroundColor: Brand.background }]}>
-              <Ionicons name="document-text-outline" size={19} color={Brand.textSecondary} />
+            <View style={[styles.iconWrap, { backgroundColor: theme.colors.bgSurfaceSubtle }]}>
+              <Ionicons name="document-text-outline" size={20} color={theme.colors.textSecondary} />
             </View>
-            <Text style={styles.actionLabel}>Detail pesanan</Text>
+            <AppText variant="caption" tone="secondary">
+              Detail pesanan
+            </AppText>
           </Pressable>
         </View>
       </View>
@@ -323,95 +308,135 @@ export function ClientTripSheet({
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (theme: AppTheme) => ({
   sheet: {
-    position: 'absolute',
+    position: 'absolute' as const,
     left: 0,
     right: 0,
     bottom: 0,
-    backgroundColor: Brand.surface,
-    borderTopLeftRadius: Radius.xl,
-    borderTopRightRadius: Radius.xl,
-    paddingHorizontal: Space.lg,
-    ...CardShadow,
+    backgroundColor: theme.colors.bgSurface,
+    borderTopLeftRadius: theme.components.sheet.radius,
+    borderTopRightRadius: theme.components.sheet.radius,
+    borderTopWidth: 1,
+    borderColor: theme.colors.borderSubtle,
+    paddingHorizontal: theme.spacing.screenPadding,
   },
-  peek: { paddingTop: Space.xs },
-  dragArea: { paddingBottom: 6 },
-  grabberArea: { alignItems: 'center', paddingVertical: 6, gap: 2 },
-  grabber: { width: 42, height: 4, borderRadius: 2, backgroundColor: Brand.border },
-  headerRow: { flexDirection: 'row', alignItems: 'center', gap: Space.md, marginTop: 2 },
-  headerCopy: { flex: 1 },
-  headerEyebrow: { ...Type.micro, fontSize: 8.5, color: Brand.textMuted },
-  name: { ...Type.bodyStrong, fontWeight: '700', color: Brand.text, marginTop: 1 },
-  meta: { fontSize: 11, color: Brand.textSecondary, marginTop: 1 },
-  liveChip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 5,
-    paddingHorizontal: 9,
-    paddingVertical: 5,
-    borderRadius: Radius.pill,
-    backgroundColor: Brand.ink,
+  peek: { paddingTop: theme.spacing.xs },
+  dragArea: { paddingBottom: theme.spacing.xs },
+  grabberArea: {
+    alignItems: 'center' as const,
+    paddingVertical: theme.spacing.xs,
+    gap: 2,
   },
-  liveChipMuted: { backgroundColor: Brand.amberSoft },
-  liveDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: Brand.volt },
-  liveDotMuted: { backgroundColor: Brand.amber },
-  liveText: { fontSize: 9.5, fontWeight: '700', color: Brand.inkText, letterSpacing: 0.4 },
-  liveTextMuted: { color: Brand.amber },
+  grabber: {
+    width: 44,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: theme.components.sheet.handleColor,
+  },
+  headerRow: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: theme.spacing.md,
+    marginTop: 2,
+  },
+  headerCopy: {
+    flex: 1,
+    gap: theme.spacing.xxs,
+  },
   metricsRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginTop: Space.sm,
-    paddingVertical: Space.md,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderColor: Brand.divider,
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    marginTop: theme.spacing.sm,
+    paddingVertical: theme.spacing.md,
+    borderTopWidth: 1,
+    borderBottomWidth: 1,
+    borderColor: theme.colors.borderSubtle,
   },
-  metric: { flex: 1, alignItems: 'center' },
-  metricValue: { fontSize: 17, fontWeight: '700', color: Brand.text, letterSpacing: -0.3 },
-  metricLabel: { fontSize: 10, color: Brand.textMuted, marginTop: 2 },
-  metricDivider: { width: StyleSheet.hairlineWidth, height: 28, backgroundColor: Brand.divider },
+  metric: {
+    flex: 1,
+    alignItems: 'center' as const,
+    gap: theme.spacing.xxs,
+  },
+  metricDivider: {
+    width: 1,
+    height: 28,
+    backgroundColor: theme.colors.borderSubtle,
+  },
   notice: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Space.sm,
-    backgroundColor: Brand.amberSoft,
-    borderRadius: Radius.md,
-    padding: Space.md,
-    marginTop: Space.md,
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: theme.spacing.sm,
+    backgroundColor: theme.colors.statusWarningBg,
+    borderRadius: theme.radii.md,
+    padding: theme.spacing.md,
+    marginTop: theme.spacing.md,
   },
-  noticeText: { flex: 1, fontSize: 11, color: Brand.amber, lineHeight: 16 },
-  cta: { marginTop: Space.md, minHeight: 52 },
-  addressRow: { flexDirection: 'row', alignItems: 'flex-start', gap: Space.sm, marginTop: Space.md },
-  address: { flex: 1, fontSize: 12.5, color: Brand.text, lineHeight: 18 },
-  steps: { flexDirection: 'row', alignItems: 'center', marginTop: Space.lg },
-  step: { flexDirection: 'row', alignItems: 'center', gap: 5, flex: 1 },
+  flexCopy: { flex: 1 },
+  cta: { marginTop: theme.spacing.md },
+  addressRow: {
+    flexDirection: 'row' as const,
+    alignItems: 'flex-start' as const,
+    gap: theme.spacing.sm,
+    marginTop: theme.spacing.md,
+  },
+  steps: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    marginTop: theme.spacing.lg,
+  },
+  step: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: 5,
+    flex: 1,
+  },
   stepDot: {
     width: 14,
     height: 14,
     borderRadius: 7,
     borderWidth: 1.5,
-    borderColor: Brand.border,
-    alignItems: 'center',
-    justifyContent: 'center',
+    borderColor: theme.colors.borderDefault,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
   },
-  stepDotDone: { backgroundColor: Brand.primary, borderColor: Brand.primary },
-  stepDotActive: { borderColor: Brand.primary, backgroundColor: Brand.white },
-  stepLabel: { fontSize: 10.5, fontWeight: '600', color: Brand.textMuted },
-  stepLabelActive: { color: Brand.text },
-  stepLine: { flex: 1, height: 2, backgroundColor: Brand.divider, marginLeft: 2 },
-  stepLineDone: { backgroundColor: Brand.primary },
-  actionsRow: { flexDirection: 'row', justifyContent: 'space-around', gap: Space.md, marginTop: Space.lg },
-  action: { flex: 1, alignItems: 'center', gap: 6 },
+  stepDotDone: {
+    backgroundColor: theme.colors.actionPrimaryAltBg,
+    borderColor: theme.colors.actionPrimaryAltBg,
+  },
+  stepDotActive: {
+    borderColor: theme.colors.actionPrimaryAltBg,
+    backgroundColor: theme.colors.bgSurface,
+  },
+  stepLine: {
+    flex: 1,
+    height: 2,
+    backgroundColor: theme.colors.borderSubtle,
+    marginLeft: 2,
+  },
+  stepLineDone: {
+    backgroundColor: theme.colors.actionPrimaryAltBg,
+  },
+  actionsRow: {
+    flexDirection: 'row' as const,
+    justifyContent: 'space-around' as const,
+    gap: theme.spacing.md,
+    marginTop: theme.spacing.lg,
+  },
+  action: {
+    flex: 1,
+    alignItems: 'center' as const,
+    gap: theme.spacing.xs,
+    minHeight: theme.touchTarget.min,
+  },
   actionDisabled: { opacity: 0.4 },
   iconWrap: {
-    width: 46,
-    height: 46,
-    borderRadius: Radius.md,
-    alignItems: 'center',
-    justifyContent: 'center',
+    width: 48,
+    height: 48,
+    borderRadius: theme.radii.md,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
   },
-  actionLabel: { fontSize: 11, fontWeight: '600', color: Brand.textSecondary },
-  hiddenDetails: { pointerEvents: 'none' },
-  pressed: { opacity: 0.7 },
+  hiddenDetails: { pointerEvents: 'none' as const },
+  pressed: { opacity: 0.75 },
 });

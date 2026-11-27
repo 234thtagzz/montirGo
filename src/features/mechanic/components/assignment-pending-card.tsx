@@ -1,7 +1,9 @@
 import { useEffect, useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, View } from 'react-native';
 import { Ionicons } from '@/components/ui/icon';
-import { Brand, Radius, Space, Type } from '@/constants/brand';
+import { Surface } from '@/components/ui/surface';
+import { AppText } from '@/components/ui/text';
+import { useAppTheme, useThemedStyles, type AppTheme } from '@/theme';
 
 interface AssignmentPendingCardProps {
   /** Batas waktu client mengonfirmasi; null bila tidak diketahui. */
@@ -18,10 +20,11 @@ function formatRemaining(ms: number): string {
 
 /**
  * Pemberitahuan untuk montir bahwa pengajuannya masih menunggu konfirmasi
- * client. Selama status `mechanic_assigned`, montir belum boleh berangkat
- * atau mengubah status order.
+ * client (`mechanic_assigned`). Montir baru berangkat setelah pengajuan disetujui.
  */
 export function AssignmentPendingCard({ expiresAt, onPress }: AssignmentPendingCardProps) {
+  const { theme } = useAppTheme();
+  const styles = useThemedStyles(createStyles);
   const [now, setNow] = useState(0);
 
   useEffect(() => {
@@ -45,56 +48,76 @@ export function AssignmentPendingCard({ expiresAt, onPress }: AssignmentPendingC
       accessibilityLabel="Menunggu konfirmasi client"
       disabled={!onPress}
       onPress={onPress}
-      style={({ pressed }) => [styles.card, pressed && styles.pressed]}
+      style={({ pressed }) => [styles.wrap, pressed && onPress && styles.pressed]}
     >
-      <View style={styles.iconWrap}>
-        <Ionicons name="hourglass-outline" size={19} color={Brand.amber} />
-      </View>
-      <View style={styles.copy}>
-        <Text style={styles.title}>Menunggu konfirmasi client</Text>
-        <Text style={styles.desc}>
-          Client sedang meninjau profil & ratingmu. Kamu bisa berangkat setelah pengajuan
-          disetujui.
-        </Text>
-      </View>
-      {remaining != null ? (
-        <View style={styles.countdown}>
-          <Text style={styles.countdownText}>{formatRemaining(remaining)}</Text>
+      <Surface variant="outlined" padding="md" style={styles.card}>
+        <View style={styles.iconWrap}>
+          <Ionicons
+            name="hourglass-outline"
+            size={20}
+            color={theme.colors.statusWarningFg}
+          />
         </View>
-      ) : null}
+        <View style={styles.copy}>
+          <AppText variant="bodyStrong">Menunggu konfirmasi client</AppText>
+          <AppText variant="caption" tone="secondary" style={styles.desc}>
+            Client sedang meninjau profil & ratingmu. Kamu bisa berangkat setelah pengajuan
+            disetujui.
+          </AppText>
+        </View>
+        {remaining != null ? (
+          <View style={styles.countdown}>
+            <AppText
+              variant="label"
+              tabular
+              style={{ color: theme.colors.statusWarningFg }}
+            >
+              {formatRemaining(remaining)}
+            </AppText>
+          </View>
+        ) : null}
+      </Surface>
     </Pressable>
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (theme: AppTheme) => ({
+  wrap: {
+    marginTop: theme.spacing.md,
+  },
+  pressed: {
+    opacity: 0.88,
+  },
   card: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Space.md,
-    backgroundColor: Brand.amberSoft,
-    borderRadius: Radius.lg,
-    borderWidth: 1,
-    borderColor: '#F2D48A',
-    padding: Space.md,
-    marginTop: Space.md,
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: theme.spacing.md,
+    backgroundColor: theme.colors.statusWarningBg,
+    borderColor: theme.colors.statusWarningBorder,
   },
-  pressed: { opacity: 0.9 },
   iconWrap: {
-    width: 38,
-    height: 38,
-    borderRadius: Radius.sm,
-    backgroundColor: Brand.surface,
-    alignItems: 'center',
-    justifyContent: 'center',
+    width: 40,
+    height: 40,
+    borderRadius: theme.radii.sm,
+    borderCurve: theme.components.card.borderCurve,
+    backgroundColor: theme.colors.bgSurface,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
   },
-  copy: { flex: 1 },
-  title: { ...Type.bodyStrong, color: Brand.text, fontWeight: '700' },
-  desc: { ...Type.meta, color: '#7C5A12', lineHeight: 15, marginTop: 2 },
+  copy: {
+    flex: 1,
+    gap: theme.spacing.xxs,
+  },
+  desc: {
+    lineHeight: 16,
+  },
   countdown: {
-    backgroundColor: Brand.surface,
-    paddingHorizontal: 8,
-    paddingVertical: 5,
-    borderRadius: Radius.xs,
+    backgroundColor: theme.colors.bgSurface,
+    borderRadius: theme.radii.sm,
+    borderCurve: theme.components.card.borderCurve,
+    paddingHorizontal: theme.spacing.sm,
+    paddingVertical: theme.spacing.xs,
+    borderWidth: 1,
+    borderColor: theme.colors.statusWarningBorder,
   },
-  countdownText: { ...Type.label, color: Brand.amber, fontWeight: '800' },
 });

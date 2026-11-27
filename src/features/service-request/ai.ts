@@ -1,10 +1,10 @@
 // Analisis AI untuk service request.
 // Pemanggilan AI tetap lewat Edge Function `analyze-request` (PRD §11):
 // API key tidak pernah ada di aplikasi, dan penyimpanan hasil dilakukan server-side.
-import { supabase } from '@/lib/supabase';
-import { describeFunctionError } from '@/lib/edge-functions';
-import { Brand } from '@/constants/brand';
 import type { IconName } from '@/components/ui/icon';
+import { describeFunctionError } from '@/lib/edge-functions';
+import { supabase } from '@/lib/supabase';
+import type { SemanticTone } from '@/theme';
 
 export type AiRiskLevel = 'low' | 'medium' | 'high' | 'critical';
 export type AiComplexity = 'ringan' | 'sedang' | 'berat';
@@ -34,8 +34,7 @@ export const DEFAULT_AI_DISCLAIMER =
 export interface AiRiskMeta {
   label: string;
   shortLabel: string;
-  color: string;
-  background: string;
+  tone: SemanticTone;
   icon: IconName;
 }
 
@@ -43,29 +42,25 @@ const RISK_META: Record<AiRiskLevel, AiRiskMeta> = {
   low: {
     label: 'Risiko rendah',
     shortLabel: 'Rendah',
-    color: Brand.green,
-    background: Brand.greenSoft,
+    tone: 'success',
     icon: 'shield-checkmark-outline',
   },
   medium: {
     label: 'Risiko sedang',
     shortLabel: 'Sedang',
-    color: Brand.amber,
-    background: Brand.amberSoft,
+    tone: 'warning',
     icon: 'alert-circle-outline',
   },
   high: {
     label: 'Risiko tinggi',
     shortLabel: 'Tinggi',
-    color: Brand.red,
-    background: Brand.redSoft,
+    tone: 'danger',
     icon: 'warning-outline',
   },
   critical: {
     label: 'Risiko kritis',
     shortLabel: 'Kritis',
-    color: Brand.red,
-    background: Brand.redSoft,
+    tone: 'danger',
     icon: 'flame-outline',
   },
 };

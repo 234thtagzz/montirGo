@@ -1,5 +1,6 @@
 // Tipe data Keluhan (complaints).
 import type { IconName } from '@/components/ui/icon';
+import type { SemanticTone } from '@/theme';
 
 export type ComplaintCategory = 'pesanan' | 'pembayaran' | 'montir' | 'aplikasi' | 'lainnya';
 export type ComplaintStatus = 'open' | 'in_progress' | 'resolved' | 'closed';
@@ -38,8 +39,7 @@ export interface TransactionSummary {
 
 export interface ComplaintStatusMeta {
   label: string;
-  color: string;
-  background: string;
+  tone: SemanticTone;
   icon: IconName;
 }
 
@@ -54,18 +54,8 @@ export const COMPLAINT_CATEGORY_META: Record<ComplaintCategory, { label: string;
   };
 
 export const COMPLAINT_STATUS_META: Record<ComplaintStatus, ComplaintStatusMeta> = {
-  open: { label: 'Terbuka', color: '#B45309', background: '#FEF3C7', icon: 'alert-circle-outline' },
-  in_progress: {
-    label: 'Diproses',
-    color: '#0847C4',
-    background: '#EBF1FF',
-    icon: 'construct-outline',
-  },
-  resolved: {
-    label: 'Diselesaikan',
-    color: '#0E9F6E',
-    background: '#E7F8F1',
-    icon: 'checkmark-circle-outline',
-  },
-  closed: { label: 'Ditutup', color: '#8A94A6', background: '#F7F9FC', icon: 'archive-outline' },
+  open: { label: 'Terbuka', tone: 'warning', icon: 'alert-circle-outline' },
+  in_progress: { label: 'Diproses', tone: 'info', icon: 'construct-outline' },
+  resolved: { label: 'Diselesaikan', tone: 'success', icon: 'checkmark-circle-outline' },
+  closed: { label: 'Ditutup', tone: 'neutral', icon: 'archive-outline' },
 };

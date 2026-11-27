@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Alert, Linking, Pressable, StyleSheet, Text, View } from 'react-native';
-import { StatusBar } from 'expo-status-bar';
+import { Pressable, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@/components/ui/icon';
-import { Brand, Radius, Space } from '@/constants/brand';
+import { AppText } from '@/components/ui/text';
+import { useToast } from '@/components/ui/toast';
 import type { ClientOrder } from '@/features/client/service';
 import {
   STALE_LOCATION_MS,
@@ -16,7 +16,8 @@ import {
   formatDistance,
   formatDuration,
 } from '@/features/mechanic/tracking/geo';
-import { openWhatsApp } from '@/utils/whatsapp';
+import { useAppTheme, useThemedStyles, type AppTheme } from '@/theme';
+import { openPhoneDialer, openWhatsApp } from '@/utils/whatsapp';
 import { ClientTripSheet } from './client-trip-sheet';
 
 interface ClientTripViewProps {
@@ -26,14 +27,12 @@ interface ClientTripViewProps {
 }
 
 /**
- * Layar perjalanan versi client — tampilannya mengikuti layar trip montir:
- * peta penuh, kartu status mengambang di atas, dan bottom sheet yang bisa
- * dilipat berisi ETA, jarak, jam tiba, serta aksi chat/telepon montir.
- *
- * Aktif hanya saat status order `on_the_way`; sumber posisi memakai hook
- * pasif `useMechanicTracking` (tanpa izin GPS di perangkat client).
+ * Layar pelacakan perjalanan montir sisi client (Light & Dark + Toast feedback).
  */
 export function ClientTripView({ order, onBack, onOpenDetail }: ClientTripViewProps) {
+  const { theme } = useAppTheme();
+  const styles = useThemedStyles(createStyles);
+  const { showToast } = useToast();
   const insets = useSafeAreaInsets();
   const [following, setFollowing] = useState(true);
   const [recenterToken, setRecenterToken] = useState(0);
@@ -59,7 +58,6 @@ export function ClientTripView({ order, onBack, onOpenDetail }: ClientTripViewPr
   });
   const route = tracking.route;
 
-  // Jam relatif & perkiraan tiba ikut diperbarui walau tidak ada titik baru.
   const [now, setNow] = useState(0);
   useEffect(() => {
     const timer = setInterval(() => setNow(Date.now()), 10_000);
@@ -75,22 +73,32 @@ export function ClientTripView({ order, onBack, onOpenDetail }: ClientTripViewPr
     route && !arrived ? formatArrivalClock(route.durationSeconds) : route ? 'Sekarang' : null;
   const phone = order.mechanic_phone;
 
-  const callMechanic = useCallback(() => {
-    if (!phone) return;
-    const digits = phone.replace(/[^+0-9]/g, '');
-    void Linking.openURL(`tel:${digits}`).catch(() =>
-      Alert.alert('Gagal menelepon', 'Perangkat tidak mendukung panggilan telepon.'),
-    );
-  }, [phone]);
+  const callMechanic = useCallback(async () => {
+    const res = await openPhoneDialer(phone);
+    if (!res.ok) {
+      showToast({
+        tone: 'warning',
+        title: 'Gagal menelepon',
+        message: res.error ?? 'Perangkat tidak mendukung panggilan telepon.',
+      });
+    }
+  }, [phone, showToast]);
 
-  const chatMechanic = useCallback(() => {
-    void openWhatsApp(
+  const chatMechanic = useCallback(async () => {
+    const res = await openWhatsApp(
       phone,
       `Halo, saya client MontirGo untuk pesanan #${order.id
         .slice(0, 8)
         .toUpperCase()}. Saya memantau perjalananmu ke lokasi saya.`,
     );
-  }, [order.id, phone]);
+    if (!res.ok) {
+      showToast({
+        tone: 'warning',
+        title: 'WhatsApp tidak tersedia',
+        message: res.error ?? 'Coba hubungi via telepon.',
+      });
+    }
+  }, [order.id, phone, showToast]);
 
   const topInset = insets.top + 96;
   const subtitle = tracking.waiting
@@ -102,8 +110,6 @@ export function ClientTripView({ order, onBack, onOpenDetail }: ClientTripViewPr
 
   return (
     <View style={styles.screen}>
-      <StatusBar style="dark" />
-
       <TripMap
         mechanic={tracking.position}
         heading={null}
@@ -123,10 +129,10 @@ export function ClientTripView({ order, onBack, onOpenDetail }: ClientTripViewPr
         estimated={route?.estimated ?? false}
         trafficAware={route?.trafficAware ?? true}
         onBack={onBack}
-        onAction={hasPhone ? chatMechanic : onOpenDetail}
+        onAction={hasPhone ? () => void chatMechanic() : onOpenDetail}
         actionIcon={hasPhone ? 'logo-whatsapp' : 'document-text-outline'}
         actionLabel={hasPhone ? 'Chat montir' : 'Buka detail pesanan'}
-        actionBackground={hasPhone ? Brand.whatsapp : Brand.primary}
+        actionTone={hasPhone ? 'whatsapp' : 'primary'}
       />
 
       {!following ? (
@@ -137,16 +143,23 @@ export function ClientTripView({ order, onBack, onOpenDetail }: ClientTripViewPr
             setFollowing(true);
             setRecenterToken((value) => value + 1);
           }}
-          style={[styles.recenter, { bottom: sheetHeight + Space.md }]}
+          style={({ pressed }) => [
+            styles.recenter,
+            theme.elevation.sheet,
+            { bottom: sheetHeight + theme.spacing.md },
+            pressed && styles.pressed,
+          ]}
         >
-          <Ionicons name="locate" size={20} color={Brand.primary} />
+          <Ionicons name="locate" size={20} color={theme.colors.actionPrimaryAltBg} />
         </Pressable>
       ) : null}
 
       {tracking.routeLoading && tracking.position ? (
-        <View style={[styles.loadingChip, { top: topInset + Space.sm }]}>
-          <Ionicons name="navigate-outline" size={12} color={Brand.textSecondary} />
-          <Text style={styles.loadingChipText}>Menghitung rute tercepat…</Text>
+        <View style={[styles.loadingChip, theme.elevation.card, { top: topInset + theme.spacing.sm }]}>
+          <Ionicons name="navigate-outline" size={14} color={theme.colors.textSecondary} />
+          <AppText variant="caption" tone="secondary">
+            Menghitung rute tercepat…
+          </AppText>
         </View>
       ) : null}
 
@@ -160,8 +173,8 @@ export function ClientTripView({ order, onBack, onOpenDetail }: ClientTripViewPr
         arrivalClock={arrivalClock}
         waiting={tracking.waiting}
         stale={isStale}
-        onWhatsApp={chatMechanic}
-        onCall={callMechanic}
+        onWhatsApp={() => void chatMechanic()}
+        onCall={() => void callMechanic()}
         onOpenDetail={onOpenDetail}
         onHeightChange={setSheetHeight}
       />
@@ -169,38 +182,35 @@ export function ClientTripView({ order, onBack, onOpenDetail }: ClientTripViewPr
   );
 }
 
-const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: Brand.background },
+const createStyles = (theme: AppTheme) => ({
+  screen: {
+    flex: 1,
+    backgroundColor: theme.colors.bgCanvas,
+  },
   recenter: {
-    position: 'absolute',
-    right: Space.lg,
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: Brand.surface,
-    alignItems: 'center',
-    justifyContent: 'center',
-    shadowColor: '#0B1B33',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.18,
-    shadowRadius: 8,
-    elevation: 5,
+    position: 'absolute' as const,
+    right: theme.spacing.lg,
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: theme.colors.bgSurface,
+    borderWidth: 1,
+    borderColor: theme.colors.borderDefault,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
   },
   loadingChip: {
-    position: 'absolute',
-    alignSelf: 'center',
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    paddingHorizontal: Space.md,
-    paddingVertical: 6,
-    borderRadius: Radius.pill,
-    backgroundColor: Brand.surface,
-    shadowColor: '#0B1B33',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.12,
-    shadowRadius: 6,
-    elevation: 3,
+    position: 'absolute' as const,
+    alignSelf: 'center' as const,
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: theme.spacing.xs,
+    paddingHorizontal: theme.spacing.md,
+    paddingVertical: theme.spacing.xs,
+    borderRadius: theme.radii.pill,
+    backgroundColor: theme.colors.bgSurface,
+    borderWidth: 1,
+    borderColor: theme.colors.borderSubtle,
   },
-  loadingChipText: { fontSize: 11, fontWeight: '600', color: Brand.textSecondary },
+  pressed: { opacity: 0.78 },
 });

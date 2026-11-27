@@ -1,4 +1,9 @@
-import { Alert, Linking } from 'react-native';
+import { Linking } from 'react-native';
+
+export interface ExternalActionResult {
+  ok: boolean;
+  error?: string;
+}
 
 /**
  * Normalisasi nomor ke format internasional tanpa tanda baca, sesuai syarat
@@ -33,31 +38,59 @@ export function buildWhatsAppUrl(
   return `https://wa.me/${number}${text ? `?text=${encodeURIComponent(text)}` : ''}`;
 }
 
+/** Ambil nomor WhatsApp CS dari `platform_settings` dengan fallback env publik. */
+export function getCsWhatsAppNumber(settingsNumber?: string | null): string | null {
+  const fromSettings = settingsNumber?.trim();
+  if (fromSettings) return fromSettings;
+  const fromEnv = process.env.EXPO_PUBLIC_CS_WHATSAPP?.trim();
+  return fromEnv || null;
+}
+
 /**
- * Buka chat WhatsApp dengan kontak terkait.
- * Mengembalikan false (dan menampilkan pesan) bila nomor tidak valid.
+ * Buka chat WhatsApp dengan kontak terkait tanpa memblokir dengan Alert.alert.
  */
 export async function openWhatsApp(
   phone: string | null | undefined,
   message?: string,
-): Promise<boolean> {
+): Promise<ExternalActionResult> {
   const url = buildWhatsAppUrl(phone, message);
   if (!url) {
-    Alert.alert(
-      'Nomor tidak tersedia',
-      'Nomor WhatsApp kontak ini belum diisi atau formatnya tidak dikenali.',
-    );
-    return false;
+    return {
+      ok: false,
+      error: 'Nomor WhatsApp belum diisi atau formatnya tidak dikenali.',
+    };
   }
 
   try {
     await Linking.openURL(url);
-    return true;
+    return { ok: true };
   } catch {
-    Alert.alert(
-      'Gagal membuka WhatsApp',
-      'Pastikan aplikasi WhatsApp terpasang di perangkat ini, lalu coba lagi.',
-    );
-    return false;
+    return {
+      ok: false,
+      error: 'Gagal membuka WhatsApp. Pastikan WhatsApp terpasang lalu coba lagi.',
+    };
+  }
+}
+
+/** Buka aplikasi telepon perangkat untuk fallback panggilan langsung (`tel:`). */
+export async function openPhoneDialer(
+  phone: string | null | undefined,
+): Promise<ExternalActionResult> {
+  const cleaned = (phone ?? '').replace(/[^+0-9]/g, '');
+  if (!cleaned) {
+    return {
+      ok: false,
+      error: 'Nomor telepon tidak tersedia.',
+    };
+  }
+
+  try {
+    await Linking.openURL(`tel:${cleaned}`);
+    return { ok: true };
+  } catch {
+    return {
+      ok: false,
+      error: 'Perangkat tidak mendukung panggilan telepon.',
+    };
   }
 }

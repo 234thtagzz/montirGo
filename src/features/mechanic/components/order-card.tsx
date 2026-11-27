@@ -1,17 +1,20 @@
-import { Pressable, StyleSheet, Text, View } from 'react-native';
 import type { ComponentProps } from 'react';
+import { Pressable, View } from 'react-native';
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Money } from '@/components/ui/money';
 import { Ionicons, type IconName } from '@/components/ui/icon';
-import { Brand, Radius, Space, Type } from '@/constants/brand';
-import { getStatusMeta } from '@/features/service-request/status';
+import { Money } from '@/components/ui/money';
+import { AppText } from '@/components/ui/text';
 import { getRiskMeta, type AiRiskLevel } from '@/features/service-request/ai';
+import { getStatusMeta } from '@/features/service-request/status';
+import { useAppTheme, useThemedStyles, type AppTheme, type SemanticTone } from '@/theme';
 import { formatDateTime } from '@/utils/format';
 
 interface OrderBadge {
   label: string;
-  color: string;
-  background: string;
+  tone?: SemanticTone;
+  color?: string;
+  background?: string;
   icon: IconName;
 }
 
@@ -38,7 +41,7 @@ interface OrderCardProps {
   };
 }
 
-/** Kartu order bergaya "job ticket": rail status di kiri, isi ringkas. */
+/** Kartu order bergaya "job ticket": rail status semantik di kiri, isi ringkas. */
 export function OrderCard({
   issue,
   status,
@@ -52,28 +55,28 @@ export function OrderCard({
   onPress,
   action,
 }: OrderCardProps) {
+  const { theme } = useAppTheme();
+  const styles = useThemedStyles(createStyles);
   const meta = getStatusMeta(status);
   const riskMeta = aiRisk ? getRiskMeta(aiRisk) : null;
-  const chip = badge ?? {
-    label: meta.shortLabel,
-    color: meta.color,
-    background: meta.background,
-    icon: meta.icon,
-  };
+
+  const chipTone: SemanticTone = badge?.tone ?? meta.tone;
+  const chipFg = badge?.color ?? theme.tones[chipTone].fg;
+  const chipLabel = badge?.label ?? meta.shortLabel;
+  const chipIcon = badge?.icon ?? meta.icon;
 
   const body = (
     <View style={styles.inner}>
       <View style={styles.top}>
-        <View style={[styles.chip, { backgroundColor: chip.background }]}>
-          <Ionicons name={chip.icon} size={12} color={chip.color} />
-          <Text style={[styles.chipText, { color: chip.color }]}>{chip.label}</Text>
-        </View>
-        <Text style={styles.date}>{formatDateTime(createdAt)}</Text>
+        <Badge label={chipLabel} tone={chipTone} icon={chipIcon} size="sm" />
+        <AppText variant="caption" tone="muted" style={theme.tabularNums}>
+          {formatDateTime(createdAt)}
+        </AppText>
       </View>
 
-      <Text style={styles.issue} numberOfLines={2}>
+      <AppText variant="title" style={styles.issue} numberOfLines={2}>
         {issue}
-      </Text>
+      </AppText>
 
       <View style={styles.metas}>
         {vehicle ? <MetaRow icon="car-outline" text={vehicle} /> : null}
@@ -81,10 +84,13 @@ export function OrderCard({
         {address ? <MetaRow icon="location-outline" text={address} /> : null}
         {riskMeta ? (
           <View style={styles.metaRow}>
-            <Ionicons name="sparkles-outline" size={13} color={riskMeta.color} />
-            <Text style={[styles.metaText, { color: riskMeta.color, fontWeight: '600' }]}>
+            <Ionicons name="sparkles-outline" size={14} color={theme.tones[riskMeta.tone].fg} />
+            <AppText
+              variant="label"
+              style={{ color: theme.tones[riskMeta.tone].fg }}
+            >
               Analisis AI: {riskMeta.label.toLowerCase()}
-            </Text>
+            </AppText>
           </View>
         ) : null}
       </View>
@@ -92,15 +98,19 @@ export function OrderCard({
       {price != null || onPress ? (
         <View style={styles.footer}>
           {price != null ? (
-            <View>
-              <Text style={styles.priceLabel}>BIAYA</Text>
-              <Money value={price} size="md" color={Brand.text} />
+            <View style={styles.priceWrap}>
+              <AppText variant="overline" tone="muted">
+                BIAYA
+              </AppText>
+              <Money value={price} size="md" color={theme.colors.textPrimary} />
             </View>
           ) : (
-            <Text style={styles.footerHint}>Buka detail order</Text>
+            <AppText variant="caption" tone="muted">
+              Buka detail order
+            </AppText>
           )}
           {onPress ? (
-            <Ionicons name="arrow-forward" size={16} color={Brand.textMuted} />
+            <Ionicons name="arrow-forward" size={16} color={theme.colors.textMuted} />
           ) : null}
         </View>
       ) : null}
@@ -110,6 +120,7 @@ export function OrderCard({
           label={action.label}
           icon={action.icon}
           variant={action.variant}
+          size="cta"
           loading={action.loading}
           disabled={action.disabled}
           onPress={action.onPress}
@@ -119,7 +130,7 @@ export function OrderCard({
     </View>
   );
 
-  const cardStyle = [styles.card, { borderLeftColor: chip.color }];
+  const cardStyle = [styles.card, { borderLeftColor: chipFg }];
 
   if (!onPress) {
     return <View style={cardStyle}>{body}</View>;
@@ -128,7 +139,7 @@ export function OrderCard({
   return (
     <Pressable
       accessibilityRole="button"
-      accessibilityLabel={`${chip.label}: ${issue}`}
+      accessibilityLabel={`${chipLabel}: ${issue}`}
       onPress={onPress}
       style={({ pressed }) => [cardStyle, pressed && styles.pressed]}
     >
@@ -138,53 +149,65 @@ export function OrderCard({
 }
 
 function MetaRow({ icon, text }: { icon: IconName; text: string }) {
+  const { theme } = useAppTheme();
+  const styles = useThemedStyles(createStyles);
   return (
     <View style={styles.metaRow}>
-      <Ionicons name={icon} size={13} color={Brand.textMuted} />
-      <Text style={styles.metaText} numberOfLines={1}>
+      <Ionicons name={icon} size={14} color={theme.colors.textMuted} />
+      <AppText variant="caption" tone="secondary" style={styles.metaText} numberOfLines={1}>
         {text}
-      </Text>
+      </AppText>
     </View>
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (theme: AppTheme) => ({
   card: {
-    backgroundColor: Brand.surface,
-    borderRadius: Radius.lg,
+    backgroundColor: theme.colors.bgSurface,
+    borderRadius: theme.radii.lg,
+    borderCurve: theme.components.card.borderCurve,
     borderWidth: 1,
-    borderColor: Brand.border,
+    borderColor: theme.colors.borderDefault,
     borderLeftWidth: 3,
-    overflow: 'hidden',
-    marginBottom: Space.md,
+    overflow: 'hidden' as const,
+    marginBottom: theme.spacing.md,
   },
   pressed: { opacity: 0.78 },
-  inner: { padding: Space.lg },
-  top: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  chip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: Radius.pill,
+  inner: { padding: theme.spacing.lg },
+  top: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    justifyContent: 'space-between' as const,
+    gap: theme.spacing.sm,
   },
-  chipText: { ...Type.micro, fontSize: 9.5, letterSpacing: 0.2 },
-  date: { ...Type.meta, color: Brand.textMuted },
-  issue: { ...Type.bodyStrong, color: Brand.text, marginTop: Space.md, lineHeight: 20 },
-  metas: { gap: 5, marginTop: Space.md },
-  metaRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  metaText: { flex: 1, ...Type.meta, color: Brand.textSecondary },
+  issue: {
+    marginTop: theme.spacing.md,
+  },
+  metas: {
+    gap: theme.spacing.xs,
+    marginTop: theme.spacing.md,
+  },
+  metaRow: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: theme.spacing.xs,
+  },
+  metaText: {
+    flex: 1,
+  },
   footer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginTop: Space.md,
-    paddingTop: Space.md,
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    justifyContent: 'space-between' as const,
+    marginTop: theme.spacing.md,
+    paddingTop: theme.spacing.md,
     borderTopWidth: 1,
-    borderTopColor: Brand.divider,
+    borderTopColor: theme.colors.borderSubtle,
   },
-  priceLabel: { ...Type.micro, color: Brand.textMuted, marginBottom: 1 },
-  footerHint: { ...Type.meta, color: Brand.textMuted },
-  action: { marginTop: Space.lg },
+  priceWrap: {
+    gap: theme.spacing.xxs,
+  },
+  action: {
+    marginTop: theme.spacing.lg,
+  },
 });

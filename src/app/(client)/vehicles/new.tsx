@@ -1,22 +1,16 @@
-import { useEffect, useState, type ComponentProps } from 'react';
-import {
-  Alert,
-  KeyboardAvoidingView,
-  Platform,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  View,
-} from 'react-native';
+import { useEffect, useState } from 'react';
+import { KeyboardAvoidingView, Platform, Pressable, ScrollView, View } from 'react-native';
 import { Image } from 'expo-image';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { ScreenHeader } from '@/components/ui/screen-header';
 import { Button } from '@/components/ui/button';
-import { LoadingState } from '@/components/ui/state';
+import { Chip } from '@/components/ui/chip';
 import { Ionicons } from '@/components/ui/icon';
-import { Brand, Radius, ScreenPadding, Space, Type } from '@/constants/brand';
+import { ScreenHeader } from '@/components/ui/screen-header';
+import { LoadingState } from '@/components/ui/state';
+import { Surface } from '@/components/ui/surface';
+import { AppText } from '@/components/ui/text';
+import { TextField } from '@/components/ui/text-field';
+import { useToast } from '@/components/ui/toast';
 import {
   createVehicle,
   getMyId,
@@ -24,23 +18,27 @@ import {
   updateVehicle,
   type VehicleType,
 } from '@/features/client/service';
+import { VehiclePhoto } from '@/features/vehicles/components/vehicle-photo';
 import {
   VEHICLE_TYPE_OPTIONS,
   getVehicleTypeMeta,
 } from '@/features/vehicles/constants';
-import { VehiclePhoto } from '@/features/vehicles/components/vehicle-photo';
 import {
   deleteVehiclePhoto,
   pickVehiclePhoto,
   uploadVehiclePhoto,
   type PickedVehiclePhoto,
 } from '@/features/vehicles/photo';
+import { useAppTheme, useThemedStyles, type AppTheme } from '@/theme';
 
 const TYPES = VEHICLE_TYPE_OPTIONS;
 
 export default function VehicleFormScreen() {
   const { id } = useLocalSearchParams<{ id?: string }>();
   const router = useRouter();
+  const { theme } = useAppTheme();
+  const styles = useThemedStyles(createStyles);
+  const { showToast } = useToast();
   const isEdit = Boolean(id);
 
   const [type, setType] = useState<VehicleType>('motor');
@@ -54,6 +52,7 @@ export default function VehicleFormScreen() {
   const [photoRemoved, setPhotoRemoved] = useState(false);
   const [loading, setLoading] = useState(isEdit);
   const [saving, setSaving] = useState(false);
+  const [submitted, setSubmitted] = useState(false);
 
   useEffect(() => {
     if (!id) return;
@@ -70,7 +69,11 @@ export default function VehicleFormScreen() {
         setNotes(vehicle.notes ?? '');
         setPhotoPath(vehicle.photo_url);
       } catch (error) {
-        Alert.alert('Gagal memuat', error instanceof Error ? error.message : 'Coba lagi.');
+        showToast({
+          tone: 'danger',
+          title: 'Gagal memuat kendaraan',
+          message: error instanceof Error ? error.message : 'Coba lagi.',
+        });
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -78,7 +81,7 @@ export default function VehicleFormScreen() {
     return () => {
       cancelled = true;
     };
-  }, [id]);
+  }, [id, showToast]);
 
   const choosePhoto = async () => {
     try {
@@ -87,10 +90,11 @@ export default function VehicleFormScreen() {
       setPickedPhoto(picked);
       setPhotoRemoved(false);
     } catch (error) {
-      Alert.alert(
-        'Gagal memilih foto',
-        error instanceof Error ? error.message : 'Coba lagi beberapa saat lagi.',
-      );
+      showToast({
+        tone: 'danger',
+        title: 'Gagal memilih foto',
+        message: error instanceof Error ? error.message : 'Coba lagi beberapa saat lagi.',
+      });
     }
   };
 
@@ -100,15 +104,23 @@ export default function VehicleFormScreen() {
     setPhotoRemoved(true);
   };
 
-  const save = async () => {
-    if (!brand.trim() || !model.trim() || !plate.trim()) {
-      Alert.alert('Validasi', 'Merek, model, dan nomor polisi wajib diisi.');
-      return;
-    }
+  const brandError = !brand.trim() ? 'Merek wajib diisi.' : null;
+  const modelError = !model.trim() ? 'Model wajib diisi.' : null;
+  const plateError = !plate.trim() ? 'Nomor polisi wajib diisi.' : null;
+  const parsedYear = year.trim() ? Number(year.trim()) : null;
+  const yearError =
+    parsedYear != null && (Number.isNaN(parsedYear) || parsedYear < 1980 || parsedYear > 2100)
+      ? 'Tahun kendaraan harus antara 1980 dan 2100.'
+      : null;
 
-    const parsedYear = year.trim() ? Number(year.trim()) : null;
-    if (parsedYear != null && (Number.isNaN(parsedYear) || parsedYear < 1980 || parsedYear > 2100)) {
-      Alert.alert('Validasi', 'Tahun kendaraan harus antara 1980 dan 2100.');
+  const save = async () => {
+    setSubmitted(true);
+    if (brandError || modelError || plateError || yearError) {
+      showToast({
+        tone: 'warning',
+        title: 'Periksa data kendaraan',
+        message: brandError ?? modelError ?? plateError ?? yearError ?? 'Lengkapi kolom wajib.',
+      });
       return;
     }
 
@@ -140,16 +152,20 @@ export default function VehicleFormScreen() {
       if (isEdit && id) await updateVehicle(id, payload);
       else await createVehicle(payload);
 
-      // Foto lama baru dihapus setelah data tersimpan agar tidak ada momen
-      // kendaraan kehilangan foto ketika penyimpanan gagal.
       if (replacedPhoto) await deleteVehiclePhoto(replacedPhoto);
+      showToast({
+        tone: 'success',
+        title: isEdit ? 'Perubahan disimpan' : 'Kendaraan ditambahkan',
+        message: `${payload.brand} ${payload.model} siap dipakai di form bantuan.`,
+      });
       router.back();
     } catch (error) {
       if (uploadedPath) await deleteVehiclePhoto(uploadedPath);
-      Alert.alert(
-        'Gagal menyimpan',
-        error instanceof Error ? error.message : 'Coba lagi beberapa saat lagi.',
-      );
+      showToast({
+        tone: 'danger',
+        title: 'Gagal menyimpan',
+        message: error instanceof Error ? error.message : 'Coba lagi beberapa saat lagi.',
+      });
     } finally {
       setSaving(false);
     }
@@ -164,11 +180,14 @@ export default function VehicleFormScreen() {
     );
   }
 
+  const activeMeta = getVehicleTypeMeta(type);
+  const activeTone = theme.tones[activeMeta.tone];
+
   return (
     <View style={styles.screen}>
       <ScreenHeader
         title={isEdit ? 'Ubah Kendaraan' : 'Tambah Kendaraan'}
-        subtitle="Data ini dipakai untuk mempercepat permintaan bantuan"
+        subtitle="Data ini mempercepat permintaan bantuan"
       />
       <KeyboardAvoidingView
         style={styles.flex}
@@ -179,124 +198,142 @@ export default function VehicleFormScreen() {
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
-          <View style={styles.preview}>
-            <View style={styles.previewIcon}>
-              <Ionicons
-                name={getVehicleTypeMeta(type).icon}
-                size={22}
-                color={Brand.volt}
-              />
+          <Surface variant="default" padding="md" style={styles.preview}>
+            <View style={[styles.previewIcon, { backgroundColor: activeTone.bg }]}>
+              <Ionicons name={activeMeta.icon} size={22} color={activeTone.fg} />
             </View>
             <View style={styles.previewCopy}>
-              <Text style={styles.previewEyebrow}>
+              <AppText variant="overline" tone="muted">
                 {isEdit ? 'UBAH KENDARAAN' : 'KENDARAAN BARU'}
-              </Text>
-              <Text style={styles.previewTitle} numberOfLines={1}>
+              </AppText>
+              <AppText variant="title" numberOfLines={1}>
                 {brand.trim() || model.trim()
                   ? `${brand.trim()} ${model.trim()}`.trim()
                   : 'Belum ada nama'}
-              </Text>
-              <Text style={styles.previewPlate}>
+              </AppText>
+              <AppText variant="caption" tone="secondary">
                 {plate.trim() ? plate.trim().toUpperCase() : 'Nomor polisi belum diisi'}
-              </Text>
+              </AppText>
             </View>
-          </View>
+          </Surface>
 
-          <Text style={styles.label}>Jenis kendaraan</Text>
-          <View style={styles.typeRow}>
-            {TYPES.map((item) => {
-              const active = item.key === type;
-              const meta = getVehicleTypeMeta(item.key);
-              return (
-                <Pressable
-                  key={item.key}
-                  accessibilityRole="button"
-                  accessibilityState={{ selected: active }}
-                  onPress={() => setType(item.key)}
-                  style={[styles.typeChip, active && styles.typeChipActive]}
-                >
-                  <Ionicons
-                    name={meta.icon}
-                    size={15}
-                    color={active ? Brand.volt : meta.color}
+          <View style={styles.block}>
+            <AppText variant="label">Jenis kendaraan</AppText>
+            <View style={styles.typeRow}>
+              {TYPES.map((item) => {
+                const meta = getVehicleTypeMeta(item.key);
+                return (
+                  <Chip
+                    key={item.key}
+                    label={item.label}
+                    icon={meta.icon}
+                    tone={meta.tone}
+                    selected={item.key === type}
+                    onPress={() => setType(item.key)}
+                    style={styles.typeChip}
                   />
-                  <Text style={[styles.typeText, active && styles.typeTextActive]}>
-                    {item.label}
-                  </Text>
-                </Pressable>
-              );
-            })}
-          </View>
-
-          <Text style={styles.label}>Foto kendaraan</Text>
-          <View style={styles.photoCard}>
-            {pickedPhoto ? (
-              <Image
-                source={{ uri: pickedPhoto.uri }}
-                style={styles.photoPreview}
-                contentFit="cover"
-                transition={150}
-              />
-            ) : (
-              <VehiclePhoto
-                value={photoPath}
-                height={168}
-                emptyLabel="Tambahkan foto kendaraan"
-              />
-            )}
-            <View style={styles.photoActions}>
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel={pickedPhoto || photoPath ? 'Ganti foto kendaraan' : 'Pilih foto kendaraan'}
-                onPress={choosePhoto}
-                style={({ pressed }) => [styles.photoAction, pressed && styles.pressed]}
-              >
-                <Ionicons name="camera-outline" size={16} color={Brand.primary} />
-                <Text style={styles.photoActionText}>
-                  {pickedPhoto || photoPath ? 'Ganti Foto' : 'Pilih Foto'}
-                </Text>
-              </Pressable>
-              {pickedPhoto || photoPath ? (
-                <Pressable
-                  accessibilityRole="button"
-                  accessibilityLabel="Hapus foto kendaraan"
-                  onPress={removePhoto}
-                  style={({ pressed }) => [
-                    styles.photoAction,
-                    styles.photoRemove,
-                    pressed && styles.pressed,
-                  ]}
-                >
-                  <Ionicons name="trash-outline" size={16} color={Brand.red} />
-                  <Text style={[styles.photoActionText, styles.photoRemoveText]}>Hapus</Text>
-                </Pressable>
-              ) : null}
+                );
+              })}
             </View>
           </View>
-          <Text style={styles.hint}>
-            Foto tampak depan/samping membantu montir menyiapkan alat dan memperkirakan kondisi
-            kendaraan sebelum datang.
-          </Text>
 
-          <Text style={styles.sectionLabel}>IDENTITAS</Text>
-          <Field label="Merek" value={brand} onChangeText={setBrand} placeholder="Contoh: Honda" required />
-          <Field label="Model" value={model} onChangeText={setModel} placeholder="Contoh: Vario 125" required />
-          <Field
+          <View style={styles.block}>
+            <AppText variant="label">Foto kendaraan</AppText>
+            <View style={styles.photoCard}>
+              {pickedPhoto ? (
+                <Image
+                  source={{ uri: pickedPhoto.uri }}
+                  style={styles.photoPreview}
+                  contentFit="cover"
+                  transition={150}
+                />
+              ) : (
+                <VehiclePhoto
+                  value={photoPath}
+                  height={168}
+                  emptyLabel="Tambahkan foto kendaraan"
+                />
+              )}
+              <View style={styles.photoActions}>
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel={
+                    pickedPhoto || photoPath ? 'Ganti foto kendaraan' : 'Pilih foto kendaraan'
+                  }
+                  onPress={() => void choosePhoto()}
+                  style={({ pressed }) => [styles.photoAction, pressed && styles.pressed]}
+                >
+                  <Ionicons name="camera-outline" size={17} color={theme.colors.statusInfoFg} />
+                  <AppText variant="label" tone="info">
+                    {pickedPhoto || photoPath ? 'Ganti Foto' : 'Pilih Foto'}
+                  </AppText>
+                </Pressable>
+                {pickedPhoto || photoPath ? (
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel="Hapus foto kendaraan"
+                    onPress={removePhoto}
+                    style={({ pressed }) => [
+                      styles.photoAction,
+                      styles.photoRemove,
+                      pressed && styles.pressed,
+                    ]}
+                  >
+                    <Ionicons name="trash-outline" size={17} color={theme.colors.statusDangerFg} />
+                    <AppText variant="label" tone="danger">
+                      Hapus
+                    </AppText>
+                  </Pressable>
+                ) : null}
+              </View>
+            </View>
+            <AppText variant="caption" tone="muted">
+              Foto tampak depan/samping membantu montir menyiapkan alat sebelum datang.
+            </AppText>
+          </View>
+
+          <AppText variant="overline" tone="muted">
+            IDENTITAS KENDARAAN
+          </AppText>
+
+          <TextField
+            label="Merek"
+            required
+            value={brand}
+            onChangeText={setBrand}
+            placeholder="Contoh: Honda"
+            error={brandError}
+            showError={submitted}
+          />
+          <TextField
+            label="Model"
+            required
+            value={model}
+            onChangeText={setModel}
+            placeholder="Contoh: Vario 125"
+            error={modelError}
+            showError={submitted}
+          />
+          <TextField
             label="Tahun"
             value={year}
             onChangeText={setYear}
             placeholder="Contoh: 2020"
             keyboardType="number-pad"
+            error={yearError}
+            showError={submitted}
           />
-          <Field
+          <TextField
             label="Nomor polisi"
+            required
             value={plate}
             onChangeText={setPlate}
             placeholder="Contoh: B 1234 XYZ"
             autoCapitalize="characters"
-            required
+            error={plateError}
+            showError={submitted}
           />
-          <Field
+          <TextField
             label="Catatan"
             value={notes}
             onChangeText={setNotes}
@@ -306,9 +343,9 @@ export default function VehicleFormScreen() {
           <Button
             label={isEdit ? 'Simpan Perubahan' : 'Simpan Kendaraan'}
             icon="checkmark-circle-outline"
+            size="cta"
             loading={saving}
-            onPress={save}
-            style={styles.submit}
+            onPress={() => void save()}
           />
         </ScrollView>
       </KeyboardAvoidingView>
@@ -316,133 +353,71 @@ export default function VehicleFormScreen() {
   );
 }
 
-function Field({
-  label,
-  required = false,
-  ...inputProps
-}: { label: string; required?: boolean } & ComponentProps<typeof TextInput>) {
-  return (
-    <View>
-      <View style={styles.fieldRow}>
-        <Text style={styles.label}>{label}</Text>
-        {required ? <Text style={styles.required}>WAJIB</Text> : null}
-      </View>
-      <TextInput
-        {...inputProps}
-        placeholderTextColor={Brand.textMuted}
-        selectionColor={Brand.primary}
-        style={styles.input}
-      />
-    </View>
-  );
-}
-
-const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: Brand.background },
+const createStyles = (theme: AppTheme) => ({
+  screen: {
+    flex: 1,
+    backgroundColor: theme.colors.bgCanvas,
+  },
   flex: { flex: 1 },
-  content: { padding: ScreenPadding, paddingBottom: Space.xxxl },
+  content: {
+    padding: theme.spacing.screenPadding,
+    paddingBottom: theme.spacing.xxxl,
+    gap: theme.spacing.lg,
+  },
   preview: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Space.md,
-    backgroundColor: Brand.ink,
-    borderRadius: Radius.lg,
-    padding: Space.md,
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: theme.spacing.md,
   },
   previewIcon: {
-    width: 46,
-    height: 46,
-    borderRadius: Radius.sm,
-    backgroundColor: 'rgba(255,255,255,0.08)',
-    alignItems: 'center',
-    justifyContent: 'center',
+    width: 48,
+    height: 48,
+    borderRadius: theme.radii.sm,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
   },
-  previewCopy: { flex: 1 },
-  previewEyebrow: { ...Type.micro, fontSize: 9, color: Brand.inkMuted },
-  previewTitle: { ...Type.bodyStrong, fontWeight: '700', color: Brand.white, marginTop: 2 },
-  previewPlate: { fontSize: 10.5, color: Brand.inkMuted, marginTop: 1, letterSpacing: 0.4 },
-  label: {
-    ...Type.label,
-    fontSize: 12.5,
-    fontWeight: '700',
-    color: Brand.text,
-    marginTop: Space.lg,
-    marginBottom: Space.sm,
+  previewCopy: {
+    flex: 1,
+    gap: theme.spacing.xxs,
   },
-  fieldRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  required: {
-    ...Type.micro,
-    fontSize: 8.5,
-    color: Brand.primary,
-    backgroundColor: Brand.primarySoft,
-    paddingHorizontal: 5,
-    paddingVertical: 1,
-    borderRadius: 4,
-    overflow: 'hidden',
+  block: {
+    gap: theme.spacing.sm,
   },
-  sectionLabel: {
-    ...Type.micro,
-    color: Brand.textMuted,
-    marginTop: Space.xxl,
-    marginBottom: 2,
+  typeRow: {
+    flexDirection: 'row' as const,
+    gap: theme.spacing.sm,
   },
-  typeRow: { flexDirection: 'row', gap: Space.sm },
   typeChip: {
     flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 6,
-    paddingVertical: 12,
-    borderRadius: Radius.md,
-    borderWidth: 1,
-    borderColor: Brand.border,
-    backgroundColor: Brand.surface,
   },
-  typeChipActive: { backgroundColor: Brand.ink, borderColor: Brand.ink },
-  typeText: { fontSize: 12.5, fontWeight: '600', color: Brand.textSecondary },
-  typeTextActive: { color: Brand.white, fontWeight: '700' },
   photoCard: {
-    borderRadius: Radius.md,
+    borderRadius: theme.radii.md,
+    borderCurve: theme.components.card.borderCurve,
     borderWidth: 1,
-    borderColor: Brand.border,
-    backgroundColor: Brand.surface,
-    overflow: 'hidden',
+    borderColor: theme.colors.borderDefault,
+    backgroundColor: theme.colors.bgSurface,
+    overflow: 'hidden' as const,
   },
-  photoPreview: { width: '100%', height: 168 },
+  photoPreview: {
+    width: '100%' as const,
+    height: 168,
+  },
   photoActions: {
-    flexDirection: 'row',
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: Brand.divider,
+    flexDirection: 'row' as const,
+    borderTopWidth: 1,
+    borderTopColor: theme.colors.borderSubtle,
   },
   photoAction: {
     flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 6,
-    paddingVertical: 12,
-    minHeight: 44,
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+    gap: theme.spacing.xs,
+    minHeight: theme.touchTarget.min,
   },
-  photoRemove: { borderLeftWidth: StyleSheet.hairlineWidth, borderLeftColor: Brand.divider },
-  photoActionText: { fontSize: 12, fontWeight: '700', color: Brand.primary },
-  photoRemoveText: { color: Brand.red },
-  hint: {
-    fontSize: 10.5,
-    color: Brand.textMuted,
-    lineHeight: 15,
-    marginTop: Space.sm,
+  photoRemove: {
+    borderLeftWidth: 1,
+    borderLeftColor: theme.colors.borderSubtle,
   },
-  pressed: { opacity: 0.7 },
-  input: {
-    backgroundColor: Brand.surface,
-    borderWidth: 1,
-    borderColor: Brand.border,
-    borderRadius: Radius.md,
-    paddingHorizontal: Space.md,
-    minHeight: 48,
-    fontSize: 13.5,
-    color: Brand.text,
-  },
-  submit: { marginTop: Space.xxl },
+  pressed: { opacity: 0.78 },
 });

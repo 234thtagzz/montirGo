@@ -1,7 +1,9 @@
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, View } from 'react-native';
 import { Ionicons } from '@/components/ui/icon';
 import { Money } from '@/components/ui/money';
-import { Brand, Radius, Space, Type } from '@/constants/brand';
+import { Surface } from '@/components/ui/surface';
+import { AppText } from '@/components/ui/text';
+import { useAppTheme, useThemedStyles, type AppTheme } from '@/theme';
 
 interface StatTilesProps {
   netToday: number;
@@ -11,70 +13,103 @@ interface StatTilesProps {
 }
 
 /**
- * Ringkasan performa harian. Satu panel dengan hierarki jelas:
- * pendapatan adalah fokus, jumlah job & order menjadi konteks.
+ * Ringkasan performa harian montir di Beranda.
  */
 export function StatTiles({ netToday, jobsToday, activeOrders, onPressEarnings }: StatTilesProps) {
+  const { theme } = useAppTheme();
+  const styles = useThemedStyles(createStyles);
+
   return (
     <Pressable
       accessibilityRole="button"
       accessibilityLabel="Lihat rincian pendapatan"
       onPress={onPressEarnings}
-      style={({ pressed }) => [styles.card, pressed && styles.pressed]}
+      style={({ pressed }) => pressed && styles.pressed}
     >
-      <View style={styles.topRow}>
-        <View style={styles.labelRow}>
-          <View style={styles.dot} />
-          <Text style={styles.label}>Pendapatan bersih hari ini</Text>
+      <Surface variant="default" padding="lg">
+        <View style={styles.topRow}>
+          <View style={styles.labelRow}>
+            <View style={styles.dot} />
+            <AppText variant="label" tone="secondary">
+              Pendapatan bersih hari ini
+            </AppText>
+          </View>
+          <Ionicons name="arrow-forward" size={16} color={theme.colors.textMuted} />
         </View>
-        <Ionicons name="arrow-forward" size={15} color={Brand.textMuted} />
-      </View>
 
-      <Money value={netToday} size="lg" color={Brand.text} style={styles.amount} />
+        <Money
+          value={netToday}
+          size="lg"
+          color={theme.colors.textPrimary}
+          style={styles.amount}
+        />
 
-      <View style={styles.metaRow}>
-        <View style={styles.metaItem}>
-          <Ionicons name="construct-outline" size={14} color={Brand.textMuted} />
-          <Text style={styles.metaValue}>{jobsToday}</Text>
-          <Text style={styles.metaLabel}>job selesai</Text>
+        <View style={styles.metaRow}>
+          <View style={styles.metaItem}>
+            <Ionicons name="construct-outline" size={14} color={theme.colors.textMuted} />
+            <AppText variant="bodyStrong" tabular>
+              {jobsToday}
+            </AppText>
+            <AppText variant="caption" tone="muted">
+              job selesai
+            </AppText>
+          </View>
+          <View style={styles.metaDivider} />
+          <View style={styles.metaItem}>
+            <Ionicons name="pulse-outline" size={14} color={theme.colors.textMuted} />
+            <AppText variant="bodyStrong" tabular>
+              {activeOrders}
+            </AppText>
+            <AppText variant="caption" tone="muted">
+              order aktif
+            </AppText>
+          </View>
         </View>
-        <View style={styles.metaDivider} />
-        <View style={styles.metaItem}>
-          <Ionicons name="pulse-outline" size={14} color={Brand.textMuted} />
-          <Text style={styles.metaValue}>{activeOrders}</Text>
-          <Text style={styles.metaLabel}>order aktif</Text>
-        </View>
-        <Text style={styles.metaFootnote}>Diperbarui otomatis</Text>
-      </View>
+      </Surface>
     </Pressable>
   );
 }
 
-const styles = StyleSheet.create({
-  card: {
-    backgroundColor: Brand.surface,
-    borderRadius: Radius.lg,
-    padding: Space.lg,
-    borderWidth: 1,
-    borderColor: Brand.border,
+const createStyles = (theme: AppTheme) => ({
+  pressed: {
+    opacity: 0.85,
   },
-  pressed: { opacity: 0.85 },
-  topRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  labelRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  dot: { width: 6, height: 6, borderRadius: 3, backgroundColor: Brand.green },
-  label: { ...Type.meta, color: Brand.textSecondary, fontWeight: '600' },
-  amount: { marginTop: Space.sm },
+  topRow: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    justifyContent: 'space-between' as const,
+  },
+  labelRow: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: theme.spacing.xs,
+  },
+  dot: {
+    width: 7,
+    height: 7,
+    borderRadius: 4,
+    backgroundColor: theme.colors.statusSuccessFg,
+  },
+  amount: {
+    marginTop: theme.spacing.sm,
+  },
   metaRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginTop: Space.lg,
-    paddingTop: Space.md,
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    marginTop: theme.spacing.lg,
+    paddingTop: theme.spacing.md,
     borderTopWidth: 1,
-    borderTopColor: Brand.divider,
+    borderTopColor: theme.colors.borderSubtle,
+    gap: theme.spacing.md,
   },
-  metaItem: { flexDirection: 'row', alignItems: 'center', gap: 5 },
-  metaDivider: { width: 1, height: 16, backgroundColor: Brand.divider, marginHorizontal: Space.md },
-  metaValue: { ...Type.bodyStrong, color: Brand.text, fontWeight: '700' },
-  metaLabel: { ...Type.meta, color: Brand.textMuted },
-  metaFootnote: { flex: 1, textAlign: 'right', ...Type.micro, color: Brand.textMuted, fontSize: 9 },
+  metaItem: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: theme.spacing.xs,
+  },
+  metaDivider: {
+    width: 1,
+    height: 16,
+    backgroundColor: theme.colors.borderSubtle,
+  },
 });

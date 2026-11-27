@@ -1,21 +1,17 @@
-// Layar Keluhan: satu komponen dipakai client & montir.
-//   "Ajukan"  -> form laporan ke admin (melekat pada transaksi via ?requestId=)
-//   "Riwayat" -> daftar keluhan milik sendiri beserta status & balasan admin
 import { useCallback, useEffect, useState } from 'react';
 import {
-  Alert,
   KeyboardAvoidingView,
   Platform,
   RefreshControl,
   ScrollView,
-  StyleSheet,
   View,
 } from 'react-native';
 import { useFocusEffect } from 'expo-router';
 import { ScreenHeader } from '@/components/ui/screen-header';
 import { Segmented, type SegmentedOption } from '@/components/ui/segmented';
 import { EmptyState, ErrorState, LoadingState } from '@/components/ui/state';
-import { Brand, ScreenPadding, Space } from '@/constants/brand';
+import { useToast } from '@/components/ui/toast';
+import { useAppTheme, useThemedStyles, type AppTheme } from '@/theme';
 import { ComplaintCard } from '../components/complaint-card';
 import { ComplaintForm } from '../components/complaint-form';
 import { getTransactionSummary, listMyComplaints, submitComplaint } from '../service';
@@ -50,6 +46,10 @@ function validateDraft(draft: ComplaintFormDraft): string | null {
 }
 
 export function ComplaintsScreen({ role, initialRequestId }: ComplaintsScreenProps) {
+  const { theme } = useAppTheme();
+  const styles = useThemedStyles(createStyles);
+  const { showToast } = useToast();
+
   const lockedRequestId = initialRequestId?.trim() || '';
   const [segment, setSegment] = useState<Segment>('ajukan');
   const [draft, setDraft] = useState<ComplaintFormDraft>(() => ({
@@ -64,6 +64,7 @@ export function ComplaintsScreen({ role, initialRequestId }: ComplaintsScreenPro
   const [complaintsLoading, setComplaintsLoading] = useState(true);
   const [complaintsError, setComplaintsError] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [submitted, setSubmitted] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
 
   const loadComplaints = useCallback(async () => {
@@ -78,7 +79,6 @@ export function ComplaintsScreen({ role, initialRequestId }: ComplaintsScreenPro
     }
   }, []);
 
-  // Riwayat selalu segar saat layar dibuka (focus) dan saat pull-to-refresh.
   useFocusEffect(
     useCallback(() => {
       void loadComplaints();
@@ -87,7 +87,6 @@ export function ComplaintsScreen({ role, initialRequestId }: ComplaintsScreenPro
 
   const requestId = draft.requestId.trim();
 
-  // Cari transaksi dengan jeda singkat supaya input manual tidak membanjiri server.
   useEffect(() => {
     if (!requestId) return;
     let alive = true;
@@ -116,9 +115,14 @@ export function ComplaintsScreen({ role, initialRequestId }: ComplaintsScreenPro
     Boolean(requestId) && (activeLookup.status === 'idle' || activeLookup.status === 'loading');
 
   const doSubmit = useCallback(async () => {
+    setSubmitted(true);
     const error = validateDraft(draft);
     if (error) {
-      Alert.alert('Lengkapi dulu', error);
+      showToast({
+        tone: 'warning',
+        title: 'Lengkapi keluhan dulu',
+        message: error,
+      });
       return;
     }
     setSubmitting(true);
@@ -134,15 +138,24 @@ export function ComplaintsScreen({ role, initialRequestId }: ComplaintsScreenPro
         description: '',
         photos: [],
       }));
+      setSubmitted(false);
       setSegment('riwayat');
       void loadComplaints();
-      Alert.alert('Keluhan terkirim', 'Admin akan meninjau laporanmu dan membalas di tab Riwayat.');
+      showToast({
+        tone: 'success',
+        title: 'Keluhan terkirim',
+        message: 'Admin akan meninjau laporanmu dan membalas di tab Riwayat.',
+      });
     } catch (err) {
-      Alert.alert('Gagal mengirim', err instanceof Error ? err.message : 'Coba lagi beberapa saat.');
+      showToast({
+        tone: 'danger',
+        title: 'Gagal mengirim',
+        message: err instanceof Error ? err.message : 'Coba lagi beberapa saat.',
+      });
     } finally {
       setSubmitting(false);
     }
-  }, [draft, loadComplaints]);
+  }, [draft, loadComplaints, showToast]);
 
   return (
     <View style={styles.screen}>
@@ -167,10 +180,10 @@ export function ComplaintsScreen({ role, initialRequestId }: ComplaintsScreenPro
               refreshing={refreshing}
               onRefresh={() => {
                 setRefreshing(true);
-                loadComplaints().finally(() => setRefreshing(false));
+                void loadComplaints().finally(() => setRefreshing(false));
               }}
-              tintColor={Brand.primary}
-              colors={[Brand.primary]}
+              tintColor={theme.colors.actionPrimaryAltBg}
+              colors={[theme.colors.actionPrimaryAltBg]}
             />
           }
         >
@@ -185,8 +198,9 @@ export function ComplaintsScreen({ role, initialRequestId }: ComplaintsScreenPro
             <ComplaintForm
               draft={draft}
               onDraftChange={setDraft}
-              onSubmit={doSubmit}
+              onSubmit={() => void doSubmit()}
               submitting={submitting}
+              submitted={submitted}
               transaction={transaction}
               transactionLocked={Boolean(lockedRequestId)}
               transactionLoading={transactionLoading}
@@ -220,15 +234,21 @@ export function ComplaintsScreen({ role, initialRequestId }: ComplaintsScreenPro
   );
 }
 
-const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: Brand.background },
+const createStyles = (theme: AppTheme) => ({
+  screen: {
+    flex: 1,
+    backgroundColor: theme.colors.bgCanvas,
+  },
   flex: { flex: 1 },
   content: {
-    paddingHorizontal: ScreenPadding,
-    paddingTop: Space.md,
-    paddingBottom: Space.xxxl,
+    paddingHorizontal: theme.spacing.screenPadding,
+    paddingTop: theme.spacing.md,
+    paddingBottom: theme.spacing.xxxl,
   },
-  segmented: { marginBottom: Space.xl },
-  history: { paddingTop: Space.xs },
-  stateBox: { minHeight: 260, justifyContent: 'center' },
+  segmented: { marginBottom: theme.spacing.xl },
+  history: { paddingTop: theme.spacing.xs },
+  stateBox: {
+    minHeight: 260,
+    justifyContent: 'center' as const,
+  },
 });

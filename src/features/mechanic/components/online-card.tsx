@@ -1,99 +1,150 @@
-import { StyleSheet, Switch, Text, View } from 'react-native';
+import { Pressable, Switch, View } from 'react-native';
+import { Badge } from '@/components/ui/badge';
 import { Ionicons } from '@/components/ui/icon';
-import { Brand, CardShadow, Radius, Space, Type } from '@/constants/brand';
+import { Surface } from '@/components/ui/surface';
+import { AppText } from '@/components/ui/text';
+import { useAppTheme, useThemedStyles, type AppTheme } from '@/theme';
 
 interface OnlineCardProps {
   online: boolean;
   onToggle: (value: boolean) => void;
 }
 
-/** Kartu utama dashboard: saklar siap menerima order (PRD §8). */
+/**
+ * Kartu saklar SIAGA / OFFLINE utama di Beranda Montir.
+ * Area tekan besar (>= 48px) untuk penggunaan cepat di lapangan.
+ */
 export function OnlineCard({ online, onToggle }: OnlineCardProps) {
+  const { theme } = useAppTheme();
+  const styles = useThemedStyles(createStyles);
+  const activeTone = online ? theme.tones.success : theme.tones.neutral;
+
   return (
-    <View style={[styles.card, online && styles.cardOnline]}>
-      <View style={styles.top}>
-        <View style={[styles.iconCircle, online && styles.iconCircleOnline]}>
-          <Ionicons
-            name="power"
-            size={20}
-            color={online ? Brand.ink : Brand.textSecondary}
-          />
+    <Surface
+      variant="elevated"
+      padding="lg"
+      style={[
+        styles.card,
+        {
+          borderColor: online
+            ? theme.colors.statusSuccessBorder
+            : theme.colors.borderDefault,
+        },
+      ]}
+    >
+      <Pressable
+        accessibilityRole="switch"
+        accessibilityState={{ checked: online }}
+        accessibilityLabel="Status menerima order"
+        onPress={() => onToggle(!online)}
+        style={({ pressed }) => [styles.top, pressed && styles.pressed]}
+      >
+        <View
+          style={[
+            styles.iconCircle,
+            {
+              backgroundColor: activeTone.bg,
+              borderColor: activeTone.border,
+            },
+          ]}
+        >
+          <Ionicons name="power" size={22} color={activeTone.fg} />
         </View>
 
         <View style={styles.copy}>
-          <Text style={styles.title}>{online ? 'Siap menerima order' : 'Kamu sedang offline'}</Text>
-          <Text style={styles.subtitle}>
+          <View style={styles.titleRow}>
+            <AppText variant="title">
+              {online ? 'SIAGA TERIMA ORDER' : 'OFFLINE'}
+            </AppText>
+            <Badge
+              size="sm"
+              dot={online}
+              tone={online ? 'success' : 'neutral'}
+              label={online ? 'SIAGA' : 'ISTIRAHAT'}
+            />
+          </View>
+          <AppText variant="caption" tone="secondary" style={styles.subtitle}>
             {online
-              ? 'Request client terdekat akan masuk ke tab Request.'
-              : 'Aktifkan agar client bisa menemukanmu.'}
-          </Text>
+              ? 'Request darurat terdekat akan masuk otomatis.'
+              : 'Aktifkan saklar untuk mulai menerima order.'}
+          </AppText>
         </View>
 
         <Switch
           value={online}
           onValueChange={onToggle}
-          trackColor={{ false: '#D7DEE9', true: Brand.ink }}
-          thumbColor={online ? Brand.volt : Brand.white}
-          ios_backgroundColor="#D7DEE9"
-          accessibilityLabel="Status menerima order"
+          trackColor={{
+            false: theme.colors.borderInput,
+            true: theme.colors.statusSuccessFg,
+          }}
+          thumbColor={theme.colors.bgSurface}
+          ios_backgroundColor={theme.colors.borderInput}
+          accessibilityLabel="Saklar siaga montir"
         />
-      </View>
+      </Pressable>
 
       <View style={styles.footer}>
-        <View style={[styles.statusDot, { backgroundColor: online ? Brand.green : Brand.textMuted }]} />
-        <Text style={styles.footerText}>
-          {online ? 'Status online tersinkron ke server MontirGo' : 'Kamu tidak akan menerima request baru'}
-        </Text>
-        {online ? (
-          <View style={styles.liveTag}>
-            <Text style={styles.liveTagText}>LIVE</Text>
-          </View>
-        ) : null}
+        <View style={[styles.statusDot, { backgroundColor: activeTone.fg }]} />
+        <AppText variant="caption" tone="secondary" style={styles.footerText}>
+          {online
+            ? 'Tersinkron ke radar MontirGo secara realtime'
+            : 'Kamu tidak muncul dalam pencarian client'}
+        </AppText>
       </View>
-    </View>
+    </Surface>
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (theme: AppTheme) => ({
   card: {
-    backgroundColor: Brand.surface,
-    borderRadius: Radius.lg,
-    padding: Space.lg,
-    marginTop: -40,
-    borderWidth: 1,
-    borderColor: Brand.border,
-    ...CardShadow,
+    borderWidth: 1.5,
   },
-  cardOnline: { borderColor: '#D7E4F8' },
-  top: { flexDirection: 'row', alignItems: 'center', gap: Space.md },
+  top: {
+    minHeight: theme.touchTarget.cta,
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: theme.spacing.md,
+  },
+  pressed: {
+    opacity: 0.85,
+  },
   iconCircle: {
-    width: 44,
-    height: 44,
-    borderRadius: Radius.md,
-    backgroundColor: Brand.background,
-    alignItems: 'center',
-    justifyContent: 'center',
+    width: theme.touchTarget.min,
+    height: theme.touchTarget.min,
+    borderRadius: theme.radii.md,
+    borderCurve: theme.components.card.borderCurve,
+    borderWidth: 1,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
   },
-  iconCircleOnline: { backgroundColor: Brand.volt },
-  copy: { flex: 1 },
-  title: { ...Type.title, color: Brand.text },
-  subtitle: { ...Type.meta, color: Brand.textSecondary, marginTop: 2, lineHeight: 16 },
+  copy: {
+    flex: 1,
+    gap: theme.spacing.xxs,
+  },
+  titleRow: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    flexWrap: 'wrap' as const,
+    gap: theme.spacing.sm,
+  },
+  subtitle: {
+    lineHeight: 18,
+  },
   footer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: theme.spacing.sm,
     borderTopWidth: 1,
-    borderTopColor: Brand.divider,
-    paddingTop: Space.md,
-    marginTop: Space.md,
+    borderTopColor: theme.colors.borderSubtle,
+    paddingTop: theme.spacing.md,
+    marginTop: theme.spacing.md,
   },
-  statusDot: { width: 6, height: 6, borderRadius: 3 },
-  footerText: { ...Type.meta, color: Brand.textSecondary, flex: 1, lineHeight: 15 },
-  liveTag: {
-    backgroundColor: Brand.greenSoft,
-    borderRadius: Radius.xs,
-    paddingHorizontal: 6,
-    paddingVertical: 2,
+  statusDot: {
+    width: 7,
+    height: 7,
+    borderRadius: 4,
   },
-  liveTagText: { ...Type.micro, color: Brand.green, fontSize: 9, letterSpacing: 0.8 },
+  footerText: {
+    flex: 1,
+  },
 });

@@ -2,7 +2,7 @@
 // `code` disimpan di mechanic_payout_accounts.bank_code; Edge Function memetakan
 // kode bank ke SWIFT/BIC saat mengirim payout ke Xendit.
 
-import { Brand } from '@/constants/brand';
+import type { SemanticTone } from '@/theme';
 
 export interface PayoutChannel {
   code: string;
@@ -54,24 +54,22 @@ export function maskAccountNumber(value: string | undefined | null): string {
 
 export interface WithdrawalStatusMeta {
   label: string;
-  color: string;
-  background: string;
+  tone: SemanticTone;
 }
 
 export const WITHDRAWAL_STATUS_META: Record<string, WithdrawalStatusMeta> = {
-  requested: { label: 'Menunggu', color: Brand.amber, background: Brand.amberSoft },
-  processing: { label: 'Diproses', color: Brand.primary, background: Brand.primarySoft },
-  succeeded: { label: 'Berhasil', color: Brand.green, background: Brand.greenSoft },
-  failed: { label: 'Gagal', color: Brand.red, background: Brand.redSoft },
-  cancelled: { label: 'Dibatalkan', color: Brand.textSecondary, background: Brand.divider },
+  requested: { label: 'Menunggu', tone: 'warning' },
+  processing: { label: 'Diproses', tone: 'info' },
+  succeeded: { label: 'Berhasil', tone: 'success' },
+  failed: { label: 'Gagal', tone: 'danger' },
+  cancelled: { label: 'Dibatalkan', tone: 'neutral' },
 };
 
 export function withdrawalStatusMeta(status: string): WithdrawalStatusMeta {
   return (
     WITHDRAWAL_STATUS_META[status] ?? {
       label: status || 'Tidak diketahui',
-      color: Brand.textSecondary,
-      background: Brand.divider,
+      tone: 'neutral',
     }
   );
 }

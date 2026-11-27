@@ -1,15 +1,18 @@
 import type { ReactNode } from 'react';
-import { StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native';
+import { View, type StyleProp, type ViewStyle } from 'react-native';
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Ionicons, type IconName } from '@/components/ui/icon';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Brand, Radius, Space } from '@/constants/brand';
-import { formatDateTime } from '@/utils/format';
+import { Surface } from '@/components/ui/surface';
+import { AppText } from '@/components/ui/text';
 import {
   getComplexityLabel,
   getRiskMeta,
   type AiAnalysis,
 } from '@/features/service-request/ai';
+import { useAppTheme, useThemedStyles, type AppTheme } from '@/theme';
+import { formatDateTime } from '@/utils/format';
 
 interface AiAnalysisCardProps {
   analysis: AiAnalysis | null;
@@ -23,8 +26,7 @@ interface AiAnalysisCardProps {
 }
 
 /**
- * Kartu hasil analisis AI. Dipakai di detail pesanan client dan detail
- * request/order montir supaya indikasi awal selalu tampil konsisten.
+ * Kartu hasil analisis AI dengan token semantik (adaptif Light & Dark).
  */
 export function AiAnalysisCard({
   analysis,
@@ -36,15 +38,20 @@ export function AiAnalysisCard({
   subtitle = 'Indikasi awal — bukan diagnosis final',
   style,
 }: AiAnalysisCardProps) {
+  const { theme } = useAppTheme();
+  const styles = useThemedStyles(createStyles);
+
   return (
-    <View style={[styles.card, style]}>
+    <Surface variant="default" padding="lg" style={[styles.card, style]}>
       <View style={styles.header}>
         <View style={styles.headerIcon}>
-          <Ionicons name="sparkles" size={16} color={Brand.primary} />
+          <Ionicons name="sparkles" size={17} color={theme.colors.statusInfoFg} />
         </View>
         <View style={styles.headerCopy}>
-          <Text style={styles.title}>{title}</Text>
-          <Text style={styles.subtitle}>{subtitle}</Text>
+          <AppText variant="title">{title}</AppText>
+          <AppText variant="caption" tone="secondary">
+            {subtitle}
+          </AppText>
         </View>
         {analysis ? <RiskChip level={analysis.riskLevel} /> : null}
       </View>
@@ -63,16 +70,16 @@ export function AiAnalysisCard({
           <Ionicons
             name={error ? 'cloud-offline-outline' : 'sparkles-outline'}
             size={18}
-            color={error ? Brand.red : Brand.textSecondary}
+            color={error ? theme.colors.statusDangerFg : theme.colors.textSecondary}
           />
           <View style={styles.noticeCopy}>
-            <Text style={[styles.noticeTitle, error && styles.noticeTitleError]}>
+            <AppText variant="label" tone={error ? 'danger' : 'secondary'}>
               {error ? 'Analisis AI gagal dimuat' : 'Analisis AI belum tersedia'}
-            </Text>
-            <Text style={styles.noticeText}>
+            </AppText>
+            <AppText variant="caption" tone="secondary">
               {error ||
                 'Permintaan tetap bisa diproses. Montir akan melakukan pemeriksaan langsung.'}
-            </Text>
+            </AppText>
             {onRetry ? (
               <Button
                 label={retrying ? 'Menganalisis…' : 'Analisis ulang'}
@@ -87,19 +94,23 @@ export function AiAnalysisCard({
           </View>
         </View>
       )}
-    </View>
+    </Surface>
   );
 }
 
 function AnalysisBody({ analysis }: { analysis: AiAnalysis }) {
+  const { theme } = useAppTheme();
+  const styles = useThemedStyles(createStyles);
   const complexity = getComplexityLabel(analysis.estimatedComplexity);
 
   return (
-    <View>
+    <View style={styles.body}>
       {analysis.symptomsSummary ? (
         <View style={styles.summaryBox}>
-          <Text style={styles.summaryLabel}>Ringkasan indikasi</Text>
-          <Text style={styles.summaryText}>{analysis.symptomsSummary}</Text>
+          <AppText variant="overline" tone="info">
+            Ringkasan indikasi
+          </AppText>
+          <AppText variant="body">{analysis.symptomsSummary}</AppText>
         </View>
       ) : null}
 
@@ -110,14 +121,18 @@ function AnalysisBody({ analysis }: { analysis: AiAnalysis }) {
               <View style={styles.issueDot} />
               <View style={styles.issueCopy}>
                 <View style={styles.issueTitleRow}>
-                  <Text style={styles.issueTitle}>{issue.title}</Text>
+                  <AppText variant="label" style={styles.issueTitle}>
+                    {issue.title}
+                  </AppText>
                   {issue.likelihood ? (
-                    <View style={styles.likelihoodChip}>
-                      <Text style={styles.likelihoodText}>{issue.likelihood}</Text>
-                    </View>
+                    <Badge label={issue.likelihood} tone="neutral" size="sm" />
                   ) : null}
                 </View>
-                {issue.note ? <Text style={styles.issueNote}>{issue.note}</Text> : null}
+                {issue.note ? (
+                  <AppText variant="caption" tone="secondary">
+                    {issue.note}
+                  </AppText>
+                ) : null}
               </View>
             </View>
           ))}
@@ -127,7 +142,12 @@ function AnalysisBody({ analysis }: { analysis: AiAnalysis }) {
       {analysis.recommendedChecks.length > 0 ? (
         <Section icon="checkmark-done-outline" title="Pemeriksaan awal">
           {analysis.recommendedChecks.map((check, index) => (
-            <Bullet key={`${check}-${index}`} icon="checkmark" text={check} color={Brand.primary} />
+            <Bullet
+              key={`${check}-${index}`}
+              icon="checkmark"
+              text={check}
+              color={theme.colors.statusInfoFg}
+            />
           ))}
         </Section>
       ) : null}
@@ -139,7 +159,7 @@ function AnalysisBody({ analysis }: { analysis: AiAnalysis }) {
               key={`${tool}-${index}`}
               icon="ellipse"
               text={tool}
-              color={Brand.textMuted}
+              color={theme.colors.textMuted}
             />
           ))}
         </Section>
@@ -152,7 +172,7 @@ function AnalysisBody({ analysis }: { analysis: AiAnalysis }) {
               key={`${question}-${index}`}
               icon="help"
               text={question}
-              color={Brand.amber}
+              color={theme.colors.statusWarningFg}
             />
           ))}
         </Section>
@@ -161,18 +181,28 @@ function AnalysisBody({ analysis }: { analysis: AiAnalysis }) {
       <View style={styles.footerRow}>
         {complexity ? (
           <View style={styles.complexityChip}>
-            <Ionicons name="speedometer-outline" size={12} color={Brand.textSecondary} />
-            <Text style={styles.complexityText}>Kompleksitas {complexity.toLowerCase()}</Text>
+            <Ionicons name="speedometer-outline" size={13} color={theme.colors.textSecondary} />
+            <AppText variant="caption" tone="secondary">
+              Kompleksitas {complexity.toLowerCase()}
+            </AppText>
           </View>
         ) : null}
         {analysis.createdAt ? (
-          <Text style={styles.time}>{formatDateTime(analysis.createdAt)}</Text>
+          <AppText variant="caption" tone="muted">
+            {formatDateTime(analysis.createdAt)}
+          </AppText>
         ) : null}
       </View>
 
       <View style={styles.disclaimer}>
-        <Ionicons name="information-circle-outline" size={14} color={Brand.amber} />
-        <Text style={styles.disclaimerText}>{analysis.disclaimer}</Text>
+        <Ionicons
+          name="information-circle-outline"
+          size={15}
+          color={theme.colors.statusWarningFg}
+        />
+        <AppText variant="caption" tone="warning" style={styles.flexCopy}>
+          {analysis.disclaimer}
+        </AppText>
       </View>
     </View>
   );
@@ -187,11 +217,15 @@ function Section({
   title: string;
   children: ReactNode;
 }) {
+  const { theme } = useAppTheme();
+  const styles = useThemedStyles(createStyles);
   return (
     <View style={styles.section}>
       <View style={styles.sectionHeader}>
-        <Ionicons name={icon} size={14} color={Brand.textSecondary} />
-        <Text style={styles.sectionTitle}>{title}</Text>
+        <Ionicons name={icon} size={15} color={theme.colors.textSecondary} />
+        <AppText variant="label" tone="secondary">
+          {title}
+        </AppText>
       </View>
       <View style={styles.sectionBody}>{children}</View>
     </View>
@@ -207,130 +241,137 @@ function Bullet({
   text: string;
   color: string;
 }) {
+  const styles = useThemedStyles(createStyles);
   return (
     <View style={styles.bulletRow}>
-      <Ionicons name={icon} size={12} color={color} style={styles.bulletIcon} />
-      <Text style={styles.bulletText}>{text}</Text>
+      <Ionicons name={icon} size={13} color={color} style={styles.bulletIcon} />
+      <AppText variant="caption" style={styles.flexCopy}>
+        {text}
+      </AppText>
     </View>
   );
 }
 
 function RiskChip({ level }: { level: AiAnalysis['riskLevel'] }) {
   const meta = getRiskMeta(level);
-  return (
-    <View style={[styles.riskChip, { backgroundColor: meta.background }]}>
-      <Ionicons name={meta.icon} size={12} color={meta.color} />
-      <Text style={[styles.riskText, { color: meta.color }]}>{meta.shortLabel}</Text>
-    </View>
-  );
+  return <Badge label={meta.shortLabel} tone={meta.tone} icon={meta.icon} size="sm" />;
 }
 
-const styles = StyleSheet.create({
+const createStyles = (theme: AppTheme) => ({
   card: {
-    backgroundColor: Brand.surface,
-    borderRadius: Radius.lg,
-    borderWidth: 1,
-    borderColor: Brand.primaryBorder,
-    padding: Space.lg,
+    borderColor: theme.colors.statusInfoBorder,
+    gap: theme.spacing.md,
   },
-  header: { flexDirection: 'row', alignItems: 'center', gap: Space.md },
+  header: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: theme.spacing.md,
+  },
   headerIcon: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
-    backgroundColor: Brand.primarySoft,
-    alignItems: 'center',
-    justifyContent: 'center',
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: theme.colors.statusInfoBg,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
   },
-  headerCopy: { flex: 1 },
-  title: { fontSize: 14, fontWeight: '700', color: Brand.text },
-  subtitle: { fontSize: 11, color: Brand.textSecondary, marginTop: 2 },
-  riskChip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: Radius.pill,
+  headerCopy: {
+    flex: 1,
+    gap: theme.spacing.xxs,
   },
-  riskText: { fontSize: 10.5, fontWeight: '700' },
-  loading: { marginTop: Space.lg, gap: Space.sm },
-  loadingBlock: { marginTop: Space.sm },
+  loading: {
+    gap: theme.spacing.sm,
+  },
+  loadingBlock: {
+    marginTop: theme.spacing.sm,
+  },
+  body: {
+    gap: theme.spacing.md,
+  },
   summaryBox: {
-    marginTop: Space.lg,
-    backgroundColor: Brand.primarySoft,
-    borderRadius: Radius.md,
-    padding: Space.md,
+    backgroundColor: theme.colors.statusInfoBg,
+    borderRadius: theme.radii.md,
+    padding: theme.spacing.md,
+    gap: theme.spacing.xxs,
   },
-  summaryLabel: { fontSize: 10.5, fontWeight: '700', color: Brand.primary },
-  summaryText: { fontSize: 12.5, color: Brand.text, lineHeight: 18, marginTop: 4 },
-  section: { marginTop: Space.lg },
-  sectionHeader: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  sectionTitle: { fontSize: 12, fontWeight: '700', color: Brand.textSecondary },
-  sectionBody: { marginTop: Space.sm, gap: 6 },
-  issueRow: { flexDirection: 'row', gap: Space.sm },
+  section: {
+    gap: theme.spacing.xs,
+  },
+  sectionHeader: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: theme.spacing.xs,
+  },
+  sectionBody: {
+    gap: theme.spacing.xs,
+  },
+  issueRow: {
+    flexDirection: 'row' as const,
+    gap: theme.spacing.sm,
+  },
   issueDot: {
     width: 6,
     height: 6,
     borderRadius: 3,
-    backgroundColor: Brand.primary,
-    marginTop: 6,
+    backgroundColor: theme.colors.actionPrimaryAltBg,
+    marginTop: 7,
   },
-  issueCopy: { flex: 1 },
-  issueTitleRow: { flexDirection: 'row', alignItems: 'center', gap: Space.sm, flexWrap: 'wrap' },
-  issueTitle: { fontSize: 12.5, fontWeight: '600', color: Brand.text, flexShrink: 1 },
-  likelihoodChip: {
-    paddingHorizontal: 6,
-    paddingVertical: 1,
-    borderRadius: Radius.pill,
-    backgroundColor: Brand.divider,
+  issueCopy: {
+    flex: 1,
+    gap: theme.spacing.xxs,
   },
-  likelihoodText: { fontSize: 9.5, fontWeight: '700', color: Brand.textSecondary },
-  issueNote: { fontSize: 11.5, color: Brand.textSecondary, lineHeight: 16, marginTop: 2 },
-  bulletRow: { flexDirection: 'row', gap: 6, alignItems: 'flex-start' },
+  issueTitleRow: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: theme.spacing.sm,
+    flexWrap: 'wrap' as const,
+  },
+  issueTitle: { flexShrink: 1 },
+  bulletRow: {
+    flexDirection: 'row' as const,
+    gap: theme.spacing.xs,
+    alignItems: 'flex-start' as const,
+  },
   bulletIcon: { marginTop: 3 },
-  bulletText: { flex: 1, fontSize: 12, color: Brand.text, lineHeight: 17 },
+  flexCopy: { flex: 1 },
   footerRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginTop: Space.lg,
-    gap: Space.sm,
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    justifyContent: 'space-between' as const,
+    gap: theme.spacing.sm,
   },
   complexityChip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    backgroundColor: Brand.divider,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: Radius.pill,
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: theme.spacing.xs,
+    backgroundColor: theme.colors.bgSurfaceSubtle,
+    paddingHorizontal: theme.spacing.sm,
+    paddingVertical: theme.spacing.xxs,
+    borderRadius: theme.radii.pill,
   },
-  complexityText: { fontSize: 10, fontWeight: '600', color: Brand.textSecondary },
-  time: { fontSize: 10, color: Brand.textMuted },
   disclaimer: {
-    flexDirection: 'row',
-    gap: 6,
-    alignItems: 'flex-start',
-    backgroundColor: Brand.amberSoft,
-    borderRadius: Radius.md,
-    padding: Space.md,
-    marginTop: Space.lg,
+    flexDirection: 'row' as const,
+    gap: theme.spacing.xs,
+    alignItems: 'flex-start' as const,
+    backgroundColor: theme.colors.statusWarningBg,
+    borderRadius: theme.radii.md,
+    padding: theme.spacing.md,
   },
-  disclaimerText: { flex: 1, fontSize: 10.5, color: Brand.amber, lineHeight: 15 },
   notice: {
-    flexDirection: 'row',
-    gap: Space.sm,
-    alignItems: 'flex-start',
-    borderRadius: Radius.md,
-    padding: Space.md,
-    marginTop: Space.lg,
+    flexDirection: 'row' as const,
+    gap: theme.spacing.sm,
+    alignItems: 'flex-start' as const,
+    borderRadius: theme.radii.md,
+    padding: theme.spacing.md,
   },
-  noticeEmpty: { backgroundColor: Brand.background },
-  noticeError: { backgroundColor: Brand.redSoft },
-  noticeCopy: { flex: 1 },
-  noticeTitle: { fontSize: 12, fontWeight: '700', color: Brand.textSecondary },
-  noticeTitleError: { color: Brand.red },
-  noticeText: { fontSize: 11.5, color: Brand.textSecondary, lineHeight: 16, marginTop: 2 },
-  retry: { marginTop: Space.sm, alignSelf: 'flex-start' },
+  noticeEmpty: { backgroundColor: theme.colors.bgSurfaceSubtle },
+  noticeError: { backgroundColor: theme.colors.statusDangerBg },
+  noticeCopy: {
+    flex: 1,
+    gap: theme.spacing.xxs,
+  },
+  retry: {
+    marginTop: theme.spacing.sm,
+    alignSelf: 'flex-start' as const,
+  },
 });

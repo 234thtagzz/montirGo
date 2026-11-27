@@ -1,76 +1,121 @@
-import { Button } from "@/components/ui/button";
-import { Ionicons } from "@/components/ui/icon";
-import { Brand, CardShadow, Radius, Space, Type } from "@/constants/brand";
-import { StyleSheet, Text, View } from "react-native";
+import { View } from 'react-native';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Ionicons } from '@/components/ui/icon';
+import { Surface } from '@/components/ui/surface';
+import { AppText } from '@/components/ui/text';
+import { useAppTheme, useThemedStyles, type AppTheme } from '@/theme';
+import { formatIDR } from '@/utils/format';
 
 interface HeroCardProps {
+  startingCalloutFee: number;
   onPressRequest: () => void;
   onPressOrders: () => void;
 }
 
 /**
- * Kartu aksi utama yang menumpuk di atas header. Fokusnya satu: mulai
- * permintaan; "Pesanan" disediakan sebagai jalur sekunder.
+ * Kartu aksi utama Beranda Client: 1 CTA darurat 56px + transparansi Biaya Panggil Pasti.
  */
-export function HeroCard({ onPressRequest, onPressOrders }: HeroCardProps) {
+export function HeroCard({
+  startingCalloutFee,
+  onPressRequest,
+  onPressOrders,
+}: HeroCardProps) {
+  const { theme } = useAppTheme();
+  const styles = useThemedStyles(createStyles);
+
   return (
-    <View style={styles.card}>
+    <Surface variant="default" padding="lg" style={styles.card}>
       <View style={styles.top}>
         <View style={styles.iconTile}>
-          <Ionicons name="construct-outline" size={22} color={Brand.volt} />
+          <Ionicons name="flash" size={22} color={theme.colors.statusEmergencyFg} />
         </View>
         <View style={styles.copy}>
-          <Text style={styles.kicker}>BANTUAN DARURAT</Text>
-          <Text style={styles.title}>Kendaraan bermasalah?</Text>
-          <Text style={styles.subtitle}>
-            Montir terdekat datang ke lokasimu.
-          </Text>
+          <Badge label="SIAP DIPANGGIL" tone="emergency" size="sm" />
+          <AppText variant="h2" style={styles.title}>
+            Kendaraan bermasalah?
+          </AppText>
+          <AppText variant="body" tone="secondary">
+            Montir terdekat datang langsung ke lokasimu dalam hitungan menit.
+          </AppText>
         </View>
+      </View>
+
+      <View style={styles.feeStrip}>
+        <Ionicons name="shield-checkmark-outline" size={16} color={theme.colors.statusInfoFg} />
+        <AppText variant="caption" tone="info" style={[styles.feeText, theme.tabularNums]}>
+          Biaya panggil pasti mulai {formatIDR(startingCalloutFee)} · estimasi perbaikan disetujui dulu di lokasi
+        </AppText>
       </View>
 
       <View style={styles.actions}>
         <Button
-          label="Cari Montir"
+          label="Panggil Montir Sekarang"
           icon="flash-outline"
+          variant="emergency"
+          size="cta"
           onPress={onPressRequest}
           style={styles.primary}
         />
         <Button
-          label="Pesanan"
+          label="Riwayat Pesanan"
           icon="receipt-outline"
           variant="secondary"
+          size="md"
           onPress={onPressOrders}
-          style={styles.secondary}
         />
       </View>
-    </View>
+    </Surface>
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (theme: AppTheme) => ({
   card: {
-    backgroundColor: Brand.surface,
-    borderRadius: Radius.lg,
-    padding: Space.lg,
-    marginTop: -40,
-    borderWidth: 1,
-    borderColor: Brand.border,
-    ...CardShadow,
+    marginTop: theme.spacing.lg,
+    gap: theme.spacing.md,
   },
-  top: { flexDirection: "row", alignItems: "center", gap: Space.md },
+  top: {
+    flexDirection: 'row' as const,
+    alignItems: 'flex-start' as const,
+    gap: theme.spacing.md,
+  },
   iconTile: {
-    width: 44,
-    height: 44,
-    borderRadius: Radius.md,
-    backgroundColor: Brand.ink,
-    alignItems: "center",
-    justifyContent: "center",
+    width: 48,
+    height: 48,
+    borderRadius: theme.radii.md,
+    borderCurve: theme.components.card.borderCurve,
+    backgroundColor: theme.colors.statusEmergencyBg,
+    borderWidth: 1,
+    borderColor: theme.colors.statusEmergencyBorder,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
   },
-  copy: { flex: 1 },
-  kicker: { ...Type.micro, color: Brand.primary, letterSpacing: 0.9 },
-  title: { ...Type.title, color: Brand.text, marginTop: 2 },
-  subtitle: { ...Type.meta, color: Brand.textSecondary, marginTop: 2 },
-  actions: { flexDirection: "row", marginTop: Space.lg, gap: 7, fontSize: 9 },
-  primary: { flex: 1.6 },
-  secondary: { flex: 1 },
+  copy: {
+    flex: 1,
+    gap: theme.spacing.xs,
+  },
+  title: {
+    marginTop: theme.spacing.xxs,
+  },
+  feeStrip: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: theme.spacing.sm,
+    backgroundColor: theme.colors.statusInfoBg,
+    borderWidth: 1,
+    borderColor: theme.colors.statusInfoBorder,
+    borderRadius: theme.radii.sm,
+    borderCurve: theme.components.card.borderCurve,
+    paddingHorizontal: theme.spacing.md,
+    paddingVertical: theme.spacing.sm,
+  },
+  feeText: {
+    flex: 1,
+  },
+  actions: {
+    gap: theme.spacing.sm,
+  },
+  primary: {
+    width: '100%' as const,
+  },
 });

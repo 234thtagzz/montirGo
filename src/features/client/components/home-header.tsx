@@ -1,13 +1,16 @@
-import { LinearGradient } from 'expo-linear-gradient';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Avatar } from '@/components/ui/avatar';
 import { Ionicons } from '@/components/ui/icon';
-import { Brand, Gradient, Radius, ScreenPadding, Space, Type } from '@/constants/brand';
+import { AppText } from '@/components/ui/text';
+import { useAppTheme, useThemedStyles, type AppTheme } from '@/theme';
 
 interface HomeHeaderProps {
   name: string;
   unreadCount: number;
+  gpsLabel: string;
+  gpsActive: boolean;
+  onPressLocation: () => void;
   onPressProfile: () => void;
   onPressNotifications: () => void;
   onPressSearch: () => void;
@@ -28,26 +31,27 @@ function firstName(name: string): string {
 }
 
 /**
- * Header Beranda client — struktur yang sama dengan DashboardHeader montir:
- * eyebrow brand, sapaan + nama, lonceng berbadge, lalu chip status.
- * Kolom pencarian tetap ada karena merupakan fitur utama sisi client.
+ * Header Beranda client berkonsep Calm Utility (adaptif Light & Dark):
+ * profil, strip status GPS pre-warmed, lonceng notifikasi, dan pintasan cari layanan.
  */
 export function HomeHeader({
   name,
   unreadCount,
+  gpsLabel,
+  gpsActive,
+  onPressLocation,
   onPressProfile,
   onPressNotifications,
   onPressSearch,
 }: HomeHeaderProps) {
+  const { theme } = useAppTheme();
+  const styles = useThemedStyles(createStyles);
   const insets = useSafeAreaInsets();
 
+  const gpsTone = gpsActive ? theme.tones.success : theme.tones.neutral;
+
   return (
-    <LinearGradient
-      colors={Gradient.header}
-      start={{ x: 0, y: 0 }}
-      end={{ x: 1, y: 0.9 }}
-      style={[styles.header, { paddingTop: insets.top + Space.md }]}
-    >
+    <View style={[styles.header, { paddingTop: insets.top + theme.spacing.md }]}>
       <View style={styles.topRow}>
         <Pressable
           accessibilityRole="button"
@@ -55,14 +59,14 @@ export function HomeHeader({
           onPress={onPressProfile}
           style={({ pressed }) => [styles.userRow, pressed && styles.pressed]}
         >
-          <View style={styles.avatarRing}>
-            <Avatar name={name} size={42} />
-          </View>
+          <Avatar name={name} size={44} />
           <View style={styles.userText}>
-            <Text style={styles.eyebrow}>CLIENT MONTIRGO</Text>
-            <Text style={styles.greeting} numberOfLines={1}>
+            <AppText variant="overline" tone="muted">
+              CLIENT MONTIRGO
+            </AppText>
+            <AppText variant="h2" numberOfLines={1}>
               {greeting()}, {firstName(name)}
-            </Text>
+            </AppText>
           </View>
         </Pressable>
 
@@ -75,122 +79,137 @@ export function HomeHeader({
           onPress={onPressNotifications}
           style={({ pressed }) => [styles.bell, pressed && styles.pressed]}
         >
-          <Ionicons name="notifications-outline" size={20} color={Brand.white} />
+          <Ionicons name="notifications-outline" size={21} color={theme.colors.textPrimary} />
           {unreadCount > 0 ? (
             <View style={styles.bellBadge}>
-              <Text style={styles.bellBadgeText}>{unreadCount > 9 ? '9+' : unreadCount}</Text>
+              <AppText style={styles.bellBadgeText}>
+                {unreadCount > 9 ? '9+' : unreadCount}
+              </AppText>
             </View>
           ) : null}
         </Pressable>
       </View>
 
-      <View style={styles.metaRow}>
-        <View style={styles.roleChip}>
-          <Ionicons name="person-outline" size={13} color={Brand.volt} />
-          <Text style={styles.roleText}>Akun client</Text>
-        </View>
-        <View style={styles.modeChip}>
-          <View style={styles.modeDot} />
-          <Text style={styles.modeText}>Siap memesan</Text>
-        </View>
-      </View>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={`Status GPS: ${gpsLabel}`}
+        onPress={onPressLocation}
+        style={({ pressed }) => [
+          styles.gpsStrip,
+          { backgroundColor: gpsTone.bg, borderColor: gpsTone.border },
+          pressed && styles.pressed,
+        ]}
+      >
+        <Ionicons
+          name={gpsActive ? 'location' : 'locate-outline'}
+          size={15}
+          color={gpsTone.fg}
+        />
+        <AppText variant="caption" numberOfLines={1} style={[styles.gpsText, { color: gpsTone.fg }]}>
+          {gpsLabel}
+        </AppText>
+        <Ionicons name="chevron-forward" size={14} color={gpsTone.fg} />
+      </Pressable>
 
       <Pressable
         accessibilityRole="search"
         accessibilityLabel="Cari layanan montir"
         onPress={onPressSearch}
-        style={({ pressed }) => [styles.search, pressed && styles.searchPressed]}
+        style={({ pressed }) => [styles.search, pressed && styles.pressed]}
       >
-        <Ionicons name="search-outline" size={18} color={Brand.inkMuted} />
-        <Text style={styles.searchText}>Cari layanan montir…</Text>
-        <Ionicons name="chevron-forward" size={16} color={Brand.inkMuted} />
+        <Ionicons name="search-outline" size={18} color={theme.colors.textMuted} />
+        <AppText variant="body" tone="muted" style={styles.searchText}>
+          Cari masalah kendaraan atau layanan…
+        </AppText>
+        <Ionicons name="chevron-forward" size={16} color={theme.colors.textMuted} />
       </Pressable>
-    </LinearGradient>
+    </View>
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (theme: AppTheme) => ({
   header: {
-    paddingHorizontal: ScreenPadding,
-    paddingBottom: 58,
-    borderBottomLeftRadius: Radius.xxl,
-    borderBottomRightRadius: Radius.xxl,
+    backgroundColor: theme.colors.bgSurface,
+    paddingHorizontal: theme.spacing.screenPadding,
+    paddingBottom: theme.spacing.lg,
+    borderBottomWidth: 1,
+    borderBottomColor: theme.colors.borderSubtle,
+    gap: theme.spacing.md,
   },
   topRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: Space.sm,
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    justifyContent: 'space-between' as const,
+    gap: theme.spacing.sm,
   },
-  userRow: { flexDirection: 'row', alignItems: 'center', gap: 12, flex: 1 },
-  avatarRing: {
-    padding: 2,
-    borderRadius: Radius.pill,
-    borderWidth: 1.5,
-    borderColor: 'rgba(255,255,255,0.28)',
+  userRow: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: theme.spacing.md,
+    flex: 1,
+    minHeight: theme.touchTarget.min,
   },
-  userText: { flex: 1 },
-  eyebrow: { ...Type.micro, color: Brand.inkMuted, letterSpacing: 1.2 },
-  greeting: { ...Type.title, color: Brand.white, marginTop: 3 },
+  userText: {
+    flex: 1,
+    gap: theme.spacing.xxs,
+  },
   bell: {
-    width: 42,
-    height: 42,
-    borderRadius: Radius.md,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: 'rgba(255,255,255,0.08)',
+    width: theme.touchTarget.min,
+    height: theme.touchTarget.min,
+    borderRadius: theme.radii.md,
+    borderCurve: theme.components.card.borderCurve,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+    backgroundColor: theme.colors.bgSurfaceSubtle,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.12)',
+    borderColor: theme.colors.borderSubtle,
   },
-  pressed: { opacity: 0.7 },
   bellBadge: {
-    position: 'absolute',
-    top: 5,
-    right: 5,
-    minWidth: 16,
-    height: 16,
+    position: 'absolute' as const,
+    top: 4,
+    right: 4,
+    minWidth: 18,
+    height: 18,
     paddingHorizontal: 4,
-    borderRadius: 8,
-    backgroundColor: Brand.red,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 1.5,
-    borderColor: Brand.ink,
+    borderRadius: theme.radii.pill,
+    backgroundColor: theme.colors.statusDangerFg,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
   },
-  bellBadgeText: { color: Brand.white, fontSize: 8.5, fontWeight: '800' },
-  metaRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Space.sm,
-    marginTop: Space.xl,
+  bellBadgeText: {
+    fontFamily: theme.fontFamily.bold,
+    fontSize: 11,
+    lineHeight: 13,
+    color: theme.colors.textInverse,
   },
-  roleChip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 5,
-    paddingHorizontal: 9,
-    paddingVertical: 5,
-    borderRadius: Radius.pill,
-    backgroundColor: 'rgba(201,241,88,0.1)',
+  gpsStrip: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: theme.spacing.xs,
+    minHeight: 40,
+    paddingHorizontal: theme.spacing.md,
+    borderRadius: theme.radii.sm,
+    borderCurve: theme.components.card.borderCurve,
     borderWidth: 1,
-    borderColor: 'rgba(201,241,88,0.2)',
   },
-  roleText: { ...Type.micro, color: Brand.inkText, fontWeight: '600', letterSpacing: 0.1 },
-  modeChip: { flexDirection: 'row', alignItems: 'center', gap: 5 },
-  modeDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: Brand.volt },
-  modeText: { ...Type.meta, color: Brand.inkMuted },
+  gpsText: {
+    flex: 1,
+    fontFamily: theme.fontFamily.medium,
+  },
   search: {
-    height: 46,
-    borderRadius: Radius.md,
-    backgroundColor: 'rgba(255,255,255,0.08)',
+    minHeight: theme.touchTarget.min,
+    borderRadius: theme.radii.md,
+    borderCurve: theme.components.input.borderCurve,
+    backgroundColor: theme.colors.bgCanvas,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.12)',
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: Space.md,
-    gap: Space.sm,
-    marginTop: Space.lg,
+    borderColor: theme.colors.borderDefault,
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    paddingHorizontal: theme.spacing.md,
+    gap: theme.spacing.sm,
   },
-  searchPressed: { opacity: 0.92 },
-  searchText: { flex: 1, color: Brand.inkMuted, fontSize: 13.5 },
+  searchText: {
+    flex: 1,
+  },
+  pressed: { opacity: 0.78 },
 });

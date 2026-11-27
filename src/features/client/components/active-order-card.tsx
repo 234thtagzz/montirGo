@@ -1,11 +1,18 @@
-import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Pressable, View } from 'react-native';
 import { Avatar } from '@/components/ui/avatar';
+import { Badge } from '@/components/ui/badge';
 import { Ionicons } from '@/components/ui/icon';
-import { Brand, Radius, Space, Type } from '@/constants/brand';
-import { formatDateTime } from '@/utils/format';
+import { AppText } from '@/components/ui/text';
 import type { ClientOrder } from '@/features/client/types';
+import {
+  getProgressLabel,
+  getQuoteStatusMeta,
+  getStatusMeta,
+  TOTAL_STEPS,
+} from '@/features/service-request/status';
 import { formatVehicleLabel } from '@/features/vehicles/constants';
-import { getProgressLabel, getStatusMeta, TOTAL_STEPS } from '@/features/service-request/status';
+import { useAppTheme, useThemedStyles, type AppTheme } from '@/theme';
+import { formatDateTime } from '@/utils/format';
 
 interface ActiveOrderCardProps {
   order: ClientOrder;
@@ -13,36 +20,66 @@ interface ActiveOrderCardProps {
 }
 
 /**
- * Kartu pesanan aktif — memakai tata bahasa "job ticket" yang sama dengan
- * OrderCard montir: rail status di kiri, chip status, isi ringkas, dan aksi
- * di kanan bawah. Progres hanya muncul saat order benar-benar berjalan.
+ * Kartu pesanan aktif menonjol di bagian atas Beranda Client.
  */
 export function ActiveOrderCard({ order, onPress }: ActiveOrderCardProps) {
+  const { theme } = useAppTheme();
+  const styles = useThemedStyles(createStyles);
+
   const meta = getStatusMeta(order.status);
+  const quoteMeta =
+    order.status === 'arrived' ? getQuoteStatusMeta(order.quote_status) : null;
   const hasMechanic = Boolean(order.mechanic_id);
   const pendingConfirmation = order.status === 'mechanic_assigned' && hasMechanic;
+  const pendingQuoteApproval =
+    order.status === 'arrived' && order.quote_status === 'pending_approval';
   const vehicle = formatVehicleLabel(
     order.vehicle_type,
     order.vehicle_brand,
     order.vehicle_model,
   );
-  const accent = pendingConfirmation ? Brand.amber : meta.color;
+  const accentColor = pendingConfirmation || pendingQuoteApproval
+    ? theme.colors.statusWarningFg
+    : theme.tones[meta.tone].fg;
+
+  const actionLabel = pendingConfirmation
+    ? 'Konfirmasi'
+    : pendingQuoteApproval
+      ? 'Tinjau Estimasi'
+      : order.status === 'on_the_way'
+        ? 'Lacak Peta'
+        : 'Detail';
 
   return (
     <Pressable
       accessibilityRole="button"
       accessibilityLabel={`Pesanan aktif: ${getProgressLabel(order.status)}`}
       onPress={onPress}
-      style={({ pressed }) => [styles.card, { borderLeftColor: accent }, pressed && styles.pressed]}
+      style={({ pressed }) => [
+        styles.card,
+        theme.elevation.card,
+        { borderLeftColor: accentColor },
+        pressed && styles.pressed,
+      ]}
     >
       <View style={styles.inner}>
         <View style={styles.top}>
-          <View style={[styles.chip, { backgroundColor: meta.background }]}>
-            <Ionicons name={meta.icon} size={12} color={meta.color} />
-            <Text style={[styles.chipText, { color: meta.color }]}>{meta.shortLabel}</Text>
-          </View>
-          <Text style={styles.time}>{formatDateTime(order.created_at)}</Text>
+          <Badge label={meta.shortLabel} tone={meta.tone} icon={meta.icon} size="sm" />
+          <AppText variant="caption" tone="muted" style={theme.tabularNums}>
+            {formatDateTime(order.created_at)}
+          </AppText>
         </View>
+
+        {quoteMeta ? (
+          <View style={styles.quoteBadgeRow}>
+            <Badge
+              label={quoteMeta.shortLabel}
+              tone={quoteMeta.tone}
+              icon={quoteMeta.icon}
+              size="sm"
+            />
+          </View>
+        ) : null}
 
         {meta.step > 0 ? (
           <View style={styles.progress}>
@@ -51,18 +88,22 @@ export function ActiveOrderCard({ order, onPress }: ActiveOrderCardProps) {
                 key={index}
                 style={[
                   styles.segment,
-                  index < meta.step && { backgroundColor: accent },
+                  index < meta.step && { backgroundColor: accentColor },
                 ]}
               />
             ))}
           </View>
         ) : null}
 
-        <Text style={styles.title}>{getProgressLabel(order.status)}</Text>
-        <Text style={styles.issue} numberOfLines={1}>
+        <AppText variant="title" style={styles.title}>
+          {pendingQuoteApproval
+            ? 'Estimasi biaya menunggu persetujuanmu'
+            : getProgressLabel(order.status)}
+        </AppText>
+        <AppText variant="body" tone="secondary" numberOfLines={1}>
           {vehicle ? `${vehicle} · ` : ''}
           {order.issue_description}
-        </Text>
+        </AppText>
 
         <View style={styles.footer}>
           <View style={styles.mechanicRow}>
@@ -71,37 +112,41 @@ export function ActiveOrderCard({ order, onPress }: ActiveOrderCardProps) {
                 <Avatar
                   name={order.mechanic_name ?? 'Montir'}
                   uri={order.mechanic_avatar}
-                  size={28}
+                  size={32}
                 />
                 <View style={styles.mechanicText}>
-                  <Text style={styles.mechanicName} numberOfLines={1}>
+                  <AppText variant="label" numberOfLines={1}>
                     {order.mechanic_name ?? 'Montir MontirGo'}
-                  </Text>
-                  <Text
-                    style={[
-                      styles.mechanicRole,
-                      pendingConfirmation && styles.mechanicRolePending,
-                    ]}
+                  </AppText>
+                  <AppText
+                    variant="caption"
+                    tone={pendingConfirmation ? 'warning' : 'muted'}
                   >
-                    {pendingConfirmation ? 'Menunggu konfirmasimu' : 'Montir menuju lokasi'}
-                  </Text>
+                    {pendingConfirmation
+                      ? 'Menunggu konfirmasimu'
+                      : order.status === 'arrived'
+                        ? 'Sedang di lokasi'
+                        : 'Montir ditugaskan'}
+                  </AppText>
                 </View>
               </>
             ) : (
               <>
                 <View style={styles.searching}>
-                  <ActivityIndicator size="small" color={Brand.primary} />
+                  <ActivityIndicator size="small" color={theme.colors.actionPrimaryAltBg} />
                 </View>
-                <Text style={styles.mechanicName}>Mencari montir terdekat…</Text>
+                <AppText variant="label" tone="secondary">
+                  Mencari montir terdekat…
+                </AppText>
               </>
             )}
           </View>
 
-          <View style={styles.action}>
-            <Text style={styles.actionText}>
-              {pendingConfirmation ? 'Konfirmasi' : 'Lacak'}
-            </Text>
-            <Ionicons name="arrow-forward" size={13} color={Brand.volt} />
+          <View style={styles.actionPill}>
+            <AppText variant="label" tone="inverse">
+              {actionLabel}
+            </AppText>
+            <Ionicons name="arrow-forward" size={14} color={theme.colors.actionPrimaryFg} />
           </View>
         </View>
       </View>
@@ -109,63 +154,78 @@ export function ActiveOrderCard({ order, onPress }: ActiveOrderCardProps) {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (theme: AppTheme) => ({
   card: {
-    backgroundColor: Brand.surface,
-    borderRadius: Radius.lg,
+    backgroundColor: theme.colors.bgSurface,
+    borderRadius: theme.radii.lg,
+    borderCurve: theme.components.card.borderCurve,
     borderWidth: 1,
-    borderColor: Brand.border,
-    borderLeftWidth: 3,
-    overflow: 'hidden',
+    borderColor: theme.colors.borderDefault,
+    borderLeftWidth: 4,
+    overflow: 'hidden' as const,
   },
-  pressed: { opacity: 0.85 },
-  inner: { padding: Space.lg },
-  top: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  chip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: Radius.pill,
+  pressed: { opacity: 0.82 },
+  inner: {
+    padding: theme.spacing.lg,
+    gap: theme.spacing.xs,
   },
-  chipText: { ...Type.micro, fontSize: 9.5, letterSpacing: 0.2 },
-  time: { ...Type.meta, color: Brand.textMuted },
-  progress: { flexDirection: 'row', gap: 4, marginTop: Space.md },
-  segment: { flex: 1, height: 3, borderRadius: 2, backgroundColor: Brand.divider },
-  title: { ...Type.bodyStrong, color: Brand.text, marginTop: Space.md, lineHeight: 20 },
-  issue: { fontSize: 12, color: Brand.textSecondary, marginTop: 2 },
+  top: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    justifyContent: 'space-between' as const,
+    gap: theme.spacing.sm,
+  },
+  quoteBadgeRow: {
+    marginTop: theme.spacing.xxs,
+  },
+  progress: {
+    flexDirection: 'row' as const,
+    gap: theme.spacing.xs,
+    marginTop: theme.spacing.sm,
+  },
+  segment: {
+    flex: 1,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: theme.colors.borderSubtle,
+  },
+  title: {
+    marginTop: theme.spacing.xs,
+  },
   footer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginTop: Space.md,
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    justifyContent: 'space-between' as const,
+    marginTop: theme.spacing.sm,
     borderTopWidth: 1,
-    borderTopColor: Brand.divider,
-    paddingTop: Space.md,
-    gap: Space.md,
+    borderTopColor: theme.colors.borderSubtle,
+    paddingTop: theme.spacing.md,
+    gap: theme.spacing.md,
   },
-  mechanicRow: { flexDirection: 'row', alignItems: 'center', gap: Space.sm, flex: 1 },
-  mechanicText: { flex: 1 },
-  mechanicName: { fontSize: 12.5, fontWeight: '600', color: Brand.text },
-  mechanicRole: { fontSize: 10.5, color: Brand.textMuted, marginTop: 1 },
-  mechanicRolePending: { color: Brand.amber, fontWeight: '700' },
+  mechanicRow: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: theme.spacing.sm,
+    flex: 1,
+  },
+  mechanicText: {
+    flex: 1,
+  },
   searching: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    backgroundColor: Brand.primarySoft,
-    alignItems: 'center',
-    justifyContent: 'center',
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: theme.colors.statusInfoBg,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
   },
-  action: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 5,
-    paddingHorizontal: Space.md,
-    minHeight: 34,
-    borderRadius: Radius.pill,
-    backgroundColor: Brand.ink,
+  actionPill: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: theme.spacing.xs,
+    paddingHorizontal: theme.spacing.md,
+    minHeight: 40,
+    borderRadius: theme.radii.pill,
+    backgroundColor: theme.colors.actionPrimaryBg,
   },
-  actionText: { fontSize: 11.5, fontWeight: '700', color: Brand.white },
 });

@@ -1,35 +1,40 @@
 import { useCallback, useMemo, useState } from 'react';
-import { Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { RefreshControl, ScrollView, View } from 'react-native';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { ScreenHeader } from '@/components/ui/screen-header';
-import { Segmented, type SegmentedOption } from '@/components/ui/segmented';
-import { Money } from '@/components/ui/money';
-import { SectionHeader } from '@/components/ui/section-header';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import { Ionicons } from '@/components/ui/icon';
+import { Money } from '@/components/ui/money';
+import { ScreenHeader } from '@/components/ui/screen-header';
+import { SectionHeader } from '@/components/ui/section-header';
+import { Segmented, type SegmentedOption } from '@/components/ui/segmented';
 import { ErrorState, LoadingState } from '@/components/ui/state';
-import {
-  Brand,
-  CardShadow,
-  Radius,
-  ScreenPadding,
-  Space,
-  Tabular,
-  Type,
-} from '@/constants/brand';
-import { getEarningsSummary, type EarningsSummary } from '@/features/mechanic/service';
+import { Surface } from '@/components/ui/surface';
+import { AppText } from '@/components/ui/text';
+import { channelLabel, withdrawalStatusMeta } from '@/features/finance/constants';
 import {
   getWallet,
   listWithdrawals,
   type MechanicWallet,
   type Withdrawal,
 } from '@/features/finance/service';
-import { channelLabel, withdrawalStatusMeta } from '@/features/finance/constants';
+import {
+  getEarningsSummary,
+  type EarningsSummary,
+} from '@/features/mechanic/service';
+import { useAppTheme, useThemedStyles, type AppTheme } from '@/theme';
 import { formatDateTime, formatIDR } from '@/utils/format';
 
 type Period = 'day' | 'week' | 'month';
 
-const ZERO: EarningsSummary = { totalJobs: 0, gross: 0, fee: 0, net: 0, cashNet: 0 };
+const ZERO: EarningsSummary = {
+  totalJobs: 0,
+  gross: 0,
+  fee: 0,
+  net: 0,
+  cashNet: 0,
+};
 
 const PERIODS: SegmentedOption<Period>[] = [
   { value: 'day', label: 'Hari ini' },
@@ -60,6 +65,9 @@ function startOf(period: Period): string {
 export default function MechanicEarningsScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const { theme } = useAppTheme();
+  const styles = useThemedStyles(createStyles);
+
   const [day, setDay] = useState<EarningsSummary>(ZERO);
   const [week, setWeek] = useState<EarningsSummary>(ZERO);
   const [month, setMonth] = useState<EarningsSummary>(ZERO);
@@ -95,7 +103,7 @@ export default function MechanicEarningsScreen() {
 
   useFocusEffect(
     useCallback(() => {
-      load();
+      void load();
     }, [load]),
   );
 
@@ -103,21 +111,27 @@ export default function MechanicEarningsScreen() {
   const available = wallet?.available_balance ?? 0;
   const commissionDebt = wallet?.commission_debt ?? 0;
   const netRatio = useMemo(
-    () => (active.gross > 0 ? Math.max(0, Math.min(1, active.net / active.gross)) : 0),
+    () =>
+      active.gross > 0
+        ? Math.max(0, Math.min(1, active.net / active.gross))
+        : 0,
     [active.gross, active.net],
   );
   const feeRatio = Math.max(0, 1 - netRatio);
 
   return (
     <View style={styles.screen}>
-      <ScreenHeader title="Pendapatan" subtitle="Arus kas dan performa kerjamu" />
+      <ScreenHeader
+        title="Pendapatan"
+        subtitle="Arus kas dan performa kerjamu"
+      />
       {loading ? (
         <LoadingState message="Memuat pendapatan..." />
       ) : (
         <ScrollView
           contentContainerStyle={[
             styles.content,
-            { paddingBottom: Space.xxxl + insets.bottom },
+            { paddingBottom: theme.spacing.xxxl + insets.bottom },
           ]}
           showsVerticalScrollIndicator={false}
           refreshControl={
@@ -125,134 +139,161 @@ export default function MechanicEarningsScreen() {
               refreshing={refreshing}
               onRefresh={() => {
                 setRefreshing(true);
-                load();
+                void load();
               }}
-              tintColor={Brand.primary}
-              colors={[Brand.primary]}
+              tintColor={theme.colors.actionPrimaryBg}
+              colors={[theme.colors.actionPrimaryBg]}
             />
           }
         >
           {error ? (
-            <ErrorState onRetry={load} />
+            <ErrorState onRetry={() => void load()} />
           ) : (
             <>
-              <View style={styles.hero}>
+              <Surface variant="elevated" padding="lg" style={styles.hero}>
                 <View style={styles.heroTop}>
                   <View style={styles.heroLabelRow}>
                     <View style={styles.liveDot} />
-                    <Text style={styles.heroLabel} numberOfLines={1}>
+                    <AppText variant="label" tone="secondary">
                       Saldo bisa ditarik
-                    </Text>
+                    </AppText>
                   </View>
-                  <View style={styles.heroBadge}>
-                    <Ionicons name="shield-checkmark" size={12} color={Brand.volt} />
-                    <Text style={styles.heroBadgeText}>Xendit</Text>
-                  </View>
+                  <Badge
+                    size="sm"
+                    tone="info"
+                    icon="shield-checkmark-outline"
+                    label="Xendit"
+                  />
                 </View>
 
                 <Money
                   value={available}
                   size="hero"
-                  color={Brand.white}
-                  prefixColor={Brand.inkMuted}
+                  color={theme.colors.textPrimary}
+                  prefixColor={theme.colors.textSecondary}
                   style={styles.heroAmount}
                 />
 
                 <View style={styles.heroMeta}>
                   <View style={styles.heroMetaItem}>
-                    <Text style={styles.heroMetaLabel}>Menunggu</Text>
+                    <AppText variant="caption" tone="muted">
+                      Menunggu
+                    </AppText>
                     <Money
                       value={wallet?.pending_balance ?? 0}
                       size="sm"
-                      color={Brand.inkText}
+                      color={theme.colors.textPrimary}
                     />
                   </View>
                   <View style={styles.heroMetaDivider} />
                   <View style={styles.heroMetaItem}>
-                    <Text style={styles.heroMetaLabel}>Ditahan</Text>
-                    <Money value={wallet?.held_balance ?? 0} size="sm" color={Brand.inkText} />
+                    <AppText variant="caption" tone="muted">
+                      Ditahan
+                    </AppText>
+                    <Money
+                      value={wallet?.held_balance ?? 0}
+                      size="sm"
+                      color={theme.colors.textPrimary}
+                    />
                   </View>
                   <View style={styles.heroMetaDivider} />
                   <View style={styles.heroMetaItem}>
-                    <Text style={styles.heroMetaLabel}>Total pendapatan</Text>
+                    <AppText variant="caption" tone="muted">
+                      Total pendapatan
+                    </AppText>
                     <Money
                       value={wallet?.total_earned ?? 0}
                       size="sm"
-                      color={Brand.inkText}
+                      color={theme.colors.textPrimary}
                     />
                   </View>
                 </View>
 
                 <View style={styles.heroActions}>
-                  <Pressable
-                    accessibilityRole="button"
-                    accessibilityLabel="Tarik saldo"
+                  <Button
+                    label="Tarik saldo"
+                    icon="arrow-up-outline"
+                    variant="primary"
                     onPress={() => router.push('/(mechanic)/withdraw')}
-                    style={({ pressed }) => [styles.heroAction, pressed && styles.pressed]}
-                  >
-                    <Text style={styles.heroActionText}>Tarik saldo</Text>
-                    <Ionicons name="arrow-up" size={16} color={Brand.ink} />
-                  </Pressable>
-                  <Pressable
-                    accessibilityRole="button"
-                    accessibilityLabel="Kelola rekening pencairan"
+                    style={styles.heroActionBtn}
+                  />
+                  <Button
+                    label="Rekening"
+                    icon="card-outline"
+                    variant="secondary"
                     onPress={() => router.push('/(mechanic)/payout-accounts')}
-                    style={({ pressed }) => [
-                      styles.heroSecondary,
-                      pressed && styles.pressed,
-                    ]}
-                  >
-                    <Ionicons name="card-outline" size={16} color={Brand.inkText} />
-                    <Text style={styles.heroSecondaryText}>Rekening</Text>
-                  </Pressable>
+                  />
                 </View>
-              </View>
+              </Surface>
 
               {commissionDebt > 0 ? (
-                <View style={styles.debtCard}>
-                  <Ionicons name="alert-circle-outline" size={16} color={Brand.amber} />
-                  <Text style={styles.debtCardText}>
+                <Surface variant="outlined" padding="md" style={styles.debtCard}>
+                  <Ionicons
+                    name="alert-circle-outline"
+                    size={18}
+                    color={theme.colors.statusWarningFg}
+                  />
+                  <AppText variant="caption" tone="warning" style={styles.debtCardText}>
                     Kamu memiliki tunggakan komisi order tunai sebesar{' '}
-                    {formatIDR(commissionDebt)}. Penarikan saldo dijeda sampai tunggakan lunas
-                    otomatis dari pendapatan online.
-                  </Text>
-                </View>
+                    {formatIDR(commissionDebt)}. Penarikan saldo dijeda sampai
+                    tunggakan lunas otomatis dari pendapatan online.
+                  </AppText>
+                </Surface>
               ) : null}
 
               <SectionHeader eyebrow="PERFORMA" title="Rincian pendapatan" />
               <Segmented options={PERIODS} value={period} onChange={setPeriod} />
 
-              <View style={styles.panel}>
+              <Surface variant="default" padding="lg" style={styles.panel}>
                 <View style={styles.panelTop}>
                   <View style={styles.panelCopy}>
-                    <Text style={styles.panelLabel}>Bersih diterima {PERIOD_LABEL[period]}</Text>
+                    <AppText variant="caption" tone="secondary">
+                      Bersih diterima {PERIOD_LABEL[period]}
+                    </AppText>
                     <Money
                       value={active.net}
                       size="lg"
-                      color={Brand.text}
+                      color={theme.colors.textPrimary}
                       style={styles.panelAmount}
                     />
                   </View>
-                  <View style={styles.jobsPill}>
-                    <Text style={styles.jobsValue}>{active.totalJobs}</Text>
-                    <Text style={styles.jobsLabel} numberOfLines={1}>
+                  <Surface variant="subtle" padding="sm" radius="md" style={styles.jobsPill}>
+                    <AppText variant="title" tabular>
+                      {active.totalJobs}
+                    </AppText>
+                    <AppText variant="overline" tone="muted">
                       job
-                    </Text>
-                  </View>
+                    </AppText>
+                  </Surface>
                 </View>
 
                 <View style={styles.splitTrack}>
                   <View style={[styles.splitNet, { flex: netRatio }]} />
                   <View style={[styles.splitFee, { flex: feeRatio }]} />
                 </View>
+
                 <View style={styles.legend}>
                   <View style={styles.legendItem}>
-                    <View style={[styles.legendDot, { backgroundColor: Brand.green }]} />
-                    <Text style={styles.legendText}>Bersih</Text>
+                    <View
+                      style={[
+                        styles.legendDot,
+                        { backgroundColor: theme.colors.statusSuccessFg },
+                      ]}
+                    />
+                    <AppText variant="caption" tone="muted">
+                      Bersih
+                    </AppText>
                   </View>
                   <View style={styles.legendItem}>
-                    <View style={[styles.legendDot, { backgroundColor: '#CFD8E6' }]} />
-                    <Text style={styles.legendText}>Fee platform</Text>
+                    <View
+                      style={[
+                        styles.legendDot,
+                        { backgroundColor: theme.colors.borderInput },
+                      ]}
+                    />
+                    <AppText variant="caption" tone="muted">
+                      Fee platform
+                    </AppText>
                   </View>
                 </View>
 
@@ -263,16 +304,20 @@ export default function MechanicEarningsScreen() {
                     <Row label="Termasuk tunai" value={formatIDR(active.cashNet)} />
                   ) : null}
                 </View>
-              </View>
+              </Surface>
 
               {active.cashNet > 0 ? (
-                <View style={styles.cashNote}>
-                  <Ionicons name="cash-outline" size={16} color={Brand.amber} />
-                  <Text style={styles.cashNoteText}>
-                    {formatIDR(active.cashNet)} dari pendapatan {PERIOD_LABEL[period]} diterima
-                    langsung secara tunai dan tidak masuk saldo dompet.
-                  </Text>
-                </View>
+                <Surface variant="outlined" padding="md" style={styles.cashNote}>
+                  <Ionicons
+                    name="cash-outline"
+                    size={18}
+                    color={theme.colors.statusWarningFg}
+                  />
+                  <AppText variant="caption" tone="warning" style={styles.cashNoteText}>
+                    {formatIDR(active.cashNet)} dari pendapatan {PERIOD_LABEL[period]}{' '}
+                    diterima langsung secara tunai dan tidak masuk saldo dompet.
+                  </AppText>
+                </Surface>
               ) : null}
 
               {withdrawals.length > 0 ? (
@@ -283,45 +328,49 @@ export default function MechanicEarningsScreen() {
                     actionLabel="Tarik saldo"
                     onPressAction={() => router.push('/(mechanic)/withdraw')}
                   />
-                  <View style={styles.historyCard}>
+                  <Surface variant="default" padding="lg" style={styles.historyCard}>
                     {withdrawals.map((item, index) => {
                       const meta = withdrawalStatusMeta(item.status);
                       return (
                         <View
                           key={item.id}
-                          style={[styles.historyRow, index === 0 && styles.historyRowFirst]}
+                          style={[
+                            styles.historyRow,
+                            index === 0 && styles.historyRowFirst,
+                          ]}
                         >
                           <View style={styles.historyIcon}>
                             <Ionicons
                               name="arrow-up-outline"
-                              size={15}
-                              color={Brand.textSecondary}
+                              size={16}
+                              color={theme.colors.textSecondary}
                             />
                           </View>
                           <View style={styles.historyCopy}>
-                            <Money value={item.amount} size="sm" color={Brand.text} />
-                            <Text style={styles.historyMeta}>
+                            <Money
+                              value={item.amount}
+                              size="sm"
+                              color={theme.colors.textPrimary}
+                            />
+                            <AppText variant="caption" tone="secondary">
                               {item.account_snapshot?.bank_code
                                 ? `${channelLabel(item.account_snapshot.bank_code)} · `
                                 : ''}
                               {formatDateTime(item.created_at)}
-                            </Text>
+                            </AppText>
                           </View>
-                          <View style={[styles.statusChip, { backgroundColor: meta.background }]}>
-                            <Text style={[styles.statusChipText, { color: meta.color }]}>
-                              {meta.label}
-                            </Text>
-                          </View>
+                          <Badge size="sm" tone={meta.tone} label={meta.label} />
                         </View>
                       );
                     })}
-                  </View>
+                  </Surface>
                 </>
               ) : null}
 
-              <Text style={styles.note}>
-                Ringkasan pendapatan diperbarui otomatis setelah setiap pembayaran terverifikasi.
-              </Text>
+              <AppText variant="caption" tone="muted" style={styles.note}>
+                Ringkasan pendapatan diperbarui otomatis setelah setiap pembayaran
+                terverifikasi.
+              </AppText>
             </>
           )}
         </ScrollView>
@@ -331,176 +380,186 @@ export default function MechanicEarningsScreen() {
 }
 
 function Row({ label, value }: { label: string; value: string }) {
+  const styles = useThemedStyles(createStyles);
   return (
     <View style={styles.row}>
-      <Text style={styles.rowLabel}>{label}</Text>
-      <Text style={[styles.rowValue, Tabular]}>{value}</Text>
+      <AppText variant="caption" tone="secondary">
+        {label}
+      </AppText>
+      <AppText variant="label" tabular>
+        {value}
+      </AppText>
     </View>
   );
 }
 
-const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: Brand.background },
-  content: { padding: ScreenPadding, paddingBottom: Space.xxxl },
-  hero: {
-    backgroundColor: Brand.ink,
-    borderRadius: Radius.xxl,
-    borderWidth: 1,
-    borderColor: Brand.inkBorder,
-    padding: Space.xl,
-    ...CardShadow,
-  },
-  heroTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: Space.sm },
-  heroLabelRow: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 7 },
-  liveDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: Brand.volt },
-  heroLabel: { flexShrink: 1, ...Type.label, color: Brand.inkText },
-  heroBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    backgroundColor: 'rgba(201,241,88,0.12)',
-    borderRadius: Radius.pill,
-    paddingHorizontal: 9,
-    paddingVertical: 4,
-  },
-  heroBadgeText: { ...Type.micro, color: Brand.volt, fontSize: 9, letterSpacing: 0.4 },
-  heroAmount: { marginTop: Space.md },
-  heroMeta: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Space.sm,
-    marginTop: Space.lg,
-    paddingTop: Space.md,
-    borderTopWidth: 1,
-    borderTopColor: Brand.inkBorder,
-  },
-  heroMetaItem: { flex: 1 },
-  heroMetaDivider: { width: 1, height: 26, backgroundColor: Brand.inkBorder },
-  heroMetaLabel: { ...Type.meta, color: Brand.inkMuted, marginBottom: 3, fontSize: 10 },
-  heroActions: { flexDirection: 'row', gap: Space.sm, marginTop: Space.lg },
-  heroAction: {
+const createStyles = (theme: AppTheme) => ({
+  screen: {
     flex: 1,
-    minHeight: 46,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 6,
-    backgroundColor: Brand.volt,
-    borderRadius: Radius.md,
-    paddingHorizontal: Space.lg,
+    backgroundColor: theme.colors.bgCanvas,
   },
-  heroActionText: { ...Type.label, color: Brand.ink, fontWeight: '800' },
-  heroSecondary: {
-    minHeight: 46,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 6,
-    borderRadius: Radius.md,
-    borderWidth: 1,
-    borderColor: Brand.inkBorder,
-    paddingHorizontal: Space.lg,
+  content: {
+    padding: theme.spacing.screenPadding,
   },
-  heroSecondaryText: { ...Type.label, color: Brand.inkText, fontWeight: '700' },
-  panel: {
-    backgroundColor: Brand.surface,
-    borderRadius: Radius.lg,
-    borderWidth: 1,
-    borderColor: Brand.border,
-    padding: Space.lg,
-    marginTop: Space.md,
+  hero: {
+    gap: theme.spacing.sm,
   },
-  panelTop: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between' },
-  panelCopy: { flex: 1 },
-  panelLabel: { ...Type.meta, color: Brand.textSecondary, fontWeight: '600' },
-  panelAmount: { marginTop: Space.xs },
-  jobsPill: {
-    minWidth: 52,
-    alignItems: 'center',
-    backgroundColor: Brand.background,
-    borderRadius: Radius.md,
-    paddingHorizontal: Space.md,
-    paddingVertical: 6,
+  heroTop: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    justifyContent: 'space-between' as const,
+    gap: theme.spacing.sm,
   },
-  jobsValue: { ...Type.title, color: Brand.text, ...Tabular },
-  jobsLabel: { ...Type.micro, color: Brand.textMuted, fontSize: 9, letterSpacing: 0.2, textAlign: 'center' },
-  splitTrack: {
-    flexDirection: 'row',
-    height: 6,
-    borderRadius: 3,
-    overflow: 'hidden',
-    backgroundColor: Brand.divider,
-    marginTop: Space.lg,
+  heroLabelRow: {
+    flex: 1,
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: theme.spacing.xs,
   },
-  splitNet: { backgroundColor: Brand.green },
-  splitFee: { backgroundColor: '#CFD8E6' },
-  legend: { flexDirection: 'row', gap: Space.lg, marginTop: Space.sm },
-  legendItem: { flexDirection: 'row', alignItems: 'center', gap: 5 },
-  legendDot: { width: 6, height: 6, borderRadius: 3 },
-  legendText: { ...Type.meta, color: Brand.textMuted, fontSize: 10 },
-  panelRows: {
-    marginTop: Space.md,
-    paddingTop: Space.sm,
+  liveDot: {
+    width: 7,
+    height: 7,
+    borderRadius: 4,
+    backgroundColor: theme.colors.statusSuccessFg,
+  },
+  heroAmount: {
+    marginTop: theme.spacing.xs,
+  },
+  heroMeta: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: theme.spacing.sm,
+    marginTop: theme.spacing.sm,
+    paddingTop: theme.spacing.md,
     borderTopWidth: 1,
-    borderTopColor: Brand.divider,
+    borderTopColor: theme.colors.borderSubtle,
+  },
+  heroMetaItem: {
+    flex: 1,
+    gap: 2,
+  },
+  heroMetaDivider: {
+    width: 1,
+    height: 28,
+    backgroundColor: theme.colors.borderSubtle,
+  },
+  heroActions: {
+    flexDirection: 'row' as const,
+    gap: theme.spacing.sm,
+    marginTop: theme.spacing.sm,
+  },
+  heroActionBtn: {
+    flex: 1,
+  },
+  debtCard: {
+    flexDirection: 'row' as const,
+    alignItems: 'flex-start' as const,
+    gap: theme.spacing.sm,
+    backgroundColor: theme.colors.statusWarningBg,
+    borderColor: theme.colors.statusWarningBorder,
+    marginTop: theme.spacing.md,
+  },
+  debtCardText: {
+    flex: 1,
+  },
+  panel: {
+    marginTop: theme.spacing.md,
+    gap: theme.spacing.md,
+  },
+  panelTop: {
+    flexDirection: 'row' as const,
+    alignItems: 'flex-start' as const,
+    justifyContent: 'space-between' as const,
+    gap: theme.spacing.md,
+  },
+  panelCopy: {
+    flex: 1,
+    gap: theme.spacing.xxs,
+  },
+  panelAmount: {
+    marginTop: 2,
+  },
+  jobsPill: {
+    minWidth: 56,
+    alignItems: 'center' as const,
+  },
+  splitTrack: {
+    flexDirection: 'row' as const,
+    height: 8,
+    borderRadius: 4,
+    overflow: 'hidden' as const,
+    backgroundColor: theme.colors.bgSurfaceSubtle,
+  },
+  splitNet: {
+    backgroundColor: theme.colors.statusSuccessFg,
+  },
+  splitFee: {
+    backgroundColor: theme.colors.borderInput,
+  },
+  legend: {
+    flexDirection: 'row' as const,
+    gap: theme.spacing.lg,
+  },
+  legendItem: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: theme.spacing.xs,
+  },
+  legendDot: {
+    width: 7,
+    height: 7,
+    borderRadius: 4,
+  },
+  panelRows: {
+    paddingTop: theme.spacing.sm,
+    borderTopWidth: 1,
+    borderTopColor: theme.colors.borderSubtle,
+    gap: theme.spacing.xs,
   },
   row: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingVertical: 5,
-    gap: Space.md,
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    justifyContent: 'space-between' as const,
+    gap: theme.spacing.md,
   },
-  rowLabel: { ...Type.meta, color: Brand.textSecondary },
-  rowValue: { ...Type.meta, color: Brand.text, fontWeight: '700', fontSize: 12 },
   cashNote: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: Space.sm,
-    backgroundColor: Brand.amberSoft,
-    borderRadius: Radius.md,
-    padding: Space.md,
-    marginTop: Space.md,
+    flexDirection: 'row' as const,
+    alignItems: 'flex-start' as const,
+    gap: theme.spacing.sm,
+    backgroundColor: theme.colors.statusWarningBg,
+    borderColor: theme.colors.statusWarningBorder,
+    marginTop: theme.spacing.md,
   },
-  cashNoteText: { flex: 1, ...Type.meta, color: Brand.amber, lineHeight: 17 },
-  debtCard: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: Space.sm,
-    backgroundColor: Brand.amberSoft,
-    borderRadius: Radius.md,
-    padding: Space.md,
-    marginTop: Space.md,
+  cashNoteText: {
+    flex: 1,
   },
-  debtCardText: { flex: 1, ...Type.meta, color: Brand.amber, lineHeight: 17 },
   historyCard: {
-    backgroundColor: Brand.surface,
-    borderRadius: Radius.lg,
-    borderWidth: 1,
-    borderColor: Brand.border,
-    paddingHorizontal: Space.lg,
+    paddingVertical: theme.spacing.xs,
   },
   historyRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Space.md,
-    paddingVertical: Space.md,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: Brand.divider,
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: theme.spacing.md,
+    paddingVertical: theme.spacing.md,
+    borderTopWidth: 1,
+    borderTopColor: theme.colors.borderSubtle,
   },
-  historyRowFirst: { borderTopWidth: 0 },
+  historyRowFirst: {
+    borderTopWidth: 0,
+  },
   historyIcon: {
-    width: 32,
-    height: 32,
-    borderRadius: Radius.sm,
-    backgroundColor: Brand.background,
-    alignItems: 'center',
-    justifyContent: 'center',
+    width: 34,
+    height: 34,
+    borderRadius: theme.radii.sm,
+    backgroundColor: theme.colors.bgSurfaceSubtle,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
   },
-  historyCopy: { flex: 1 },
-  historyMeta: { ...Type.meta, color: Brand.textSecondary, marginTop: 2, fontSize: 10.5 },
-  statusChip: { borderRadius: Radius.pill, paddingHorizontal: 9, paddingVertical: 4 },
-  statusChipText: { ...Type.micro, fontSize: 9.5, letterSpacing: 0.2 },
-  note: { ...Type.meta, color: Brand.textMuted, marginTop: Space.lg, lineHeight: 16 },
-  pressed: { opacity: 0.78 },
+  historyCopy: {
+    flex: 1,
+    gap: 2,
+  },
+  note: {
+    marginTop: theme.spacing.lg,
+  },
 });

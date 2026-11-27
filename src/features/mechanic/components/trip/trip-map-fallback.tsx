@@ -1,8 +1,9 @@
-import { StyleSheet, Text, View } from 'react-native';
+import { View } from 'react-native';
 import { Ionicons } from '@/components/ui/icon';
-import { Brand, Radius, Space } from '@/constants/brand';
-import { formatDistance, type LatLng } from '@/features/mechanic/tracking/geo';
+import { AppText } from '@/components/ui/text';
 import type { TripRoute } from '@/features/mechanic/tracking/directions';
+import { formatDistance, type LatLng } from '@/features/mechanic/tracking/geo';
+import { useAppTheme, useThemedStyles, type AppTheme } from '@/theme';
 
 interface TripMapFallbackProps {
   destination: LatLng | null;
@@ -15,9 +16,7 @@ interface TripMapFallbackProps {
 }
 
 /**
- * Pengganti peta saat peta native tidak bisa dirender: build web, atau Android
- * yang belum diberi Google Maps API key. Rute & koordinat tetap ditampilkan agar
- * montir punya informasi dan tidak melihat kotak abu-abu kosong.
+ * Pengganti peta saat peta tidak bisa dirender (build web atau gagal muat tile).
  */
 export function TripMapFallback({
   destination,
@@ -28,53 +27,54 @@ export function TripMapFallback({
   title,
   hint,
 }: TripMapFallbackProps) {
+  const { theme } = useAppTheme();
+  const styles = useThemedStyles(createStyles);
+
   return (
     <View style={[styles.screen, { paddingTop: topInset, paddingBottom: bottomInset }]}>
-      <View style={styles.card}>
-        <Ionicons name="map-outline" size={22} color={Brand.primary} />
-        <Text style={styles.title}>{title}</Text>
-        <Text style={styles.hint}>{hint}</Text>
-        <Text style={styles.hint}>
+      <View style={[styles.card, theme.elevation.card]}>
+        <Ionicons name="map-outline" size={24} color={theme.colors.actionPrimaryAltBg} />
+        <AppText variant="title" style={styles.center}>
+          {title}
+        </AppText>
+        <AppText variant="caption" tone="secondary" style={styles.center}>
+          {hint}
+        </AppText>
+        <AppText variant="caption" tone="muted" style={[styles.center, theme.tabularNums]}>
           {destination
             ? `Tujuan: ${destination.latitude.toFixed(5)}, ${destination.longitude.toFixed(5)}`
             : 'Menunggu titik lokasi client…'}
-        </Text>
-        <Text style={styles.hint}>
+        </AppText>
+        <AppText variant="caption" tone="muted" style={styles.center}>
           {route
             ? `Rute ${estimated ? 'estimasi' : 'aktif'} · ${formatDistance(route.distanceMeters)}`
             : 'Rute belum dihitung'}
-        </Text>
+        </AppText>
       </View>
     </View>
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (theme: AppTheme) => ({
   screen: {
     flex: 1,
-    backgroundColor: Brand.primarySoft,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: Space.xl,
+    backgroundColor: theme.colors.bgCanvas,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+    paddingHorizontal: theme.spacing.xl,
   },
   card: {
-    backgroundColor: Brand.surface,
-    borderRadius: Radius.lg,
-    padding: Space.xl,
-    alignItems: 'center',
-    gap: Space.sm,
+    backgroundColor: theme.colors.bgSurface,
+    borderRadius: theme.radii.lg,
+    borderCurve: theme.components.card.borderCurve,
+    borderWidth: 1,
+    borderColor: theme.colors.borderSubtle,
+    padding: theme.spacing.xl,
+    alignItems: 'center' as const,
+    gap: theme.spacing.sm,
     maxWidth: 420,
   },
-  title: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: Brand.text,
-    textAlign: 'center',
-  },
-  hint: {
-    fontSize: 12,
-    color: Brand.textSecondary,
-    textAlign: 'center',
-    lineHeight: 17,
+  center: {
+    textAlign: 'center' as const,
   },
 });

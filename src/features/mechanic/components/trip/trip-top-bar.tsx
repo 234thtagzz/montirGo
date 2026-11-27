@@ -1,7 +1,8 @@
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons, type IconName } from '@/components/ui/icon';
-import { Brand, CardShadow, Radius, Space, Type } from '@/constants/brand';
+import { AppText } from '@/components/ui/text';
+import { useAppTheme, useThemedStyles, type AppTheme } from '@/theme';
 
 interface TripTopBarProps {
   title: string;
@@ -14,10 +15,11 @@ interface TripTopBarProps {
   onAction: () => void;
   actionIcon?: IconName;
   actionLabel?: string;
+  actionTone?: 'primary' | 'whatsapp';
   actionBackground?: string;
 }
 
-/** Kartu status mengambang di atas peta (gaya aplikasi transportasi). */
+/** Kartu status mengambang di atas peta perjalanan. */
 export function TripTopBar({
   title,
   subtitle,
@@ -27,32 +29,44 @@ export function TripTopBar({
   onAction,
   actionIcon = 'navigate',
   actionLabel = 'Buka rute di Google Maps',
-  actionBackground = Brand.primary,
+  actionTone = 'primary',
+  actionBackground,
 }: TripTopBarProps) {
+  const { theme } = useAppTheme();
+  const styles = useThemedStyles(createStyles);
   const insets = useSafeAreaInsets();
 
+  const resolvedActionBg =
+    actionBackground ??
+    (actionTone === 'whatsapp' ? theme.colors.whatsappBg : theme.colors.actionPrimaryBg);
+  const resolvedActionFg =
+    actionTone === 'whatsapp' ? theme.colors.whatsappFg : theme.colors.actionPrimaryFg;
+
   return (
-    <View pointerEvents="box-none" style={[styles.wrap, { paddingTop: insets.top + Space.sm }]}>
-      <View style={styles.card}>
+    <View
+      pointerEvents="box-none"
+      style={[styles.wrap, { paddingTop: insets.top + theme.spacing.sm }]}
+    >
+      <View style={[styles.card, theme.elevation.sheet]}>
         <Pressable
           accessibilityRole="button"
           accessibilityLabel="Kembali"
           onPress={onBack}
           style={({ pressed }) => [styles.iconButton, pressed && styles.pressed]}
         >
-          <Ionicons name="chevron-back" size={22} color={Brand.white} />
+          <Ionicons name="chevron-back" size={22} color={theme.colors.textPrimary} />
         </Pressable>
 
         <View style={styles.copy}>
           <View style={styles.titleRow}>
             <View style={styles.liveDot} />
-            <Text numberOfLines={1} style={styles.title}>
+            <AppText variant="bodyStrong" numberOfLines={1} style={styles.title}>
               {title}
-            </Text>
+            </AppText>
           </View>
-          <Text numberOfLines={1} style={styles.subtitle}>
+          <AppText variant="caption" tone="secondary" numberOfLines={1}>
             {subtitle}
-          </Text>
+          </AppText>
         </View>
 
         <Pressable
@@ -61,92 +75,102 @@ export function TripTopBar({
           onPress={onAction}
           style={({ pressed }) => [
             styles.routeButton,
-            { backgroundColor: actionBackground },
+            { backgroundColor: resolvedActionBg },
             pressed && styles.pressed,
           ]}
         >
-          <Ionicons name={actionIcon} size={18} color={Brand.white} />
+          <Ionicons name={actionIcon} size={18} color={resolvedActionFg} />
         </Pressable>
       </View>
 
       {estimated ? (
         <View style={styles.estimateChip}>
-          <Ionicons name="information-circle-outline" size={12} color={Brand.amber} />
-          <Text style={styles.estimateText}>Rute estimasi — data lalu lintas belum tersedia</Text>
+          <Ionicons name="information-circle-outline" size={14} color={theme.colors.statusWarningFg} />
+          <AppText variant="caption" tone="warning">
+            Rute estimasi — data lalu lintas belum tersedia
+          </AppText>
         </View>
       ) : !trafficAware ? (
         <View style={styles.routeChip}>
-          <Ionicons name="navigate" size={12} color={Brand.primary} />
-          <Text style={styles.routeText}>Rute tercepat · tanpa data lalu lintas</Text>
+          <Ionicons name="navigate" size={14} color={theme.colors.statusInfoFg} />
+          <AppText variant="caption" tone="info">
+            Rute tercepat · tanpa data lalu lintas
+          </AppText>
         </View>
       ) : null}
     </View>
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (theme: AppTheme) => ({
   wrap: {
-    position: 'absolute',
+    position: 'absolute' as const,
     top: 0,
     left: 0,
     right: 0,
-    paddingHorizontal: Space.lg,
+    paddingHorizontal: theme.spacing.lg,
   },
   card: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Space.md,
-    backgroundColor: Brand.ink,
-    borderRadius: Radius.lg,
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: theme.spacing.md,
+    backgroundColor: theme.colors.bgSurface,
+    borderRadius: theme.radii.lg,
+    borderCurve: theme.components.card.borderCurve,
     borderWidth: 1,
-    borderColor: Brand.inkBorder,
-    paddingHorizontal: Space.md,
-    paddingVertical: Space.md,
-    ...CardShadow,
+    borderColor: theme.colors.borderDefault,
+    paddingHorizontal: theme.spacing.md,
+    paddingVertical: theme.spacing.md,
   },
   iconButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: 'rgba(255,255,255,0.08)',
+    width: 48,
+    height: 48,
+    borderRadius: theme.radii.pill,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+    backgroundColor: theme.colors.bgSurfaceSubtle,
   },
-  copy: { flex: 1 },
-  titleRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  liveDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: Brand.volt },
-  title: { ...Type.bodyStrong, flex: 1, color: Brand.white, fontWeight: '700' },
-  subtitle: { ...Type.meta, color: Brand.inkMuted, marginTop: 2 },
+  copy: { flex: 1, gap: theme.spacing.xxs },
+  titleRow: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: theme.spacing.xs },
+  liveDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: theme.colors.statusSuccessFg,
+  },
+  title: { flex: 1 },
   routeButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    alignItems: 'center',
-    justifyContent: 'center',
+    width: 48,
+    height: 48,
+    borderRadius: theme.radii.pill,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
   },
   estimateChip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 5,
-    alignSelf: 'center',
-    marginTop: Space.sm,
-    paddingHorizontal: Space.md,
-    paddingVertical: 5,
-    borderRadius: Radius.pill,
-    backgroundColor: Brand.amberSoft,
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: theme.spacing.xs,
+    alignSelf: 'center' as const,
+    marginTop: theme.spacing.sm,
+    paddingHorizontal: theme.spacing.md,
+    paddingVertical: theme.spacing.xs,
+    borderRadius: theme.radii.pill,
+    backgroundColor: theme.colors.statusWarningBg,
+    borderWidth: 1,
+    borderColor: theme.colors.statusWarningBorder,
   },
-  estimateText: { fontSize: 10.5, fontWeight: '600', color: Brand.amber },
   routeChip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 5,
-    alignSelf: 'center',
-    marginTop: Space.sm,
-    paddingHorizontal: Space.md,
-    paddingVertical: 5,
-    borderRadius: Radius.pill,
-    backgroundColor: Brand.primarySoft,
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: theme.spacing.xs,
+    alignSelf: 'center' as const,
+    marginTop: theme.spacing.sm,
+    paddingHorizontal: theme.spacing.md,
+    paddingVertical: theme.spacing.xs,
+    borderRadius: theme.radii.pill,
+    backgroundColor: theme.colors.statusInfoBg,
+    borderWidth: 1,
+    borderColor: theme.colors.statusInfoBorder,
   },
-  routeText: { fontSize: 10.5, fontWeight: '600', color: Brand.primary },
-  pressed: { opacity: 0.75 },
+  pressed: { opacity: 0.78 },
 });

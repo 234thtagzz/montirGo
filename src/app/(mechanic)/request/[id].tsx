@@ -1,26 +1,18 @@
 import { useCallback, useEffect, useState } from 'react';
-import {
-  Alert,
-  Pressable,
-  RefreshControl,
-  ScrollView,
-  StyleSheet,
-  Text,
-  View,
-} from 'react-native';
+import { Pressable, RefreshControl, ScrollView, View } from 'react-native';
 import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { ScreenHeader } from '@/components/ui/screen-header';
 import { Avatar } from '@/components/ui/avatar';
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { ConfirmSheet } from '@/components/ui/confirm-sheet';
+import { Ionicons } from '@/components/ui/icon';
+import { ScreenHeader } from '@/components/ui/screen-header';
 import { SectionHeader } from '@/components/ui/section-header';
 import { EmptyState, ErrorState, LoadingState } from '@/components/ui/state';
-import { Ionicons } from '@/components/ui/icon';
-import { Brand, Radius, ScreenPadding, Space, Type } from '@/constants/brand';
-import { createRealtimeChannel, subscribeWithResync } from '@/lib/realtime';
-import { supabase } from '@/lib/supabase';
-import { useRefreshOnForeground } from '@/hooks/use-foreground';
+import { Surface } from '@/components/ui/surface';
+import { AppText } from '@/components/ui/text';
+import { useToast } from '@/components/ui/toast';
 import {
   acceptOrder,
   ACTIVE_ORDER_MESSAGE,
@@ -30,16 +22,23 @@ import {
 } from '@/features/mechanic/service';
 import { AiAnalysisCard } from '@/features/service-request/components/ai-analysis-card';
 import { VehicleProfileCard } from '@/features/vehicles/components/vehicle-profile-card';
+import { useRefreshOnForeground } from '@/hooks/use-foreground';
+import { createRealtimeChannel, subscribeWithResync } from '@/lib/realtime';
+import { supabase } from '@/lib/supabase';
+import { useAppTheme, useThemedStyles, type AppTheme } from '@/theme';
 import { formatDateTime, formatMonthYear } from '@/utils/format';
 
 /**
  * Layar otorisasi montir: detail request SEBELUM diterima.
- * Menampilkan data client + kendaraan + hasil analisis AI, lalu CTA "Ajukan".
+ * Menampilkan data client, kendaraan, dan analisis AI, lalu tombol 56px Ajukan Diri.
  */
 export default function MechanicRequestDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const { theme } = useAppTheme();
+  const styles = useThemedStyles(createStyles);
+  const { showToast } = useToast();
 
   const [order, setOrder] = useState<IncomingRequestDetail | null>(null);
   const [loading, setLoading] = useState(true);
@@ -69,28 +68,27 @@ export default function MechanicRequestDetailScreen() {
 
   useFocusEffect(
     useCallback(() => {
-      load();
+      void load();
     }, [load]),
   );
 
-  // Muat ulang saat app kembali aktif agar status request tidak basi.
-  useRefreshOnForeground(load);
+  useRefreshOnForeground(() => {
+    void load();
+  });
 
-  // Realtime: request diambil montir lain, dibatalkan, atau analisis AI selesai.
   useEffect(() => {
     if (!id) return;
     const channel = createRealtimeChannel(`mechanic-request-${id}`)
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'service_requests', filter: `id=eq.${id}` },
-        () => load(),
+        () => void load(),
       )
       .on(
         'postgres_changes',
         { event: 'INSERT', schema: 'public', table: 'ai_diagnoses', filter: `request_id=eq.${id}` },
-        () => load(),
+        () => void load(),
       );
-    // Setelah koneksi sempat putus, ambil ulang data yang terlewat.
     subscribeWithResync(channel, () => void load());
     return () => {
       supabase.removeChannel(channel);
@@ -100,13 +98,13 @@ export default function MechanicRequestDetailScreen() {
   const openConfirm = () => {
     if (!order) return;
     if (activeOrderId) {
-      Alert.alert('Masih ada order aktif', ACTIVE_ORDER_MESSAGE, [
-        { text: 'Tutup', style: 'cancel' },
-        {
-          text: 'Buka Order Aktif',
-          onPress: () => router.push(`/(mechanic)/active-order/${activeOrderId}`),
-        },
-      ]);
+      showToast({
+        tone: 'warning',
+        title: 'Masih ada order aktif',
+        message: ACTIVE_ORDER_MESSAGE,
+        actionLabel: 'Buka Order',
+        onAction: () => router.push(`/(mechanic)/active-order/${activeOrderId}`),
+      });
       return;
     }
     setConfirmOpen(true);
@@ -118,20 +116,23 @@ export default function MechanicRequestDetailScreen() {
     try {
       await acceptOrder(order.id);
       setConfirmOpen(false);
-      // Pengajuan belum menjadi order aktif sampai client menyetujui.
+      showToast({
+        tone: 'success',
+        title: 'Pengajuan terkirim',
+        message: 'Menunggu konfirmasi client dalam 5 menit.',
+      });
       router.replace({
         pathname: '/(mechanic)/active-order/[id]',
         params: { id: order.id },
       });
-      Alert.alert(
-        'Pengajuan terkirim',
-        'Menunggu konfirmasi client. Kamu akan mendapat notifikasi begitu disetujui.',
-      );
     } catch (e) {
-      Alert.alert(
-        'Gagal mengajukan',
-        e instanceof Error ? e.message : 'Request mungkin sudah diambil montir lain.',
-      );
+      setConfirmOpen(false);
+      showToast({
+        tone: 'danger',
+        title: 'Gagal mengajukan diri',
+        message:
+          e instanceof Error ? e.message : 'Request mungkin sudah diambil montir lain.',
+      });
       await load();
     } finally {
       setAccepting(false);
@@ -151,7 +152,7 @@ export default function MechanicRequestDetailScreen() {
     return (
       <View style={styles.screen}>
         <ScreenHeader title="Detail Request" />
-        <ErrorState onRetry={load} />
+        <ErrorState onRetry={() => void load()} />
       </View>
     );
   }
@@ -206,44 +207,51 @@ export default function MechanicRequestDetailScreen() {
             refreshing={refreshing}
             onRefresh={() => {
               setRefreshing(true);
-              load();
+              void load();
             }}
-            tintColor={Brand.primary}
-            colors={[Brand.primary]}
+            tintColor={theme.colors.actionPrimaryBg}
+            colors={[theme.colors.actionPrimaryBg]}
           />
         }
       >
-        <View style={styles.hero}>
+        <Surface variant="elevated" padding="lg" style={styles.hero}>
           <View style={styles.heroTop}>
-            <View style={styles.liveChip}>
-              <View style={styles.liveDot} />
-              <Text style={styles.liveText}>REQUEST BARU</Text>
-            </View>
-            <Text style={styles.heroTime}>{formatDateTime(order.created_at)}</Text>
+            <Badge size="sm" dot tone="warning" label="REQUEST BARU" />
+            <AppText variant="caption" tone="muted">
+              {formatDateTime(order.created_at)}
+            </AppText>
           </View>
 
-          <Text style={styles.heroTitle}>Menunggu montir menerima</Text>
-          <Text style={styles.heroSub}>
+          <AppText variant="h2" style={styles.heroTitle}>
+            Menunggu montir menerima
+          </AppText>
+          <AppText variant="caption" tone="secondary">
             Periksa keluhan dan analisis awal sebelum mengajukan diri ke client.
-          </Text>
+          </AppText>
 
           <View style={styles.heroDivider} />
 
           <View style={styles.heroClient}>
-            <Avatar name={order.client_name ?? 'Client'} uri={order.client_avatar_url} size={42} />
+            <Avatar
+              name={order.client_name ?? 'Client'}
+              uri={order.client_avatar_url}
+              size={44}
+            />
             <View style={styles.heroClientCopy}>
-              <Text style={styles.heroClientName} numberOfLines={1}>
+              <AppText variant="bodyStrong" numberOfLines={1}>
                 {order.client_name ?? 'Client MontirGo'}
-              </Text>
-              <Text style={styles.heroClientRole}>Client yang membutuhkan bantuan</Text>
+              </AppText>
+              <AppText variant="caption" tone="secondary">
+                Client yang membutuhkan bantuan
+              </AppText>
               {clientMeta ? (
-                <Text style={styles.heroClientMeta} numberOfLines={1}>
+                <AppText variant="caption" tone="muted" numberOfLines={1}>
                   {clientMeta}
-                </Text>
+                </AppText>
               ) : null}
             </View>
           </View>
-        </View>
+        </Surface>
 
         {hasVehicle ? (
           <>
@@ -260,7 +268,7 @@ export default function MechanicRequestDetailScreen() {
         ) : null}
 
         <SectionHeader eyebrow="KELUHAN" title="Detail permintaan" />
-        <View style={styles.detailCard}>
+        <Surface variant="default" padding="lg" style={styles.detailCard}>
           <DetailRow label="Keluhan" value={order.issue_description} />
           {order.symptoms ? <DetailRow label="Gejala" value={order.symptoms} /> : null}
           {!hasVehicle ? <DetailRow label="Kendaraan" value="Tidak dicantumkan" /> : null}
@@ -270,9 +278,9 @@ export default function MechanicRequestDetailScreen() {
             value="Tersedia otomatis setelah client menyetujui pengajuanmu."
           />
           {order.additional_notes ? (
-            <DetailRow label="Catatan" value={order.additional_notes} />
+            <DetailRow label="Catatan" value={order.additional_notes} isLast />
           ) : null}
-        </View>
+        </Surface>
 
         <SectionHeader eyebrow="AI" title="Analisis awal" />
         <AiAnalysisCard
@@ -280,38 +288,53 @@ export default function MechanicRequestDetailScreen() {
           subtitle="Indikasi awal untuk membantumu memutuskan"
         />
 
-        <View style={styles.disclaimer}>
-          <Ionicons name="information-circle-outline" size={15} color={Brand.primary} />
-          <Text style={styles.disclaimerText}>
+        <Surface variant="outlined" padding="md" style={styles.disclaimer}>
+          <Ionicons
+            name="information-circle-outline"
+            size={16}
+            color={theme.colors.statusInfoFg}
+          />
+          <AppText variant="caption" tone="secondary" style={styles.disclaimerText}>
             Analisis AI bukan diagnosis final. Lakukan pemeriksaan langsung saat tiba di lokasi.
-          </Text>
-        </View>
+          </AppText>
+        </Surface>
 
         {activeOrderId ? (
           <Pressable
             accessibilityRole="button"
             accessibilityLabel="Buka order aktif yang sedang berjalan"
             onPress={() => router.push(`/(mechanic)/active-order/${activeOrderId}`)}
-            style={({ pressed }) => [styles.notice, pressed && styles.pressed]}
+            style={({ pressed }) => pressed && styles.pressed}
           >
-            <Ionicons name="lock-closed-outline" size={16} color={Brand.amber} />
-            <View style={styles.noticeCopy}>
-              <Text style={styles.noticeTitle}>Selesaikan order aktif dulu</Text>
-              <Text style={styles.noticeText}>
-                Kamu hanya bisa memegang satu order. Request ini bisa diterima setelah order #
-                {activeOrderId.slice(0, 8).toUpperCase()} lunas.
-              </Text>
-            </View>
-            <Ionicons name="chevron-forward" size={15} color={Brand.amber} />
+            <Surface variant="outlined" padding="md" style={styles.notice}>
+              <Ionicons
+                name="lock-closed-outline"
+                size={18}
+                color={theme.colors.statusWarningFg}
+              />
+              <View style={styles.noticeCopy}>
+                <AppText variant="label">Selesaikan order aktif dulu</AppText>
+                <AppText variant="caption" tone="secondary">
+                  Kamu hanya bisa memegang satu order. Order #
+                  {activeOrderId.slice(0, 8).toUpperCase()} masih berjalan.
+                </AppText>
+              </View>
+              <Ionicons
+                name="chevron-forward"
+                size={16}
+                color={theme.colors.statusWarningFg}
+              />
+            </Surface>
           </Pressable>
         ) : null}
       </ScrollView>
 
-      <View style={[styles.footer, { paddingBottom: insets.bottom + Space.md }]}>
+      <View style={[styles.footer, { paddingBottom: insets.bottom + theme.spacing.md }]}>
         <Button
-          label={activeOrderId ? 'Selesaikan Order Dulu' : 'Ajukan ke Client'}
+          label={activeOrderId ? 'Selesaikan Order Dulu' : 'Ajukan Diri'}
           icon="paper-plane-outline"
-          variant="ink"
+          variant="primary"
+          size="cta"
           loading={accepting}
           disabled={activeOrderId != null}
           onPress={openConfirm}
@@ -325,104 +348,118 @@ export default function MechanicRequestDetailScreen() {
         confirmLabel="Ya, ajukan"
         icon="paper-plane-outline"
         loading={accepting}
-        onConfirm={submitAccept}
+        onConfirm={() => void submitAccept()}
         onCancel={() => setConfirmOpen(false)}
       />
     </View>
   );
 }
 
-function DetailRow({ label, value }: { label: string; value: string }) {
+function DetailRow({
+  label,
+  value,
+  isLast = false,
+}: {
+  label: string;
+  value: string;
+  isLast?: boolean;
+}) {
+  const styles = useThemedStyles(createStyles);
   return (
-    <View style={styles.detailRow}>
-      <Text style={styles.detailLabel}>{label}</Text>
-      <Text style={styles.detailValue}>{value}</Text>
+    <View style={[styles.detailRow, isLast && styles.detailRowLast]}>
+      <AppText variant="caption" tone="muted">
+        {label}
+      </AppText>
+      <AppText variant="body" style={styles.detailValue}>
+        {value}
+      </AppText>
     </View>
   );
 }
 
-const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: Brand.background },
-  content: { padding: ScreenPadding },
-  hero: {
-    backgroundColor: Brand.ink,
-    borderRadius: Radius.xxl,
-    borderWidth: 1,
-    borderColor: Brand.inkBorder,
-    padding: Space.lg,
+const createStyles = (theme: AppTheme) => ({
+  screen: {
+    flex: 1,
+    backgroundColor: theme.colors.bgCanvas,
   },
-  heroTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  liveChip: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  liveDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: Brand.volt },
-  liveText: { ...Type.micro, color: Brand.volt, fontSize: 9.5 },
-  heroTime: { ...Type.meta, color: Brand.inkMuted, fontSize: 10 },
-  heroTitle: { ...Type.h2, color: Brand.white, marginTop: Space.md },
-  heroSub: { ...Type.meta, color: Brand.inkMuted, marginTop: 3, lineHeight: 17 },
+  content: {
+    padding: theme.spacing.screenPadding,
+  },
+  hero: {
+    gap: theme.spacing.xs,
+  },
+  heroTop: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    justifyContent: 'space-between' as const,
+  },
+  heroTitle: {
+    marginTop: theme.spacing.xs,
+  },
   heroDivider: {
     height: 1,
-    backgroundColor: Brand.inkBorder,
-    marginVertical: Space.lg,
+    backgroundColor: theme.colors.borderSubtle,
+    marginVertical: theme.spacing.md,
   },
-  heroClient: { flexDirection: 'row', alignItems: 'center', gap: Space.md },
-  heroClientCopy: { flex: 1 },
-  heroClientName: { ...Type.bodyStrong, color: Brand.white, fontWeight: '700' },
-  heroClientRole: { ...Type.meta, color: Brand.inkMuted, marginTop: 2 },
-  heroClientMeta: { ...Type.micro, color: Brand.volt, marginTop: 3 },
-  chatButton: {
-    width: 42,
-    height: 42,
-    borderRadius: 21,
-    backgroundColor: Brand.ink,
-    alignItems: 'center',
-    justifyContent: 'center',
+  heroClient: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: theme.spacing.md,
+  },
+  heroClientCopy: {
+    flex: 1,
+    gap: 2,
   },
   detailCard: {
-    backgroundColor: Brand.surface,
-    borderRadius: Radius.lg,
-    paddingHorizontal: Space.lg,
-    paddingVertical: Space.xs,
-    borderWidth: 1,
-    borderColor: Brand.border,
+    paddingVertical: theme.spacing.xs,
   },
   detailRow: {
-    paddingVertical: Space.md,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: Brand.divider,
+    paddingVertical: theme.spacing.md,
+    borderBottomWidth: 1,
+    borderBottomColor: theme.colors.borderSubtle,
+    gap: 2,
   },
-  detailLabel: { ...Type.meta, color: Brand.textMuted, fontWeight: '600', fontSize: 10.5 },
-  detailValue: { ...Type.body, color: Brand.text, marginTop: 3, lineHeight: 20, fontSize: 13.5 },
+  detailRowLast: {
+    borderBottomWidth: 0,
+  },
+  detailValue: {
+    lineHeight: 20,
+  },
   disclaimer: {
-    flexDirection: 'row',
-    gap: 6,
-    alignItems: 'flex-start',
-    backgroundColor: Brand.primarySoft,
-    borderRadius: Radius.md,
-    padding: Space.md,
-    marginTop: Space.lg,
+    flexDirection: 'row' as const,
+    gap: theme.spacing.sm,
+    alignItems: 'flex-start' as const,
+    backgroundColor: theme.colors.statusInfoBg,
+    borderColor: theme.colors.statusInfoBorder,
+    marginTop: theme.spacing.lg,
   },
-  disclaimerText: { flex: 1, ...Type.meta, color: Brand.primaryDark, lineHeight: 16 },
+  disclaimerText: {
+    flex: 1,
+  },
   notice: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Space.sm,
-    backgroundColor: Brand.amberSoft,
-    borderRadius: Radius.md,
-    padding: Space.md,
-    marginTop: Space.lg,
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: theme.spacing.sm,
+    backgroundColor: theme.colors.statusWarningBg,
+    borderColor: theme.colors.statusWarningBorder,
+    marginTop: theme.spacing.md,
   },
-  noticeCopy: { flex: 1 },
-  noticeTitle: { ...Type.label, color: Brand.text, fontWeight: '700' },
-  noticeText: { ...Type.meta, color: Brand.textSecondary, marginTop: 2, lineHeight: 16 },
+  noticeCopy: {
+    flex: 1,
+    gap: 2,
+  },
   footer: {
-    position: 'absolute',
+    position: 'absolute' as const,
     left: 0,
     right: 0,
     bottom: 0,
-    paddingHorizontal: ScreenPadding,
-    paddingTop: Space.md,
-    backgroundColor: Brand.background,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: Brand.border,
+    paddingHorizontal: theme.spacing.screenPadding,
+    paddingTop: theme.spacing.md,
+    backgroundColor: theme.colors.bgCanvas,
+    borderTopWidth: 1,
+    borderTopColor: theme.colors.borderSubtle,
   },
-  pressed: { opacity: 0.72 },
+  pressed: {
+    opacity: 0.78,
+  },
 });

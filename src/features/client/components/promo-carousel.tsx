@@ -1,13 +1,7 @@
-import {
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  View,
-  useWindowDimensions,
-} from 'react-native';
+import { Pressable, ScrollView, View, useWindowDimensions } from 'react-native';
 import { Ionicons, type IconName } from '@/components/ui/icon';
-import { Brand, Radius, ScreenPadding, Space, Type } from '@/constants/brand';
+import { AppText } from '@/components/ui/text';
+import { useAppTheme, useThemedStyles, type AppTheme } from '@/theme';
 
 export type PromoKey = 'request' | 'track' | 'vehicle';
 
@@ -23,22 +17,22 @@ const PROMOS: Promo[] = [
   {
     key: 'request',
     eyebrow: 'MULAI CEPAT',
-    title: 'Pesan montir dalam 3 langkah',
-    body: 'Pilih layanan, jelaskan keluhan, montir datang.',
+    title: 'Pesan montir dalam 3 ketukan',
+    body: 'Pilih masalah, pastikan lokasi, lihat biaya panggil pasti, kirim.',
     icon: 'flash-outline',
   },
   {
     key: 'track',
     eyebrow: 'PELACAKAN',
     title: 'Pantau montir secara langsung',
-    body: 'Status perjalanan diperbarui otomatis di aplikasi.',
+    body: 'Posisi montir dan persetujuan estimasi transparan di aplikasi.',
     icon: 'navigate-outline',
   },
   {
     key: 'vehicle',
     eyebrow: 'GARASI',
     title: 'Simpan kendaraanmu',
-    body: 'Permintaan berikutnya jadi lebih cepat dibuat.',
+    body: 'Tier motor/mobil terisi otomatis pada permintaan berikutnya.',
     icon: 'car-sport-outline',
   },
 ];
@@ -47,15 +41,12 @@ interface PromoCarouselProps {
   onPressPromo: (key: PromoKey) => void;
 }
 
-/**
- * Rel panduan horizontal. Memakai permukaan kartu yang sama dengan komponen
- * lain (surface + border) dan satu aksen biru, tanpa gradient atau aksen
- * dekoratif per kartu.
- */
 export function PromoCarousel({ onPressPromo }: PromoCarouselProps) {
+  const { theme } = useAppTheme();
+  const styles = useThemedStyles(createStyles);
   const { width } = useWindowDimensions();
-  const cardWidth = Math.min(width - ScreenPadding * 2 - 32, 460);
-  const gap = Space.md;
+  const cardWidth = Math.min(width - theme.spacing.screenPadding * 2 - 32, 460);
+  const gap = theme.spacing.md;
 
   return (
     <ScrollView
@@ -73,20 +64,26 @@ export function PromoCarousel({ onPressPromo }: PromoCarouselProps) {
           onPress={() => onPressPromo(promo.key)}
           style={({ pressed }) => [{ width: cardWidth }, pressed && styles.pressed]}
         >
-          <View style={styles.card}>
+          <View style={[styles.card, theme.elevation.card]}>
             <View style={styles.topRow}>
               <View style={styles.iconTile}>
-                <Ionicons name={promo.icon} size={17} color={Brand.primary} />
+                <Ionicons name={promo.icon} size={17} color={theme.colors.statusInfoFg} />
               </View>
-              <Text style={styles.eyebrow}>{promo.eyebrow}</Text>
+              <AppText variant="overline" tone="info">
+                {promo.eyebrow}
+              </AppText>
             </View>
-            <Text style={styles.title}>{promo.title}</Text>
-            <Text style={styles.body} numberOfLines={2}>
+            <AppText variant="title" style={styles.title}>
+              {promo.title}
+            </AppText>
+            <AppText variant="caption" tone="secondary" numberOfLines={2}>
               {promo.body}
-            </Text>
+            </AppText>
             <View style={styles.cta}>
-              <Text style={styles.ctaText}>Lihat</Text>
-              <Ionicons name="arrow-forward" size={13} color={Brand.primary} />
+              <AppText variant="label" tone="info">
+                Lihat
+              </AppText>
+              <Ionicons name="arrow-forward" size={14} color={theme.colors.statusInfoFg} />
             </View>
           </View>
         </Pressable>
@@ -95,28 +92,38 @@ export function PromoCarousel({ onPressPromo }: PromoCarouselProps) {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (theme: AppTheme) => ({
   card: {
-    minHeight: 146,
-    borderRadius: Radius.lg,
-    backgroundColor: Brand.surface,
+    minHeight: 150,
+    borderRadius: theme.radii.lg,
+    borderCurve: theme.components.card.borderCurve,
+    backgroundColor: theme.colors.bgSurface,
     borderWidth: 1,
-    borderColor: Brand.border,
-    padding: Space.lg,
+    borderColor: theme.colors.borderSubtle,
+    padding: theme.spacing.lg,
+    gap: theme.spacing.xs,
   },
-  topRow: { flexDirection: 'row', alignItems: 'center', gap: Space.sm },
+  topRow: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: theme.spacing.sm,
+  },
   iconTile: {
-    width: 30,
-    height: 30,
-    borderRadius: Radius.sm,
-    backgroundColor: Brand.primarySoft,
-    alignItems: 'center',
-    justifyContent: 'center',
+    width: 32,
+    height: 32,
+    borderRadius: theme.radii.sm,
+    backgroundColor: theme.colors.statusInfoBg,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
   },
-  eyebrow: { ...Type.micro, color: Brand.primary, letterSpacing: 0.9 },
-  title: { ...Type.title, color: Brand.text, marginTop: Space.md },
-  body: { ...Type.meta, color: Brand.textSecondary, marginTop: 2, lineHeight: 16 },
-  cta: { flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: Space.md },
-  ctaText: { ...Type.label, color: Brand.primary, fontWeight: '700' },
-  pressed: { opacity: 0.9 },
+  title: {
+    marginTop: theme.spacing.xs,
+  },
+  cta: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: theme.spacing.xs,
+    marginTop: theme.spacing.sm,
+  },
+  pressed: { opacity: 0.85 },
 });

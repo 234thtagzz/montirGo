@@ -3,13 +3,12 @@ import { Platform, StyleSheet, View } from 'react-native';
 import MapView, { Marker, Polyline, PROVIDER_GOOGLE, type Region } from 'react-native-maps';
 import Constants from 'expo-constants';
 import { Ionicons } from '@/components/ui/icon';
-import { Brand } from '@/constants/brand';
-import type { LatLng } from '@/features/mechanic/tracking/geo';
 import { getMapsApiKey } from '@/features/mechanic/tracking/directions';
+import type { LatLng } from '@/features/mechanic/tracking/geo';
+import { useAppTheme, useThemedStyles, type AppTheme } from '@/theme';
 import { TripMapFallback } from './trip-map-fallback';
 import type { TripMapProps } from './trip-map-props';
 
-/** Titik tengah Jakarta sebagai fallback sebelum GPS tersedia. */
 const FALLBACK_CENTER: LatLng = { latitude: -6.2, longitude: 106.816666 };
 const FOLLOW_ZOOM = 17;
 
@@ -25,11 +24,7 @@ function initialRegion(mechanic: LatLng | null, destination: LatLng | null): Reg
 }
 
 /**
- * Peta native `react-native-maps` (Google Maps di Android, Apple Maps di iOS).
- *
- * Hanya bisa dipakai di **development build** — Expo Go tidak lagi mendukung
- * Google Maps di Android (petak peta kosong/hitam). Dipilih lewat konstanta
- * `MAP_RENDERER` pada `trip-map.tsx`.
+ * Peta native `react-native-maps` opsional untuk development build.
  */
 export function TripMapGoogle({
   mechanic,
@@ -43,6 +38,8 @@ export function TripMapGoogle({
   recenterToken,
   onFollowChange,
 }: TripMapProps) {
+  const { theme } = useAppTheme();
+  const styles = useThemedStyles(createStyles);
   const mapRef = useRef<MapView | null>(null);
   const followingRef = useRef(true);
   const fittedOnceRef = useRef(false);
@@ -54,10 +51,8 @@ export function TripMapGoogle({
   const mechanicLng = mechanic?.longitude;
   const isExpoGo = Constants.expoGoConfig != null;
   const needsDevBuild = Platform.OS === 'android' && isExpoGo;
-  // Di development build, Android butuh key di manifest agar petak tampil.
   const needsGoogleKey = Platform.OS === 'android' && !isExpoGo && getMapsApiKey() == null;
 
-  // Saat rute pertama kali tersedia: tampilkan seluruh perjalanan.
   useEffect(() => {
     if (mode !== 'mechanic') return;
     if (fittedOnceRef.current || routeCoordinates.length < 2) return;
@@ -68,7 +63,6 @@ export function TripMapGoogle({
     });
   }, [mode, routeCoordinates, topInset, bottomInset]);
 
-  // Mode client: bingkai rute (atau montir + tujuan) setiap rute diperbarui.
   const viewerCoordinates = useMemo(() => {
     if (mode !== 'client') return [];
     if (routeCoordinates.length > 1) return routeCoordinates;
@@ -83,7 +77,6 @@ export function TripMapGoogle({
     });
   }, [mode, viewerCoordinates]);
 
-  // Tombol "recenter" ditekan: kembali mengikuti montir.
   useEffect(() => {
     if (mode !== 'mechanic') return;
     if (recenterToken === lastRecenterRef.current) return;
@@ -98,7 +91,6 @@ export function TripMapGoogle({
     }
   }, [mode, recenterToken, mechanicLat, mechanicLng, onFollowChange]);
 
-  // Ikuti montir selama pengguna belum menggeser peta.
   useEffect(() => {
     if (mode !== 'mechanic') return;
     if (mechanicLat == null || mechanicLng == null || !followingRef.current) return;
@@ -117,7 +109,7 @@ export function TripMapGoogle({
         topInset={topInset}
         bottomInset={bottomInset}
         title="Peta butuh development build"
-        hint="Expo Go tidak lagi mendukung Google Maps di Android. Jalankan `npx expo run:android` atau `eas build --profile development`, lalu buka aplikasi hasil build tersebut."
+        hint="Expo Go tidak lagi mendukung Google Maps di Android. Gunakan renderer WebView Leaflet atau build development."
       />
     );
   }
@@ -131,7 +123,7 @@ export function TripMapGoogle({
         topInset={topInset}
         bottomInset={bottomInset}
         title="Peta butuh Google Maps API key"
-        hint="Isi EXPO_PUBLIC_MAPS_API_KEY lalu build ulang aplikasi (development build) untuk menampilkan peta."
+        hint="Isi EXPO_PUBLIC_MAPS_API_KEY lalu build ulang development build untuk menampilkan peta."
       />
     );
   }
@@ -157,7 +149,7 @@ export function TripMapGoogle({
         <>
           <Polyline
             coordinates={routeCoordinates}
-            strokeColor="rgba(255,255,255,0.95)"
+            strokeColor={theme.colors.bgSurface}
             strokeWidth={9}
             lineCap="round"
             lineJoin="round"
@@ -165,7 +157,7 @@ export function TripMapGoogle({
           />
           <Polyline
             coordinates={routeCoordinates}
-            strokeColor={Brand.primary}
+            strokeColor={theme.colors.actionPrimaryAltBg}
             strokeWidth={5}
             lineCap="round"
             lineJoin="round"
@@ -183,7 +175,7 @@ export function TripMapGoogle({
           title="Lokasi client"
         >
           <View style={styles.destinationPin}>
-            <Ionicons name="home" size={16} color={Brand.primary} />
+            <Ionicons name="home" size={16} color={theme.colors.actionPrimaryAltBg} />
           </View>
         </Marker>
       ) : null}
@@ -200,7 +192,7 @@ export function TripMapGoogle({
               <Ionicons
                 name="navigate"
                 size={16}
-                color={Brand.white}
+                color={theme.colors.actionPrimaryFg}
                 style={{ transform: [{ rotate: `${heading ?? 0}deg` }] }}
               />
             </View>
@@ -211,38 +203,34 @@ export function TripMapGoogle({
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (theme: AppTheme) => ({
   destinationPin: {
     width: 36,
     height: 36,
     borderRadius: 18,
-    backgroundColor: Brand.white,
+    backgroundColor: theme.colors.bgSurface,
     borderWidth: 2,
-    borderColor: Brand.primary,
-    alignItems: 'center',
-    justifyContent: 'center',
-    shadowColor: '#0B1B33',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 4,
-    elevation: 4,
+    borderColor: theme.colors.actionPrimaryAltBg,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+    ...theme.elevation.card,
   },
   mechanicHalo: {
     width: 42,
     height: 42,
     borderRadius: 21,
-    backgroundColor: 'rgba(11,116,229,0.18)',
-    alignItems: 'center',
-    justifyContent: 'center',
+    backgroundColor: theme.colors.statusInfoBg,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
   },
   mechanicDot: {
     width: 28,
     height: 28,
     borderRadius: 14,
-    backgroundColor: Brand.primary,
+    backgroundColor: theme.colors.actionPrimaryAltBg,
     borderWidth: 2,
-    borderColor: Brand.white,
-    alignItems: 'center',
-    justifyContent: 'center',
+    borderColor: theme.colors.bgSurface,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
   },
 });

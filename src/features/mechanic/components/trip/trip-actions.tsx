@@ -1,6 +1,7 @@
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, View } from 'react-native';
 import { Ionicons, type IconName } from '@/components/ui/icon';
-import { Brand, Radius, Space } from '@/constants/brand';
+import { AppText } from '@/components/ui/text';
+import { useAppTheme, useThemedStyles, type AppTheme } from '@/theme';
 
 interface TripActionsProps {
   phone: string | null;
@@ -15,18 +16,23 @@ interface ActionItem {
   icon: IconName;
   color: string;
   background: string;
+  border: string;
   onPress: () => void;
   disabled?: boolean;
 }
 
 export function TripActions({ phone, onWhatsApp, onCall, onOpenMaps }: TripActionsProps) {
+  const { theme } = useAppTheme();
+  const styles = useThemedStyles(createStyles);
+
   const actions: ActionItem[] = [
     {
       key: 'whatsapp',
       label: 'WhatsApp',
       icon: 'logo-whatsapp',
-      color: Brand.whatsapp,
-      background: '#E9FBF0',
+      color: theme.colors.statusSuccessFg,
+      background: theme.colors.statusSuccessBg,
+      border: theme.colors.statusSuccessBorder,
       onPress: onWhatsApp,
       disabled: !phone,
     },
@@ -34,8 +40,9 @@ export function TripActions({ phone, onWhatsApp, onCall, onOpenMaps }: TripActio
       key: 'call',
       label: 'Telepon',
       icon: 'call',
-      color: Brand.primary,
-      background: Brand.primarySoft,
+      color: theme.colors.statusInfoFg,
+      background: theme.colors.statusInfoBg,
+      border: theme.colors.statusInfoBorder,
       onPress: onCall,
       disabled: !phone,
     },
@@ -43,8 +50,9 @@ export function TripActions({ phone, onWhatsApp, onCall, onOpenMaps }: TripActio
       key: 'maps',
       label: 'Rute',
       icon: 'map',
-      color: Brand.textSecondary,
-      background: '#F3F6FA',
+      color: theme.colors.textPrimary,
+      background: theme.colors.bgSurfaceSubtle,
+      border: theme.colors.borderDefault,
       onPress: onOpenMaps,
     },
   ];
@@ -65,31 +73,51 @@ export function TripActions({ phone, onWhatsApp, onCall, onOpenMaps }: TripActio
             pressed && styles.pressed,
           ]}
         >
-          <View style={[styles.iconWrap, { backgroundColor: action.background }]}>
-            <Ionicons name={action.icon} size={19} color={action.color} />
+          <View
+            style={[
+              styles.iconWrap,
+              {
+                backgroundColor: action.background,
+                borderColor: action.border,
+              },
+            ]}
+          >
+            <Ionicons name={action.icon} size={20} color={action.color} />
           </View>
-          <Text style={styles.label}>{action.label}</Text>
+          <AppText variant="caption" tone="secondary">
+            {action.label}
+          </AppText>
         </Pressable>
       ))}
     </View>
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (theme: AppTheme) => ({
   row: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    gap: Space.md,
+    flexDirection: 'row' as const,
+    justifyContent: 'space-between' as const,
+    gap: theme.spacing.md,
   },
-  action: { flex: 1, alignItems: 'center', gap: 6 },
+  action: {
+    flex: 1,
+    alignItems: 'center' as const,
+    gap: theme.spacing.xs,
+    minHeight: theme.touchTarget.min,
+  },
   iconWrap: {
-    width: 46,
-    height: 46,
-    borderRadius: Radius.md,
-    alignItems: 'center',
-    justifyContent: 'center',
+    width: theme.touchTarget.min,
+    height: theme.touchTarget.min,
+    borderRadius: theme.radii.md,
+    borderCurve: theme.components.card.borderCurve,
+    borderWidth: 1,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
   },
-  label: { fontSize: 11, fontWeight: '600', color: Brand.textSecondary },
-  disabled: { opacity: 0.4 },
-  pressed: { opacity: 0.7 },
+  disabled: {
+    opacity: 0.4,
+  },
+  pressed: {
+    opacity: 0.72,
+  },
 });

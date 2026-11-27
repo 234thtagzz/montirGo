@@ -1,12 +1,15 @@
-import { LinearGradient } from 'expo-linear-gradient';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Avatar } from '@/components/ui/avatar';
+import { Badge } from '@/components/ui/badge';
 import { Ionicons } from '@/components/ui/icon';
-import { Brand, Gradient, Radius, ScreenPadding, Space, Type } from '@/constants/brand';
+import { Surface } from '@/components/ui/surface';
+import { AppText } from '@/components/ui/text';
+import { useAppTheme, useThemedStyles, type AppTheme } from '@/theme';
 
 interface DashboardHeaderProps {
   name: string;
+  avatarUrl?: string | null;
   isOnline: boolean;
   isVerified: boolean;
   /** Jumlah notifikasi yang belum dibaca (badge lonceng). */
@@ -30,30 +33,28 @@ function firstName(name: string): string {
 
 export function DashboardHeader({
   name,
+  avatarUrl,
   isOnline,
   isVerified,
   unreadNotifications = 0,
   onPressNotifications,
 }: DashboardHeaderProps) {
   const insets = useSafeAreaInsets();
+  const { theme } = useAppTheme();
+  const styles = useThemedStyles(createStyles);
 
   return (
-    <LinearGradient
-      colors={Gradient.header}
-      start={{ x: 0, y: 0 }}
-      end={{ x: 1, y: 0.9 }}
-      style={[styles.header, { paddingTop: insets.top + Space.md }]}
-    >
+    <View style={[styles.header, { paddingTop: insets.top + theme.spacing.md }]}>
       <View style={styles.topRow}>
         <View style={styles.userRow}>
-          <View style={styles.avatarRing}>
-            <Avatar name={name} size={42} />
-          </View>
+          <Avatar name={name} uri={avatarUrl} size={44} />
           <View style={styles.userText}>
-            <Text style={styles.eyebrow}>MONTIR MONTIRGO</Text>
-            <Text style={styles.greeting} numberOfLines={1}>
+            <AppText variant="overline" tone="muted">
+              MONTIR MONTIRGO
+            </AppText>
+            <AppText variant="title" numberOfLines={1}>
               {greeting()}, {firstName(name)}
-            </Text>
+            </AppText>
           </View>
         </View>
 
@@ -69,7 +70,11 @@ export function DashboardHeader({
             onPress={onPressNotifications}
             style={({ pressed }) => [styles.bell, pressed && styles.pressed]}
           >
-            <Ionicons name="notifications-outline" size={20} color={Brand.white} />
+            <Ionicons
+              name="notifications-outline"
+              size={20}
+              color={theme.colors.textPrimary}
+            />
             {unreadNotifications > 0 ? (
               <View style={styles.bellBadge}>
                 <Text style={styles.bellBadgeText}>
@@ -81,98 +86,89 @@ export function DashboardHeader({
         ) : null}
       </View>
 
-      <View style={styles.metaRow}>
-        <View style={[styles.verify, !isVerified && styles.verifyPending]}>
-          <Ionicons
-            name={isVerified ? 'shield-checkmark' : 'alert-circle-outline'}
-            size={13}
-            color={isVerified ? Brand.volt : '#FCD34D'}
+      <Surface variant="subtle" padding="sm" radius="md" style={styles.metaBar}>
+        <View style={styles.metaRow}>
+          <Badge
+            size="sm"
+            tone={isVerified ? 'success' : 'warning'}
+            icon={isVerified ? 'shield-checkmark-outline' : 'alert-circle-outline'}
+            label={isVerified ? 'Terverifikasi' : 'Belum verifikasi'}
           />
-          <Text style={styles.verifyText}>
-            {isVerified ? 'Akun terverifikasi' : 'Belum terverifikasi'}
-          </Text>
+          <Badge
+            size="sm"
+            dot
+            tone={isOnline ? 'success' : 'neutral'}
+            label={isOnline ? 'Mode Siaga' : 'Offline'}
+          />
         </View>
-        <View style={styles.modeChip}>
-          <View style={[styles.modeDot, { backgroundColor: isOnline ? Brand.volt : '#5D6A83' }]} />
-          <Text style={styles.modeText}>{isOnline ? 'Siap bekerja' : 'Sedang istirahat'}</Text>
-        </View>
-      </View>
-    </LinearGradient>
+      </Surface>
+    </View>
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (theme: AppTheme) => ({
   header: {
-    paddingHorizontal: ScreenPadding,
-    paddingBottom: 58,
-    borderBottomLeftRadius: Radius.xxl,
-    borderBottomRightRadius: Radius.xxl,
+    paddingHorizontal: theme.spacing.screenPadding,
+    paddingBottom: theme.spacing.md,
+    backgroundColor: theme.colors.bgCanvas,
+    gap: theme.spacing.md,
   },
   topRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: Space.sm,
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    justifyContent: 'space-between' as const,
+    gap: theme.spacing.sm,
   },
-  userRow: { flexDirection: 'row', alignItems: 'center', gap: 12, flex: 1 },
-  avatarRing: {
-    padding: 2,
-    borderRadius: Radius.pill,
-    borderWidth: 1.5,
-    borderColor: 'rgba(255,255,255,0.28)',
+  userRow: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: theme.spacing.md,
+    flex: 1,
   },
-  userText: { flex: 1 },
-  eyebrow: { ...Type.micro, color: Brand.inkMuted, letterSpacing: 1.2 },
-  greeting: { ...Type.title, color: Brand.white, marginTop: 3 },
+  userText: {
+    flex: 1,
+    gap: 2,
+  },
   bell: {
-    width: 42,
-    height: 42,
-    borderRadius: Radius.md,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: 'rgba(255,255,255,0.08)',
+    width: theme.touchTarget.min,
+    height: theme.touchTarget.min,
+    borderRadius: theme.radii.md,
+    borderCurve: theme.components.card.borderCurve,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+    backgroundColor: theme.colors.bgSurface,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.12)',
+    borderColor: theme.colors.borderDefault,
   },
-  pressed: { opacity: 0.7 },
+  pressed: {
+    opacity: 0.72,
+  },
   bellBadge: {
-    position: 'absolute',
-    top: 5,
-    right: 5,
-    minWidth: 16,
-    height: 16,
+    position: 'absolute' as const,
+    top: 4,
+    right: 4,
+    minWidth: 18,
+    height: 18,
     paddingHorizontal: 4,
-    borderRadius: 8,
-    backgroundColor: Brand.red,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 1.5,
-    borderColor: Brand.ink,
+    borderRadius: theme.radii.pill,
+    backgroundColor: theme.colors.statusDangerFg,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
   },
-  bellBadgeText: { color: Brand.white, fontSize: 8.5, fontWeight: '800' },
-  metaRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Space.sm,
-    marginTop: Space.xl,
+  bellBadgeText: {
+    color: theme.colors.textInverse,
+    fontFamily: theme.fontFamily.bold,
+    fontSize: 11,
+    lineHeight: 13,
   },
-  verify: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 5,
-    paddingHorizontal: 9,
-    paddingVertical: 5,
-    borderRadius: Radius.pill,
-    backgroundColor: 'rgba(201,241,88,0.1)',
+  metaBar: {
     borderWidth: 1,
-    borderColor: 'rgba(201,241,88,0.2)',
+    borderColor: theme.colors.borderSubtle,
   },
-  verifyPending: {
-    backgroundColor: 'rgba(252,211,77,0.1)',
-    borderColor: 'rgba(252,211,77,0.22)',
+  metaRow: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    flexWrap: 'wrap' as const,
+    gap: theme.spacing.sm,
   },
-  verifyText: { ...Type.micro, color: Brand.inkText, fontWeight: '600', letterSpacing: 0.1 },
-  modeChip: { flexDirection: 'row', alignItems: 'center', gap: 5 },
-  modeDot: { width: 6, height: 6, borderRadius: 3 },
-  modeText: { ...Type.meta, color: Brand.inkMuted },
 });

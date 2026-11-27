@@ -1,99 +1,103 @@
 import { useState } from 'react';
 import {
-  Alert,
   KeyboardAvoidingView,
   Platform,
   Pressable,
   ScrollView,
-  StyleSheet,
-  Text,
   View,
 } from 'react-native';
 import { useRouter } from 'expo-router';
-import { StatusBar } from 'expo-status-bar';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Button } from '@/components/ui/button';
+import { ConfirmSheet } from '@/components/ui/confirm-sheet';
 import { Ionicons } from '@/components/ui/icon';
-import { Brand, Radius, ScreenPadding, Space, Type } from '@/constants/brand';
+import { Surface } from '@/components/ui/surface';
+import { AppText } from '@/components/ui/text';
+import { useToast } from '@/components/ui/toast';
 import { AuthField } from '@/features/auth/components/auth-field';
 import {
   getAuthErrorMessage,
   setMyIdentityNumber,
   useAuth,
 } from '@/features/auth/service';
+import { useAppTheme, useThemedStyles, type AppTheme } from '@/theme';
 
 interface IdentityRequiredScreenProps {
-  /** Dipanggil setelah nomor identitas tersimpan (memuat ulang sesi/user). */
   onSaved: () => void | Promise<void>;
 }
 
 /**
- * Gerbang wajib setelah login: akun lama yang belum punya nomor identitas
- * (KTP) harus melengkapinya sebelum bisa memakai aplikasi. Nomor hanya bisa
- * diisi sekali — setelah tersimpan UI ini tidak muncul lagi.
+ * Gerbang wajib verifikasi KTP 16 digit (tanpa Alert.alert).
  */
 export function IdentityRequiredScreen({ onSaved }: IdentityRequiredScreenProps) {
+  const { theme } = useAppTheme();
+  const styles = useThemedStyles(createStyles);
+  const { showToast } = useToast();
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { logout } = useAuth();
+
   const [identityNumber, setIdentityNumber] = useState('');
+  const [submitted, setSubmitted] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [logoutVisible, setLogoutVisible] = useState(false);
   const [loggingOut, setLoggingOut] = useState(false);
 
+  const identityError = !/^\d{16}$/.test(identityNumber)
+    ? 'Nomor identitas (KTP) wajib diisi 16 digit angka.'
+    : null;
+
   const handleSave = async () => {
-    if (!/^\d{16}$/.test(identityNumber)) {
-      Alert.alert('Gagal', 'Nomor identitas (KTP) wajib diisi 16 digit angka.');
-      return;
-    }
+    setSubmitted(true);
+    if (identityError) return;
     setSaving(true);
     try {
       await setMyIdentityNumber(identityNumber);
       await onSaved();
     } catch (error) {
-      Alert.alert(
-        'Gagal menyimpan',
-        getAuthErrorMessage(error, 'Nomor identitas gagal disimpan. Coba lagi.'),
-      );
+      showToast({
+        tone: 'danger',
+        title: 'Gagal menyimpan',
+        message: getAuthErrorMessage(error, 'Nomor identitas gagal disimpan. Coba lagi.'),
+      });
     } finally {
       setSaving(false);
     }
   };
 
-  const handleLogout = () => {
-    Alert.alert(
-      'Keluar dari akun?',
-      'Nomor identitas wajib dilengkapi sebelum kamu bisa memakai MontirGo.',
-      [
-        { text: 'Batal', style: 'cancel' },
-        {
-          text: 'Keluar',
-          style: 'destructive',
-          onPress: async () => {
-            setLoggingOut(true);
-            try {
-              await logout();
-              router.replace('/(auth)/login');
-            } catch {
-              setLoggingOut(false);
-            }
-          },
-        },
-      ],
-    );
+  const confirmLogout = async () => {
+    setLoggingOut(true);
+    try {
+      await logout();
+      setLogoutVisible(false);
+      router.replace('/(auth)/login');
+    } catch {
+      setLoggingOut(false);
+      showToast({
+        tone: 'danger',
+        title: 'Gagal keluar',
+        message: 'Tidak dapat keluar sekarang. Coba lagi.',
+      });
+    }
   };
 
   return (
     <View style={styles.screen}>
-      <StatusBar style="light" />
-      <View style={[styles.hero, { paddingTop: insets.top + Space.xxl }]}>
+      <View style={[styles.hero, { paddingTop: insets.top + theme.spacing.xxl }]}>
         <View style={styles.iconWrap}>
-          <Ionicons name="shield-checkmark-outline" size={26} color={Brand.volt} />
+          <Ionicons
+            name="shield-checkmark-outline"
+            size={26}
+            color={theme.colors.statusInfoFg}
+          />
         </View>
-        <Text style={styles.eyebrow}>VERIFIKASI IDENTITAS</Text>
-        <Text style={styles.title}>Lengkapi Nomor Identitas (KTP)</Text>
-        <Text style={styles.subtitle}>
+        <AppText variant="overline" tone="info">
+          VERIFIKASI IDENTITAS
+        </AppText>
+        <AppText variant="h1">Lengkapi Nomor Identitas (KTP)</AppText>
+        <AppText variant="body" tone="secondary">
           Demi keamanan akun, nomor identitas wajib diisi sebelum kamu melanjutkan.
-        </Text>
+        </AppText>
       </View>
 
       <KeyboardAvoidingView
@@ -105,10 +109,11 @@ export function IdentityRequiredScreen({ onSaved }: IdentityRequiredScreenProps)
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
-          <View style={styles.card}>
+          <Surface variant="default" padding="lg" style={styles.card}>
             <AuthField
               label="Nomor identitas (KTP)"
               icon="card-outline"
+              required
               placeholder="16 digit sesuai KTP"
               value={identityNumber}
               onChangeText={(text) => setIdentityNumber(text.replace(/\D/g, '').slice(0, 16))}
@@ -116,106 +121,104 @@ export function IdentityRequiredScreen({ onSaved }: IdentityRequiredScreenProps)
               keyboardType="number-pad"
               maxLength={16}
               returnKeyType="done"
-              onSubmitEditing={handleSave}
+              error={identityError}
+              showError={submitted}
+              onSubmitEditing={() => void handleSave()}
             />
 
             <View style={styles.note}>
-              <Ionicons name="lock-closed" size={14} color={Brand.amber} />
-              <Text style={styles.noteText}>
-                Nomor identitas hanya bisa diisi satu kali dan bersifat permanen. Pastikan 16
-                digit sudah benar sesuai KTP.
-              </Text>
+              <Ionicons name="lock-closed" size={16} color={theme.colors.statusWarningFg} />
+              <AppText variant="caption" tone="warning" style={styles.flexCopy}>
+                Nomor identitas hanya bisa diisi satu kali dan bersifat permanen. Pastikan 16 digit sudah benar sesuai KTP.
+              </AppText>
             </View>
 
             <Button
               label="Simpan & Lanjutkan"
               icon="checkmark-circle-outline"
+              size="cta"
               loading={saving}
-              onPress={handleSave}
-              style={styles.submit}
+              onPress={() => void handleSave()}
             />
-          </View>
+          </Surface>
 
           <Pressable
             accessibilityRole="button"
             accessibilityLabel="Keluar dari akun"
             disabled={loggingOut}
-            onPress={handleLogout}
-            style={({ pressed }) => [(pressed || loggingOut) && styles.pressed]}
+            onPress={() => setLogoutVisible(true)}
+            style={({ pressed }) => [styles.logoutBtn, (pressed || loggingOut) && styles.pressed]}
           >
-            <Text style={styles.logoutText}>
+            <AppText variant="label" tone="secondary">
               {loggingOut ? 'Keluar…' : 'Keluar dari akun'}
-            </Text>
+            </AppText>
           </Pressable>
         </ScrollView>
       </KeyboardAvoidingView>
+
+      <ConfirmSheet
+        visible={logoutVisible}
+        destructive
+        loading={loggingOut}
+        icon="log-out-outline"
+        title="Keluar dari akun?"
+        message="Nomor identitas wajib dilengkapi sebelum kamu dapat memakai MontirGo."
+        confirmLabel="Keluar"
+        onConfirm={() => void confirmLogout()}
+        onCancel={() => (loggingOut ? undefined : setLogoutVisible(false))}
+      />
     </View>
   );
 }
 
-const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: Brand.background },
+const createStyles = (theme: AppTheme) => ({
+  screen: {
+    flex: 1,
+    backgroundColor: theme.colors.bgCanvas,
+  },
   flex: { flex: 1 },
   hero: {
-    backgroundColor: Brand.ink,
-    paddingHorizontal: ScreenPadding,
-    paddingBottom: Space.xxl,
-    borderBottomLeftRadius: Radius.xxl,
-    borderBottomRightRadius: Radius.xxl,
+    backgroundColor: theme.colors.bgSurface,
+    paddingHorizontal: theme.spacing.screenPadding,
+    paddingBottom: theme.spacing.xl,
+    borderBottomWidth: 1,
+    borderBottomColor: theme.colors.borderSubtle,
+    gap: theme.spacing.sm,
   },
   iconWrap: {
     width: 52,
     height: 52,
-    borderRadius: Radius.lg,
-    backgroundColor: Brand.inkSoft,
+    borderRadius: theme.radii.lg,
+    backgroundColor: theme.colors.statusInfoBg,
     borderWidth: 1,
-    borderColor: Brand.inkBorder,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: Space.lg,
-  },
-  eyebrow: { ...Type.micro, color: Brand.volt },
-  title: { ...Type.h1, color: Brand.white, marginTop: Space.sm },
-  subtitle: {
-    ...Type.body,
-    color: Brand.inkMuted,
-    marginTop: Space.sm,
-    lineHeight: 20,
+    borderColor: theme.colors.statusInfoBorder,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+    marginBottom: theme.spacing.xs,
   },
   body: {
     flexGrow: 1,
-    paddingHorizontal: ScreenPadding,
-    paddingTop: Space.xxl,
-    paddingBottom: Space.xxxl,
+    paddingHorizontal: theme.spacing.screenPadding,
+    paddingTop: theme.spacing.xl,
+    paddingBottom: theme.spacing.xxxl,
+    gap: theme.spacing.lg,
   },
   card: {
-    backgroundColor: Brand.surface,
-    borderRadius: Radius.lg,
-    padding: Space.lg,
-    borderWidth: 1,
-    borderColor: Brand.divider,
+    gap: theme.spacing.md,
   },
   note: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: Space.sm,
-    backgroundColor: Brand.amberSoft,
-    borderRadius: Radius.sm,
-    padding: Space.md,
-    marginTop: Space.md,
+    flexDirection: 'row' as const,
+    alignItems: 'flex-start' as const,
+    gap: theme.spacing.sm,
+    backgroundColor: theme.colors.statusWarningBg,
+    borderRadius: theme.radii.sm,
+    padding: theme.spacing.md,
   },
-  noteText: {
-    flex: 1,
-    fontSize: 11.5,
-    lineHeight: 17,
-    color: Brand.amber,
+  flexCopy: { flex: 1 },
+  logoutBtn: {
+    minHeight: theme.touchTarget.min,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
   },
-  submit: { marginTop: Space.xl },
-  logoutText: {
-    ...Type.label,
-    color: Brand.textSecondary,
-    textAlign: 'center',
-    marginTop: Space.xxl,
-  },
-  pressed: { opacity: 0.6 },
+  pressed: { opacity: 0.65 },
 });

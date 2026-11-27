@@ -1,25 +1,18 @@
 import { useCallback, useEffect, useState } from 'react';
-import { StyleSheet, View } from 'react-native';
-import { StatusBar } from 'expo-status-bar';
+import { View } from 'react-native';
 import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import { EmptyState, ErrorState, LoadingState } from '@/components/ui/state';
-import { Brand } from '@/constants/brand';
 import { ClientTripView } from '@/features/client/components/tracking/client-trip-view';
 import { getRequest, type ClientOrder } from '@/features/client/service';
+import { useRefreshOnForeground } from '@/hooks/use-foreground';
 import { createRealtimeChannel, subscribeWithResync } from '@/lib/realtime';
 import { supabase } from '@/lib/supabase';
-import { useRefreshOnForeground } from '@/hooks/use-foreground';
+import { useThemedStyles, type AppTheme } from '@/theme';
 
-/**
- * Layar perjalanan client (padanan `(mechanic)/trip/[id]`).
- *
- * Dibuka dari Beranda/Detail Pesanan saat montir berstatus `on_the_way`. Begitu
- * montir tiba atau order dibatalkan, layar menampilkan ringkasan dan tombol ke
- * detail pesanan.
- */
 export default function ClientTrackingScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
+  const styles = useThemedStyles(createStyles);
 
   const [order, setOrder] = useState<ClientOrder | null>(null);
   const [loading, setLoading] = useState(true);
@@ -43,18 +36,18 @@ export default function ClientTrackingScreen() {
     }, [load]),
   );
 
-  // Perjalanan montir bergerak cepat; pastikan data segar setelah app aktif lagi.
   useRefreshOnForeground(() => {
     void load();
   });
 
-  // Status order bisa berubah di tengah perjalanan (tiba / dibatalkan).
   useEffect(() => {
     if (!id) return;
     const channel = createRealtimeChannel(`client-tracking-${id}`).on(
       'postgres_changes',
       { event: '*', schema: 'public', table: 'service_requests', filter: `id=eq.${id}` },
-      () => load(),
+      () => {
+        void load();
+      },
     );
     subscribeWithResync(channel, () => void load());
     return () => {
@@ -75,7 +68,6 @@ export default function ClientTrackingScreen() {
   if (loading) {
     return (
       <View style={styles.fallback}>
-        <StatusBar style="dark" />
         <LoadingState message="Menyiapkan perjalanan..." />
       </View>
     );
@@ -84,7 +76,6 @@ export default function ClientTrackingScreen() {
   if (error) {
     return (
       <View style={styles.fallback}>
-        <StatusBar style="dark" />
         <ErrorState onRetry={load} />
       </View>
     );
@@ -93,7 +84,6 @@ export default function ClientTrackingScreen() {
   if (!order) {
     return (
       <View style={styles.fallback}>
-        <StatusBar style="dark" />
         <EmptyState
           icon="map-outline"
           message="Perjalanan tidak ditemukan"
@@ -109,7 +99,6 @@ export default function ClientTrackingScreen() {
     const arrived = order.status === 'arrived';
     return (
       <View style={styles.fallback}>
-        <StatusBar style="dark" />
         <EmptyState
           icon={arrived ? 'checkmark-circle-outline' : 'map-outline'}
           message={
@@ -132,6 +121,10 @@ export default function ClientTrackingScreen() {
   return <ClientTripView order={order} onBack={goBack} onOpenDetail={openDetail} />;
 }
 
-const styles = StyleSheet.create({
-  fallback: { flex: 1, backgroundColor: Brand.background, paddingTop: 60 },
+const createStyles = (theme: AppTheme) => ({
+  fallback: {
+    flex: 1,
+    backgroundColor: theme.colors.bgCanvas,
+    paddingTop: 60,
+  },
 });

@@ -1,14 +1,25 @@
 import type { AiAnalysis, AiRiskLevel } from '@/features/service-request/ai';
+import type { OrderStatus, QuoteStatus } from '@/features/service-request/status';
 
-export type OrderStatus =
-  | 'requested'
-  | 'mechanic_assigned'
-  | 'mechanic_accepted'
-  | 'on_the_way'
-  | 'arrived'
-  | 'payment'
-  | 'paid'
-  | 'cancelled';
+export type { OrderStatus, QuoteStatus };
+export type CalloutFeeTier = 'motor' | 'mobil' | 'derek';
+export type InvoiceItemType = 'callout_fee' | 'service' | 'parts' | 'addon';
+
+export interface RejectedQuoteItemSnapshot {
+  id: string;
+  description: string;
+  amount: number;
+  item_type: InvoiceItemType;
+  quote_photo_paths?: string[];
+}
+
+export interface RejectedQuoteSnapshot {
+  rejected_at?: string;
+  reason?: string | null;
+  callout_fee_amount?: number;
+  items?: RejectedQuoteItemSnapshot[];
+  quote_photo_paths?: string[];
+}
 
 /**
  * Profil montir — hanya data yang membantu client mengenali identitas montir:
@@ -25,6 +36,9 @@ export interface MechanicProfile {
   skills: string[];
   vehicle_specialization: string[];
   certifications: string[];
+  /** Kendaraan operasional montir (opsional, hanya terlihat client pasca-penugasan). */
+  vehicle_label: string | null;
+  vehicle_plate: string | null;
   is_online: boolean;
   is_available: boolean;
   is_verified: boolean;
@@ -46,6 +60,8 @@ export interface MechanicProfilePatch {
   skills?: string[];
   vehicle_specialization?: string[];
   certifications?: string[];
+  vehicle_label?: string | null;
+  vehicle_plate?: string | null;
 }
 
 export interface MechanicReview {
@@ -119,6 +135,10 @@ export interface MyOrder {
   vehicle_model: string | null;
   client_name: string | null;
   client_phone: string | null;
+  callout_fee_tier: CalloutFeeTier;
+  callout_fee_amount: number | null;
+  quote_status: QuoteStatus;
+  assignment_expires_at: string | null;
 }
 
 export interface MechanicOrderDetail extends MyOrder {
@@ -139,6 +159,12 @@ export interface MechanicOrderDetail extends MyOrder {
   assignment_requested_at: string | null;
   /** Batas waktu client mengonfirmasi pengajuan. */
   assignment_expires_at: string | null;
+  quote_submitted_at: string | null;
+  quote_expires_at: string | null;
+  quote_approved_at: string | null;
+  quote_revision_note: string | null;
+  quote_photo_paths: string[];
+  rejected_quote_snapshot: RejectedQuoteSnapshot | null;
 }
 
 /** Satu titik jejak perjalanan montir. */
@@ -157,13 +183,18 @@ export interface OrderStatusEvent {
   created_at: string;
 }
 
-/** Satu baris pada tagihan terperinci (deskripsi + nominal). */
+/** Satu baris pada tagihan terperinci (deskripsi + nominal + tipe + kunci). */
 export interface OrderInvoiceItem {
   id: string;
   request_id: string;
   mechanic_id?: string;
   description: string;
   amount: number;
+  item_type: InvoiceItemType;
+  is_locked: boolean;
+  approved_at: string | null;
+  voided_at: string | null;
+  quote_photo_paths: string[];
   created_at: string;
   updated_at?: string;
 }

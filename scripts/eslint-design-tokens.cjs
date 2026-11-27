@@ -45,7 +45,6 @@ function isExemptFile(relPath) {
   if (!relPath) return true;
   if (!relPath.startsWith('src/')) return true;
   if (relPath.startsWith('src/theme/')) return true;
-  if (relPath === 'src/constants/brand.ts') return true;
   if (relPath.endsWith('.d.ts')) return true;
   return false;
 }

@@ -1,5 +1,5 @@
-import { Brand } from '@/constants/brand';
 import type { IconName } from '@/components/ui/icon';
+import type { SemanticTone } from '@/theme';
 
 export type OrderStatus =
   | 'requested'
@@ -11,14 +11,22 @@ export type OrderStatus =
   | 'paid'
   | 'cancelled';
 
+export type QuoteStatus = 'draft' | 'pending_approval' | 'approved' | 'callout_only';
+
 export interface StatusMeta {
   label: string;
   shortLabel: string;
-  color: string;
-  background: string;
+  tone: SemanticTone;
   icon: IconName;
   /** Langkah 1-6 pada indikator progres; 0 untuk status batal. */
   step: number;
+}
+
+export interface QuoteStatusMeta {
+  label: string;
+  shortLabel: string;
+  tone: SemanticTone;
+  icon: IconName;
 }
 
 /** Jumlah langkah pada indikator progres order. */
@@ -28,71 +36,94 @@ const META: Record<OrderStatus, StatusMeta> = {
   requested: {
     label: 'Mencari montir',
     shortLabel: 'Mencari montir',
-    color: Brand.amber,
-    background: Brand.amberSoft,
+    tone: 'warning',
     icon: 'search-outline',
     step: 1,
   },
   mechanic_assigned: {
     label: 'Menunggu konfirmasi',
     shortLabel: 'Menunggu konfirmasi',
-    color: Brand.amber,
-    background: Brand.amberSoft,
+    tone: 'warning',
     icon: 'time-outline',
     step: 2,
   },
   mechanic_accepted: {
     label: 'Montir menerima pesanan',
     shortLabel: 'Diterima montir',
-    color: Brand.primary,
-    background: Brand.blueSoft,
+    tone: 'info',
     icon: 'checkmark-circle-outline',
     step: 2,
   },
   on_the_way: {
     label: 'Montir menuju lokasimu',
     shortLabel: 'Menuju lokasi',
-    color: Brand.primary,
-    background: Brand.blueSoft,
+    tone: 'info',
     icon: 'navigate-outline',
     step: 3,
   },
   arrived: {
     label: 'Montir tiba di lokasi',
     shortLabel: 'Montir tiba',
-    color: Brand.primary,
-    background: Brand.blueSoft,
+    tone: 'info',
     icon: 'location-outline',
     step: 4,
   },
   payment: {
     label: 'Menunggu pembayaran',
     shortLabel: 'Pembayaran',
-    color: Brand.amber,
-    background: Brand.amberSoft,
+    tone: 'warning',
     icon: 'wallet-outline',
     step: 5,
   },
   paid: {
     label: 'Pembayaran lunas',
     shortLabel: 'Lunas',
-    color: Brand.green,
-    background: Brand.greenSoft,
+    tone: 'success',
     icon: 'shield-checkmark-outline',
     step: 6,
   },
   cancelled: {
     label: 'Pesanan dibatalkan',
     shortLabel: 'Dibatalkan',
-    color: Brand.red,
-    background: Brand.redSoft,
+    tone: 'danger',
     icon: 'close-circle-outline',
     step: 0,
   },
 };
 
+const QUOTE_META: Record<QuoteStatus, QuoteStatusMeta> = {
+  draft: {
+    label: 'Montir menyusun estimasi',
+    shortLabel: 'Menyusun estimasi',
+    tone: 'neutral',
+    icon: 'document-text-outline',
+  },
+  pending_approval: {
+    label: 'Menunggu persetujuan estimasi',
+    shortLabel: 'Menunggu persetujuan',
+    tone: 'warning',
+    icon: 'time-outline',
+  },
+  approved: {
+    label: 'Estimasi disetujui client',
+    shortLabel: 'Estimasi disetujui',
+    tone: 'success',
+    icon: 'checkmark-circle-outline',
+  },
+  callout_only: {
+    label: 'Biaya panggil saja',
+    shortLabel: 'Biaya panggil saja',
+    tone: 'neutral',
+    icon: 'receipt-outline',
+  },
+};
+
 export function getStatusMeta(status: string): StatusMeta {
   return META[status as OrderStatus] ?? META.requested;
+}
+
+export function getQuoteStatusMeta(quoteStatus: string | null | undefined): QuoteStatusMeta {
+  return QUOTE_META[quoteStatus as QuoteStatus] ?? QUOTE_META.draft;
 }
 
 export function isActiveStatus(status: string): boolean {

@@ -1,6 +1,19 @@
-import { Ionicons } from "@/components/ui/icon";
-import { ScreenHeader } from "@/components/ui/screen-header";
-import { Brand, Radius, ScreenPadding, Space, Type } from "@/constants/brand";
+import { useRef, useState } from 'react';
+import {
+  FlatList,
+  KeyboardAvoidingView,
+  Platform,
+  Pressable,
+  ScrollView,
+  TextInput,
+  View,
+} from 'react-native';
+import { Chip } from '@/components/ui/chip';
+import { Ionicons } from '@/components/ui/icon';
+import { ScreenHeader } from '@/components/ui/screen-header';
+import { Surface } from '@/components/ui/surface';
+import { AppText } from '@/components/ui/text';
+import { useToast } from '@/components/ui/toast';
 import {
   AI_DISCLAIMER,
   AI_MODES,
@@ -11,30 +24,16 @@ import {
   type AssistantMode,
   type AssistantPersona,
   type AssistantVehicleOption,
-} from "@/features/ai-assistant/constants";
+} from '@/features/ai-assistant/constants';
 import {
   askAssistant,
   type ChatMessage,
-} from "@/features/ai-assistant/service";
-import { useRef, useState } from "react";
-import {
-  Alert,
-  FlatList,
-  KeyboardAvoidingView,
-  Platform,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  View,
-} from "react-native";
+} from '@/features/ai-assistant/service';
+import { useAppTheme, useThemedStyles, type AppTheme } from '@/theme';
 
 interface AssistantChatProps {
   persona: AssistantPersona;
-  /** Order terkait, dipakai server untuk menyimpan transkrip diagnosa. */
   requestId?: string;
-  /** Pilihan kendaraan dari Garasi (khusus client). */
   vehicles?: AssistantVehicleOption[];
 }
 
@@ -45,20 +44,20 @@ const EMPTY_THREADS: Record<AssistantMode, ChatMessage[]> = {
 
 /**
  * Layar chat AI bersama untuk client dan montir.
- *
- * Dua mode dipisah agar konteks tidak tercampur: `diagnose` untuk gejala
- * kerusakan, `sparepart` untuk tanya harga part. Tiap mode punya riwayat
- * sendiri, dan client bisa memilih kendaraan dari Garasi sebagai konteks.
  */
 export function AssistantChat({
   persona,
   requestId,
   vehicles,
 }: AssistantChatProps) {
-  const [mode, setMode] = useState<AssistantMode>("diagnose");
+  const { theme } = useAppTheme();
+  const styles = useThemedStyles(createStyles);
+  const { showToast } = useToast();
+
+  const [mode, setMode] = useState<AssistantMode>('diagnose');
   const [threads, setThreads] =
     useState<Record<AssistantMode, ChatMessage[]>>(EMPTY_THREADS);
-  const [input, setInput] = useState("");
+  const [input, setInput] = useState('');
   const [sending, setSending] = useState(false);
   const [vehicleId, setVehicleId] = useState<string | null>(null);
   const listRef = useRef<FlatList<ChatMessage>>(null);
@@ -75,7 +74,7 @@ export function AssistantChat({
   const switchMode = (next: AssistantMode) => {
     if (next === mode || sending) return;
     setMode(next);
-    setInput("");
+    setInput('');
     scrollToEnd(false);
   };
 
@@ -86,14 +85,20 @@ export function AssistantChat({
     const activeMode = mode;
     const next: ChatMessage[] = [
       ...threads[activeMode],
-      { role: "user", content },
+      { role: 'user', content },
     ];
     setThreads((prev) => ({ ...prev, [activeMode]: next }));
-    setInput("");
+    setInput('');
     setSending(true);
     const vehicleContext = selectedVehicle
       ? selectedVehicle.type
-        ? `${selectedVehicle.type === 'motor' ? 'Sepeda motor' : selectedVehicle.type === 'mobil' ? 'Mobil' : selectedVehicle.type} — ${selectedVehicle.label}`
+        ? `${
+            selectedVehicle.type === 'motor'
+              ? 'Sepeda motor'
+              : selectedVehicle.type === 'mobil'
+                ? 'Mobil'
+                : selectedVehicle.type
+          } — ${selectedVehicle.label}`
         : selectedVehicle.label
       : undefined;
 
@@ -108,14 +113,15 @@ export function AssistantChat({
         ...prev,
         [activeMode]: [
           ...prev[activeMode],
-          { role: "assistant", content: reply },
+          { role: 'assistant', content: reply },
         ],
       }));
     } catch (e) {
-      Alert.alert(
-        "AI tidak tersedia",
-        e instanceof Error ? e.message : "Coba lagi nanti.",
-      );
+      showToast({
+        tone: 'danger',
+        title: 'AI tidak tersedia',
+        message: e instanceof Error ? e.message : 'Coba lagi nanti.',
+      });
     } finally {
       setSending(false);
       scrollToEnd();
@@ -146,17 +152,15 @@ export function AssistantChat({
               >
                 <Ionicons
                   name={item.icon}
-                  size={14}
-                  color={active ? Brand.volt : Brand.textMuted}
+                  size={15}
+                  color={active ? theme.colors.actionPrimaryFg : theme.colors.textMuted}
                 />
-                <Text
-                  style={[
-                    styles.segmentText,
-                    active && styles.segmentTextActive,
-                  ]}
+                <AppText
+                  variant="caption"
+                  tone={active ? 'inverse' : 'secondary'}
                 >
                   {item.label}
-                </Text>
+                </AppText>
               </Pressable>
             );
           })}
@@ -171,66 +175,28 @@ export function AssistantChat({
             contentContainerStyle={styles.vehicleRow}
             keyboardShouldPersistTaps="handled"
           >
-            <Pressable
-              accessibilityRole="button"
-              accessibilityState={{ selected: vehicleId === null }}
+            <Chip
+              label="Umum"
+              icon="globe-outline"
+              selected={vehicleId === null}
               onPress={() => setVehicleId(null)}
-              style={[
-                styles.vehicleChip,
-                vehicleId === null && styles.vehicleChipActive,
-              ]}
-            >
-              <Ionicons
-                name="globe-outline"
-                size={12}
-                color={vehicleId === null ? Brand.volt : Brand.textMuted}
+            />
+            {vehicles.map((vehicle) => (
+              <Chip
+                key={vehicle.id}
+                label={vehicle.label}
+                icon={vehicle.type === 'motor' ? 'bicycle-outline' : 'car-sport-outline'}
+                selected={vehicle.id === vehicleId}
+                onPress={() => setVehicleId(vehicle.id)}
               />
-              <Text
-                style={[
-                  styles.vehicleText,
-                  vehicleId === null && styles.vehicleTextActive,
-                ]}
-              >
-                Umum
-              </Text>
-            </Pressable>
-            {vehicles.map((vehicle) => {
-              const active = vehicle.id === vehicleId;
-              return (
-                <Pressable
-                  key={vehicle.id}
-                  accessibilityRole="button"
-                  accessibilityState={{ selected: active }}
-                  onPress={() => setVehicleId(vehicle.id)}
-                  style={[
-                    styles.vehicleChip,
-                    active && styles.vehicleChipActive,
-                  ]}
-                >
-                  <Ionicons
-                    name={vehicle.type === 'motor' ? 'bicycle-outline' : 'car-sport-outline'}
-                    size={12}
-                    color={active ? Brand.volt : Brand.textMuted}
-                  />
-                  <Text
-                    numberOfLines={1}
-                    style={[
-                      styles.vehicleText,
-                      active && styles.vehicleTextActive,
-                    ]}
-                  >
-                    {vehicle.label}
-                  </Text>
-                </Pressable>
-              );
-            })}
+            ))}
           </ScrollView>
         </View>
       ) : null}
 
       <KeyboardAvoidingView
         style={styles.flex}
-        behavior={Platform.OS === "ios" ? "padding" : undefined}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         keyboardVerticalOffset={90}
       >
         <FlatList
@@ -240,43 +206,46 @@ export function AssistantChat({
           style={styles.list}
           contentContainerStyle={styles.listContent}
           keyboardShouldPersistTaps="handled"
-          onContentSizeChange={() =>
-            listRef.current?.scrollToEnd({ animated: true })
-          }
+          onContentSizeChange={() => listRef.current?.scrollToEnd({ animated: true })}
           ListEmptyComponent={
-            <View>
-              <View style={styles.intro}>
+            <View style={styles.emptyWrap}>
+              <Surface variant="default" padding="lg" style={styles.intro}>
                 <View style={styles.introIcon}>
                   <Ionicons
-                    name={mode === "sparepart" ? "pricetag" : "sparkles"}
+                    name={mode === 'sparepart' ? 'pricetag' : 'sparkles'}
                     size={20}
-                    color={Brand.volt}
+                    color={theme.colors.statusInfoFg}
                   />
                 </View>
                 <View style={styles.introCopy}>
-                  <Text style={styles.introEyebrow}>{intro.eyebrow}</Text>
-                  <Text style={styles.introTitle}>{intro.title}</Text>
-                  <Text style={styles.introText}>{intro.text}</Text>
+                  <AppText variant="overline" tone="info">
+                    {intro.eyebrow}
+                  </AppText>
+                  <AppText variant="title">{intro.title}</AppText>
+                  <AppText variant="caption" tone="secondary">
+                    {intro.text}
+                  </AppText>
                 </View>
-              </View>
+              </Surface>
 
-              <Text style={styles.hint}>PERTANYAAN CEPAT</Text>
+              <AppText variant="overline" tone="muted" style={styles.hint}>
+                PERTANYAAN CEPAT
+              </AppText>
               <View style={styles.suggestions}>
                 {suggestions.map((suggestion) => (
                   <Pressable
                     key={suggestion}
                     accessibilityRole="button"
-                    onPress={() => send(suggestion)}
-                    style={({ pressed }) => [
-                      styles.suggestion,
-                      pressed && styles.pressed,
-                    ]}
+                    onPress={() => void send(suggestion)}
+                    style={({ pressed }) => [styles.suggestion, pressed && styles.pressed]}
                   >
-                    <Text style={styles.suggestionText}>{suggestion}</Text>
+                    <AppText variant="body" style={styles.flexCopy}>
+                      {suggestion}
+                    </AppText>
                     <Ionicons
                       name="arrow-forward"
-                      size={14}
-                      color={Brand.primary}
+                      size={16}
+                      color={theme.colors.actionPrimaryAltBg}
                     />
                   </Pressable>
                 ))}
@@ -284,25 +253,21 @@ export function AssistantChat({
             </View>
           }
           renderItem={({ item }) => {
-            const isUser = item.role === "user";
+            const isUser = item.role === 'user';
             return (
-              <View
-                style={[styles.messageRow, isUser && styles.messageRowUser]}
-              >
+              <View style={[styles.messageRow, isUser && styles.messageRowUser]}>
                 {!isUser ? (
                   <View style={styles.avatar}>
-                    <Ionicons name="sparkles" size={12} color={Brand.volt} />
+                    <Ionicons name="sparkles" size={13} color={theme.colors.actionPrimaryFg} />
                   </View>
                 ) : null}
-                <View
-                  style={[
-                    styles.bubble,
-                    isUser ? styles.user : styles.assistant,
-                  ]}
-                >
-                  <Text style={isUser ? styles.userText : styles.assistantText}>
+                <View style={[styles.bubble, isUser ? styles.user : styles.assistant]}>
+                  <AppText
+                    variant="body"
+                    tone={isUser ? 'inverse' : 'primary'}
+                  >
                     {item.content}
-                  </Text>
+                  </AppText>
                 </View>
               </View>
             );
@@ -311,16 +276,12 @@ export function AssistantChat({
 
         {sending ? (
           <View style={styles.typing}>
-            <Ionicons
-              name="ellipsis-horizontal"
-              size={14}
-              color={Brand.textMuted}
-            />
-            <Text style={styles.typingText}>
-              {mode === "sparepart"
-                ? "AI sedang mengecek kisaran harga…"
-                : "AI sedang menganalisis…"}
-            </Text>
+            <Ionicons name="ellipsis-horizontal" size={15} color={theme.colors.textMuted} />
+            <AppText variant="caption" tone="muted">
+              {mode === 'sparepart'
+                ? 'AI sedang mengecek kisaran harga…'
+                : 'AI sedang menganalisis…'}
+            </AppText>
           </View>
         ) : null}
 
@@ -328,10 +289,11 @@ export function AssistantChat({
           <Ionicons
             name="information-circle-outline"
             size={14}
-            color={Brand.textMuted}
-            style={{ paddingTop: 6 }}
+            color={theme.colors.textMuted}
           />
-          <Text style={styles.disclaimerText}>{AI_DISCLAIMER[mode]}</Text>
+          <AppText variant="caption" tone="muted" style={styles.flexCopy}>
+            {AI_DISCLAIMER[mode]}
+          </AppText>
         </View>
 
         <View style={styles.inputRow}>
@@ -339,25 +301,25 @@ export function AssistantChat({
             value={input}
             onChangeText={setInput}
             placeholder={getInputPlaceholder(mode)}
-            placeholderTextColor={Brand.textMuted}
-            selectionColor={Brand.primary}
+            placeholderTextColor={theme.colors.textMuted}
+            selectionColor={theme.colors.borderFocus}
             style={styles.input}
             multiline
             editable={!sending}
-            onSubmitEditing={() => send(input)}
+            onSubmitEditing={() => void send(input)}
           />
           <Pressable
             accessibilityRole="button"
             accessibilityLabel="Kirim pertanyaan"
             disabled={sending || !input.trim()}
-            onPress={() => send(input)}
+            onPress={() => void send(input)}
             style={({ pressed }) => [
               styles.send,
               (sending || !input.trim()) && styles.sendDisabled,
               pressed && styles.pressed,
             ]}
           >
-            <Ionicons name="arrow-up" size={19} color={Brand.white} />
+            <Ionicons name="arrow-up" size={20} color={theme.colors.actionPrimaryFg} />
           </Pressable>
         </View>
       </KeyboardAvoidingView>
@@ -365,187 +327,172 @@ export function AssistantChat({
   );
 }
 
-const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: Brand.background },
+const createStyles = (theme: AppTheme) => ({
+  screen: {
+    flex: 1,
+    backgroundColor: theme.colors.bgCanvas,
+  },
   flex: { flex: 1 },
+  flexCopy: { flex: 1 },
   segmentWrap: {
-    paddingHorizontal: ScreenPadding,
-    paddingBottom: Space.sm,
-    backgroundColor: Brand.background,
+    paddingHorizontal: theme.spacing.screenPadding,
+    paddingBottom: theme.spacing.sm,
+    backgroundColor: theme.colors.bgCanvas,
   },
   segment: {
-    flexDirection: "row",
-    gap: Space.xs,
+    flexDirection: 'row' as const,
+    gap: theme.spacing.xs,
     padding: 4,
-    borderRadius: Radius.md,
-    backgroundColor: Brand.surface,
+    borderRadius: theme.radii.md,
+    backgroundColor: theme.colors.bgSurface,
     borderWidth: 1,
-    borderColor: Brand.border,
+    borderColor: theme.colors.borderDefault,
   },
   segmentItem: {
     flex: 1,
-    minHeight: 38,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 6,
-    paddingHorizontal: Space.sm,
-    borderRadius: Radius.sm,
+    minHeight: 42,
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+    gap: theme.spacing.xs,
+    paddingHorizontal: theme.spacing.sm,
+    borderRadius: theme.radii.sm,
   },
-  segmentItemActive: { backgroundColor: Brand.ink },
-  segmentText: { fontSize: 12, fontWeight: "600", color: Brand.textSecondary },
-  segmentTextActive: { color: Brand.white, fontWeight: "700" },
-  vehicleWrap: { backgroundColor: Brand.background, paddingBottom: Space.sm },
-  vehicleRow: { paddingHorizontal: ScreenPadding, gap: Space.sm },
-  vehicleChip: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 5,
-    maxWidth: 210,
-    paddingHorizontal: Space.md,
-    paddingVertical: 7,
-    borderRadius: Radius.pill,
-    backgroundColor: Brand.surface,
-    borderWidth: 1,
-    borderColor: Brand.border,
+  segmentItemActive: {
+    backgroundColor: theme.colors.actionPrimaryBg,
   },
-  vehicleChipActive: { backgroundColor: Brand.ink, borderColor: Brand.ink },
-  vehicleText: {
-    fontSize: 11.5,
-    fontWeight: "600",
-    color: Brand.textSecondary,
+  vehicleWrap: {
+    backgroundColor: theme.colors.bgCanvas,
+    paddingBottom: theme.spacing.sm,
   },
-  vehicleTextActive: { color: Brand.white, fontWeight: "700" },
+  vehicleRow: {
+    paddingHorizontal: theme.spacing.screenPadding,
+    gap: theme.spacing.sm,
+  },
   list: { flex: 1 },
   listContent: {
-    paddingHorizontal: ScreenPadding,
-    paddingTop: Space.md,
-    paddingBottom: Space.md,
+    paddingHorizontal: theme.spacing.screenPadding,
+    paddingTop: theme.spacing.md,
+    paddingBottom: theme.spacing.md,
+  },
+  emptyWrap: {
+    gap: theme.spacing.md,
   },
   intro: {
-    flexDirection: "row",
-    gap: Space.md,
-    backgroundColor: Brand.ink,
-    borderRadius: Radius.lg,
-    borderWidth: 1,
-    borderColor: Brand.inkBorder,
-    padding: Space.lg,
+    flexDirection: 'row' as const,
+    gap: theme.spacing.md,
   },
   introIcon: {
-    width: 40,
-    height: 40,
-    borderRadius: Radius.sm,
-    backgroundColor: "rgba(255,255,255,0.08)",
-    alignItems: "center",
-    justifyContent: "center",
+    width: 42,
+    height: 42,
+    borderRadius: theme.radii.sm,
+    backgroundColor: theme.colors.statusInfoBg,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
   },
-  introCopy: { flex: 1 },
-  introEyebrow: { ...Type.micro, fontSize: 8.5, color: Brand.inkMuted },
-  introTitle: { ...Type.title, color: Brand.white, marginTop: 2 },
-  introText: {
-    fontSize: 11.5,
-    color: Brand.inkText,
-    lineHeight: 16,
-    marginTop: 4,
+  introCopy: {
+    flex: 1,
+    gap: theme.spacing.xxs,
   },
   hint: {
-    ...Type.micro,
-    color: Brand.textMuted,
-    marginTop: Space.xl,
-    marginBottom: Space.sm,
+    marginTop: theme.spacing.xs,
   },
-  suggestions: { gap: Space.sm },
+  suggestions: {
+    gap: theme.spacing.sm,
+  },
   suggestion: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: Space.md,
-    backgroundColor: Brand.surface,
-    borderRadius: Radius.md,
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    justifyContent: 'space-between' as const,
+    gap: theme.spacing.md,
+    backgroundColor: theme.colors.bgSurface,
+    borderRadius: theme.radii.md,
     borderWidth: 1,
-    borderColor: Brand.divider,
-    paddingHorizontal: Space.md,
-    minHeight: 48,
+    borderColor: theme.colors.borderSubtle,
+    paddingHorizontal: theme.spacing.md,
+    paddingVertical: theme.spacing.sm,
+    minHeight: theme.touchTarget.min,
   },
-  suggestionText: { flex: 1, fontSize: 12, color: Brand.text, lineHeight: 17 },
   messageRow: {
-    flexDirection: "row",
-    alignItems: "flex-end",
-    gap: Space.sm,
+    flexDirection: 'row' as const,
+    alignItems: 'flex-end' as const,
+    gap: theme.spacing.sm,
     marginVertical: 4,
   },
-  messageRowUser: { justifyContent: "flex-end" },
-  avatar: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    backgroundColor: Brand.ink,
-    alignItems: "center",
-    justifyContent: "center",
+  messageRowUser: {
+    justifyContent: 'flex-end' as const,
   },
-  bubble: { maxWidth: "82%", padding: Space.md, borderRadius: Radius.md },
-  user: { backgroundColor: Brand.primary, borderBottomRightRadius: 4 },
+  avatar: {
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    backgroundColor: theme.colors.actionPrimaryBg,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+  },
+  bubble: {
+    maxWidth: '82%' as const,
+    padding: theme.spacing.md,
+    borderRadius: theme.radii.md,
+  },
+  user: {
+    backgroundColor: theme.colors.actionPrimaryBg,
+    borderBottomRightRadius: 4,
+  },
   assistant: {
-    backgroundColor: Brand.surface,
+    backgroundColor: theme.colors.bgSurface,
     borderWidth: 1,
-    borderColor: Brand.divider,
+    borderColor: theme.colors.borderSubtle,
     borderBottomLeftRadius: 4,
   },
-  userText: { color: Brand.white, fontSize: 13, lineHeight: 19 },
-  assistantText: { color: Brand.text, fontSize: 13, lineHeight: 19 },
   typing: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 5,
-    paddingHorizontal: ScreenPadding,
-    paddingBottom: Space.xs,
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: theme.spacing.xs,
+    paddingHorizontal: theme.spacing.screenPadding,
+    paddingBottom: theme.spacing.xs,
   },
-  typingText: { fontSize: 11, color: Brand.textMuted },
   disclaimer: {
-    flexDirection: "row",
-    gap: 5,
-    alignItems: "flex-start",
-    paddingHorizontal: ScreenPadding,
-    paddingBottom: Space.sm,
-  },
-  disclaimerText: {
-    flex: 1,
-    fontSize: 10,
-    color: Brand.textMuted,
-    lineHeight: 14,
-    paddingTop: 6,
+    flexDirection: 'row' as const,
+    gap: theme.spacing.xs,
+    alignItems: 'center' as const,
+    paddingHorizontal: theme.spacing.screenPadding,
+    paddingBottom: theme.spacing.sm,
   },
   inputRow: {
-    flexDirection: "row",
-    gap: Space.sm,
-    alignItems: "flex-end",
-    paddingHorizontal: ScreenPadding,
-    paddingTop: Space.sm,
-    paddingBottom: Space.md,
+    flexDirection: 'row' as const,
+    gap: theme.spacing.sm,
+    alignItems: 'flex-end' as const,
+    paddingHorizontal: theme.spacing.screenPadding,
+    paddingTop: theme.spacing.sm,
+    paddingBottom: theme.spacing.md,
     borderTopWidth: 1,
-    borderTopColor: Brand.divider,
-    backgroundColor: Brand.surface,
+    borderTopColor: theme.colors.borderSubtle,
+    backgroundColor: theme.colors.bgSurface,
   },
   input: {
     flex: 1,
-    backgroundColor: Brand.background,
-    borderRadius: Radius.pill,
-    borderWidth: 1,
-    borderColor: Brand.border,
-    paddingHorizontal: Space.lg,
-    paddingVertical: 12,
-    fontSize: 13.5,
-    color: Brand.text,
-    maxHeight: 110,
+    backgroundColor: theme.colors.bgCanvas,
+    borderRadius: theme.radii.pill,
+    borderWidth: 1.5,
+    borderColor: theme.colors.borderInput,
+    paddingHorizontal: theme.spacing.lg,
+    paddingVertical: theme.spacing.sm,
+    fontFamily: theme.fontFamily.regular,
+    fontSize: 14,
+    lineHeight: 20,
+    color: theme.colors.textPrimary,
+    minHeight: theme.touchTarget.min,
+    maxHeight: 112,
   },
   send: {
-    width: 46,
-    height: 46,
-    borderRadius: 23,
-    backgroundColor: Brand.ink,
-    alignItems: "center",
-    justifyContent: "center",
+    width: theme.touchTarget.min,
+    height: theme.touchTarget.min,
+    borderRadius: theme.touchTarget.min / 2,
+    backgroundColor: theme.colors.actionPrimaryBg,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
   },
-  sendDisabled: { opacity: 0.35 },
+  sendDisabled: { opacity: 0.38 },
   pressed: { opacity: 0.8 },
 });

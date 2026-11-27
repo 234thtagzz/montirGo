@@ -1,18 +1,21 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Pressable, StyleSheet, Text, View, type LayoutChangeEvent } from 'react-native';
-import { Gesture, GestureDetector } from 'react-native-gesture-handler';
+import { Pressable, View, type LayoutChangeEvent } from 'react-native';
+import { GestureDetector, usePanGesture } from 'react-native-gesture-handler';
 import Animated, {
-  runOnJS,
   useAnimatedStyle,
+  useReducedMotion,
   useSharedValue,
   withSpring,
 } from 'react-native-reanimated';
+import { scheduleOnRN } from 'react-native-worklets';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Avatar } from '@/components/ui/avatar';
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Ionicons } from '@/components/ui/icon';
-import { Brand, CardShadow, Radius, Space, Tabular, Type } from '@/constants/brand';
-import type { IconName } from '@/components/ui/icon';
+import { Ionicons, type IconName } from '@/components/ui/icon';
+import { SwipeAction } from '@/components/ui/swipe-action';
+import { AppText } from '@/components/ui/text';
+import { useAppTheme, useThemedStyles, type AppTheme } from '@/theme';
 import { TripActions } from './trip-actions';
 
 export type TripPhase = 'preview' | 'enroute' | 'arrived' | 'completed';
@@ -35,23 +38,18 @@ interface TripSheetProps {
   onCall: () => void;
   onOpenMaps: () => void;
   onRetryLocation: () => void;
-  /** Tinggi sheet yang *terlihat* (ikut berubah saat dilipat) — untuk padding peta. */
   onHeightChange?: (height: number) => void;
 }
 
 const PRIMARY: Record<TripPhase, { label: string; icon: IconName }> = {
-  preview: { label: 'Mulai Perjalanan', icon: 'navigate-outline' },
-  enroute: { label: 'Sampai di Lokasi', icon: 'location-outline' },
-  arrived: { label: 'Isi Tagihan', icon: 'receipt-outline' },
+  preview: { label: 'Geser: Mulai Perjalanan', icon: 'navigate-outline' },
+  enroute: { label: 'Geser: Sampai di Lokasi', icon: 'location-outline' },
+  arrived: { label: 'Susun Estimasi Biaya', icon: 'receipt-outline' },
   completed: { label: 'Buka Detail Order', icon: 'document-text-outline' },
 };
 
-const STEPS = ['Diterima', 'Berangkat', 'Tiba', 'Tagihan'] as const;
-
-/** Pegas snap saat sheet dilepas / diketuk. */
+const STEPS = ['Diterima', 'Berangkat', 'Tiba', 'Estimasi'] as const;
 const SHEET_SPRING = { damping: 24, stiffness: 240, mass: 0.7 };
-
-/** Ambang kecepatan (px/detik) untuk menentukan arah lipat saat jari dilepas. */
 const FLING_VELOCITY = 600;
 
 function stepState(phase: TripPhase, index: number): 'done' | 'active' | 'next' {
@@ -66,15 +64,6 @@ function stepState(phase: TripPhase, index: number): 'done' | 'active' | 'next' 
   return 'next';
 }
 
-/**
- * Kartu bawah layar perjalanan.
- *
- * Bisa **dilipat ke bawah** (minimize) dengan menggeser area grabber/header ke
- * bawah, atau dengan mengetuknya. Saat terlipat hanya bagian penting yang
- * terlihat: nama client, ETA/jarak/jam tiba, peringatan GPS, dan tombol aksi
- * utama. Detail (alamat, langkah status, tombol WhatsApp/telepon/rute) terdorong
- * ke bawah layar dan kembali muncul saat sheet ditarik naik.
- */
 export function TripSheet({
   clientName,
   phone,
@@ -96,10 +85,12 @@ export function TripSheet({
   onHeightChange,
 }: TripSheetProps) {
   const insets = useSafeAreaInsets();
+  const { theme } = useAppTheme();
+  const styles = useThemedStyles(createStyles);
+  const reduceMotion = useReducedMotion();
+
   const [collapsed, setCollapsed] = useState(false);
-  /** Tinggi total sheet (tanpa transform). */
   const [sheetHeight, setSheetHeight] = useState(0);
-  /** Tinggi bagian yang tetap terlihat saat terlipat (grabber → tombol utama). */
   const [peekHeight, setPeekHeight] = useState(0);
 
   const translateY = useSharedValue(0);
@@ -107,7 +98,7 @@ export function TripSheet({
 
   const primary = PRIMARY[phase];
   const isLive = phase === 'enroute';
-  const bottomGap = insets.bottom + Space.md;
+  const bottomGap = insets.bottom + theme.spacing.md;
   const collapsedOffset = Math.max(0, sheetHeight - peekHeight - bottomGap);
 
   const handleSheetLayout = useCallback((event: LayoutChangeEvent) => {
@@ -120,54 +111,35 @@ export function TripSheet({
     setPeekHeight((prev) => (prev === next ? prev : next));
   }, []);
 
-  // Gestur digeser sebelum `useEffect`/`useAnimatedStyle` agar React Compiler
-  // tidak menganggap shared value dimodifikasi setelah dibaca hook lain.
-  const panGesture = Gesture.Pan()
-    .activeOffsetY([-6, 6])
-    .failOffsetX([-28, 28])
-    .onStart(() => {
-      gestureStartY.value = translateY.value;
-    })
-    .onUpdate((event) => {
-      const next = gestureStartY.value + event.translationY;
-      translateY.value = Math.min(Math.max(next, 0), collapsedOffset);
-    })
-    .onEnd((event) => {
+  const panGesture = usePanGesture({
+    activeOffsetY: [-8, 8],
+    failOffsetX: [-28, 28],
+    onBegin: () => {
+      gestureStartY.set(translateY.get());
+    },
+    onUpdate: (event) => {
+      const next = gestureStartY.get() + event.translationY;
+      translateY.set(Math.min(Math.max(next, 0), collapsedOffset));
+    },
+    onDeactivate: (event) => {
       let target = 0;
       if (event.velocityY > FLING_VELOCITY) {
         target = collapsedOffset;
       } else if (event.velocityY < -FLING_VELOCITY) {
         target = 0;
       } else {
-        // Kurang dari setengah jalan → kembali; lebih dari setengah → lipat.
-        target = translateY.value > collapsedOffset * 0.45 ? collapsedOffset : 0;
+        target = translateY.get() > collapsedOffset * 0.45 ? collapsedOffset : 0;
       }
-      translateY.value = withSpring(target, SHEET_SPRING);
-      runOnJS(setCollapsed)(target > 0);
-    });
+      translateY.set(reduceMotion ? target : withSpring(target, SHEET_SPRING));
+      scheduleOnRN(setCollapsed, target > 0);
+    },
+  });
 
-  // Ketukan singkat (tanpa geser) melipat/membuka sheet — cadangan yang ramah
-  // untuk pengguna yang sulit melakukan drag presisi.
-  const tapGesture = Gesture.Tap()
-    .maxDuration(500)
-    .onEnd(() => {
-      const target = translateY.value > collapsedOffset / 2 ? 0 : collapsedOffset;
-      translateY.value = withSpring(target, SHEET_SPRING);
-      runOnJS(setCollapsed)(target > 0);
-    });
-
-  const dragGesture = Gesture.Race(panGesture, tapGesture);
-
-  // Satu sumber kebenaran: `collapsed` menentukan posisi sheet. Dipakai saat
-  // diketuk (a11y), saat chip peringatan muncul/hilang, dan saat sheet berubah
-  // tinggi karena datanya berubah.
   useEffect(() => {
-    translateY.value = withSpring(collapsed ? collapsedOffset : 0, SHEET_SPRING);
-    // `translateY` adalah shared value stabil, aman tidak dimasukkan sebagai dep.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [collapsed, collapsedOffset]);
+    const target = collapsed ? collapsedOffset : 0;
+    translateY.set(reduceMotion ? target : withSpring(target, SHEET_SPRING));
+  }, [collapsed, collapsedOffset, reduceMotion, translateY]);
 
-  // Peta memakai tinggi yang terlihat agar rute & tombol recenter tidak tertutup.
   const visibleHeight = collapsed ? sheetHeight - collapsedOffset : sheetHeight;
   useEffect(() => {
     if (sheetHeight <= 0) return;
@@ -179,70 +151,82 @@ export function TripSheet({
   }, []);
 
   const animatedStyle = useAnimatedStyle(() => ({
-    transform: [{ translateY: translateY.value }],
+    transform: [{ translateY: translateY.get() }],
   }));
 
   return (
     <Animated.View
       onLayout={handleSheetLayout}
-      style={[styles.sheet, { paddingBottom: bottomGap }, animatedStyle]}
+      style={[
+        styles.sheet,
+        theme.elevation.sheet,
+        { paddingBottom: bottomGap },
+        animatedStyle,
+      ]}
     >
       <View onLayout={handlePeekLayout} style={styles.peek}>
-        <GestureDetector gesture={dragGesture}>
-          <View style={styles.dragArea}>
-            <View
-              accessible
-              accessibilityRole="button"
-              accessibilityLabel={
-                collapsed ? 'Perluas panel perjalanan' : 'Ringkas panel perjalanan'
-              }
-              accessibilityHint="Geser ke bawah untuk meringkas, ke atas untuk memperluas"
-              accessibilityState={{ expanded: !collapsed }}
-              onAccessibilityTap={toggleCollapsed}
-              style={styles.grabberArea}
-            >
+        <GestureDetector gesture={panGesture}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={
+              collapsed ? 'Perluas panel perjalanan' : 'Ringkas panel perjalanan'
+            }
+            accessibilityState={{ expanded: !collapsed }}
+            onPress={toggleCollapsed}
+            style={styles.dragArea}
+          >
+            <View style={styles.grabberArea}>
               <View style={styles.grabber} />
               <Ionicons
                 name={collapsed ? 'chevron-up' : 'chevron-down'}
                 size={14}
-                color={Brand.textMuted}
+                color={theme.colors.textMuted}
               />
             </View>
 
             <View style={styles.headerRow}>
               <Avatar name={clientName ?? 'Client'} size={42} />
               <View style={styles.headerCopy}>
-                <Text numberOfLines={1} style={styles.clientName}>
+                <AppText variant="bodyStrong" numberOfLines={1}>
                   {clientName ?? 'Client MontirGo'}
-                </Text>
-                <Text numberOfLines={1} style={styles.clientMeta}>
+                </AppText>
+                <AppText variant="caption" tone="secondary" numberOfLines={1}>
                   {vehicleLabel || 'Kendaraan tidak dicantumkan'}
-                </Text>
+                </AppText>
               </View>
               {isLive ? (
-                <View style={styles.liveChip}>
-                  <View style={styles.liveDot} />
-                  <Text style={styles.liveText}>Live</Text>
-                </View>
+                <Badge size="sm" dot tone="success" label="Live" />
               ) : null}
             </View>
-          </View>
+          </Pressable>
         </GestureDetector>
 
         <View style={styles.metricsRow}>
           <View style={styles.metric}>
-            <Text style={styles.metricValue}>{isLive ? etaLabel : '—'}</Text>
-            <Text style={styles.metricLabel}>{isLive ? 'sisa waktu' : 'belum berangkat'}</Text>
+            <AppText variant="h2" tabular>
+              {isLive ? etaLabel : '—'}
+            </AppText>
+            <AppText variant="caption" tone="muted">
+              {isLive ? 'sisa waktu' : 'belum berangkat'}
+            </AppText>
           </View>
           <View style={styles.metricDivider} />
           <View style={styles.metric}>
-            <Text style={styles.metricValue}>{isLive ? distanceLabel : '—'}</Text>
-            <Text style={styles.metricLabel}>jarak</Text>
+            <AppText variant="h2" tabular>
+              {isLive ? distanceLabel : '—'}
+            </AppText>
+            <AppText variant="caption" tone="muted">
+              jarak
+            </AppText>
           </View>
           <View style={styles.metricDivider} />
           <View style={styles.metric}>
-            <Text style={styles.metricValue}>{arrivalClock ?? '—'}</Text>
-            <Text style={styles.metricLabel}>perkiraan tiba</Text>
+            <AppText variant="h2" tabular>
+              {arrivalClock ?? '—'}
+            </AppText>
+            <AppText variant="caption" tone="muted">
+              perkiraan tiba
+            </AppText>
           </View>
         </View>
 
@@ -252,30 +236,68 @@ export function TripSheet({
             onPress={onRetryLocation}
             style={({ pressed }) => [styles.warning, pressed && styles.pressed]}
           >
-            <Ionicons name="warning-outline" size={16} color={Brand.amber} />
-            <Text style={styles.warningText}>{locationError}</Text>
-            <Text style={styles.warningAction}>Aktifkan</Text>
+            <Ionicons
+              name="warning-outline"
+              size={16}
+              color={theme.colors.statusWarningFg}
+            />
+            <AppText
+              variant="caption"
+              style={[styles.warningText, { color: theme.colors.statusWarningFg }]}
+            >
+              {locationError}
+            </AppText>
+            <AppText
+              variant="label"
+              style={{ color: theme.colors.statusWarningFg }}
+            >
+              Aktifkan
+            </AppText>
           </Pressable>
         ) : null}
 
         {isLive && isNearDestination ? (
           <View style={styles.nearby}>
-            <Ionicons name="sparkles" size={14} color={Brand.green} />
-            <Text style={styles.nearbyText}>Kamu sudah dekat lokasi client</Text>
+            <Ionicons
+              name="sparkles"
+              size={14}
+              color={theme.colors.statusSuccessFg}
+            />
+            <AppText
+              variant="label"
+              style={{ color: theme.colors.statusSuccessFg }}
+            >
+              Kamu sudah dekat lokasi client
+            </AppText>
           </View>
         ) : null}
 
-        <Button
-          label={primary.label}
-          icon={primary.icon}
-          variant="ink"
-          loading={busy}
-          onPress={onPrimary}
-          style={styles.cta}
-        />
+        {phase === 'preview' || phase === 'enroute' ? (
+          <SwipeAction
+            label={primary.label}
+            completedLabel={
+              phase === 'preview' ? 'Memulai perjalanan…' : 'Mencatat kedatangan…'
+            }
+            icon={primary.icon}
+            tone={phase === 'enroute' ? 'success' : 'primary'}
+            edgeInset={20}
+            loading={busy}
+            onConfirm={onPrimary}
+            style={styles.cta}
+          />
+        ) : (
+          <Button
+            label={primary.label}
+            icon={primary.icon}
+            variant="primary"
+            size="cta"
+            loading={busy}
+            onPress={onPrimary}
+            style={styles.cta}
+          />
+        )}
       </View>
 
-      {/* Detail — ikut tergeser ke bawah layar saat sheet dilipat. */}
       <View
         accessibilityElementsHidden={collapsed}
         importantForAccessibility={collapsed ? 'no-hide-descendants' : 'auto'}
@@ -283,10 +305,10 @@ export function TripSheet({
       >
         {address ? (
           <View style={styles.addressRow}>
-            <Ionicons name="location" size={16} color={Brand.primary} />
-            <Text numberOfLines={2} style={styles.address}>
+            <Ionicons name="location" size={16} color={theme.colors.statusInfoFg} />
+            <AppText variant="caption" numberOfLines={2} style={styles.address}>
               {address}
-            </Text>
+            </AppText>
           </View>
         ) : null}
 
@@ -303,14 +325,26 @@ export function TripSheet({
                   ]}
                 >
                   {state === 'done' ? (
-                    <Ionicons name="checkmark" size={10} color={Brand.white} />
+                    <Ionicons
+                      name="checkmark"
+                      size={10}
+                      color={theme.colors.actionPrimaryFg}
+                    />
                   ) : null}
                 </View>
-                <Text style={[styles.stepLabel, state !== 'next' && styles.stepLabelActive]}>
+                <AppText
+                  variant="caption"
+                  tone={state !== 'next' ? 'primary' : 'muted'}
+                >
                   {label}
-                </Text>
+                </AppText>
                 {index < STEPS.length - 1 ? (
-                  <View style={[styles.stepLine, state === 'done' && styles.stepLineDone]} />
+                  <View
+                    style={[
+                      styles.stepLine,
+                      state === 'done' && styles.stepLineDone,
+                    ]}
+                  />
                 ) : null}
               </View>
             );
@@ -318,110 +352,157 @@ export function TripSheet({
         </View>
 
         <View style={styles.actionsWrap}>
-          <TripActions phone={phone} onWhatsApp={onWhatsApp} onCall={onCall} onOpenMaps={onOpenMaps} />
+          <TripActions
+            phone={phone}
+            onWhatsApp={onWhatsApp}
+            onCall={onCall}
+            onOpenMaps={onOpenMaps}
+          />
         </View>
       </View>
     </Animated.View>
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (theme: AppTheme) => ({
   sheet: {
-    position: 'absolute',
+    position: 'absolute' as const,
     left: 0,
     right: 0,
     bottom: 0,
-    backgroundColor: Brand.surface,
-    borderTopLeftRadius: Radius.xxl,
-    borderTopRightRadius: Radius.xxl,
-    paddingHorizontal: Space.lg,
-    ...CardShadow,
+    backgroundColor: theme.colors.bgSurface,
+    borderTopLeftRadius: theme.radii.xl,
+    borderTopRightRadius: theme.radii.xl,
+    borderTopWidth: 1,
+    borderColor: theme.colors.borderSubtle,
+    paddingHorizontal: theme.spacing.lg,
   },
-  peek: { paddingTop: Space.xs },
-  dragArea: { paddingBottom: 6 },
-  grabberArea: { alignItems: 'center', paddingVertical: 6, gap: 2 },
+  peek: {
+    paddingTop: theme.spacing.xs,
+  },
+  dragArea: {
+    paddingBottom: theme.spacing.xs,
+  },
+  grabberArea: {
+    alignItems: 'center' as const,
+    paddingVertical: theme.spacing.xs,
+    gap: 2,
+  },
   grabber: {
     width: 42,
     height: 4,
     borderRadius: 2,
-    backgroundColor: Brand.border,
+    backgroundColor: theme.colors.borderInput,
   },
-  headerRow: { flexDirection: 'row', alignItems: 'center', gap: Space.md, marginTop: 2 },
-  headerCopy: { flex: 1 },
-  clientName: { ...Type.title, color: Brand.text },
-  clientMeta: { ...Type.meta, color: Brand.textSecondary, marginTop: 2 },
-  liveChip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: Radius.pill,
-    backgroundColor: Brand.greenSoft,
+  headerRow: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: theme.spacing.md,
+    marginTop: 2,
   },
-  liveDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: Brand.green },
-  liveText: { fontSize: 10, fontWeight: '700', color: Brand.green },
+  headerCopy: {
+    flex: 1,
+    gap: 2,
+  },
   metricsRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginTop: Space.sm,
-    paddingVertical: Space.md,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderColor: Brand.divider,
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    marginTop: theme.spacing.sm,
+    paddingVertical: theme.spacing.md,
+    borderTopWidth: 1,
+    borderBottomWidth: 1,
+    borderColor: theme.colors.borderSubtle,
   },
-  metric: { flex: 1, alignItems: 'center' },
-  metricValue: { ...Type.h2, ...Tabular, color: Brand.text },
-  metricLabel: { ...Type.meta, color: Brand.textMuted, marginTop: 2, fontSize: 10 },
-  metricDivider: { width: StyleSheet.hairlineWidth, height: 28, backgroundColor: Brand.divider },
+  metric: {
+    flex: 1,
+    alignItems: 'center' as const,
+    gap: 2,
+  },
+  metricDivider: {
+    width: 1,
+    height: 28,
+    backgroundColor: theme.colors.borderSubtle,
+  },
   warning: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Space.sm,
-    backgroundColor: Brand.amberSoft,
-    borderRadius: Radius.md,
-    padding: Space.md,
-    marginTop: Space.md,
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: theme.spacing.sm,
+    backgroundColor: theme.colors.statusWarningBg,
+    borderWidth: 1,
+    borderColor: theme.colors.statusWarningBorder,
+    borderRadius: theme.radii.md,
+    padding: theme.spacing.md,
+    marginTop: theme.spacing.md,
   },
-  warningText: { flex: 1, fontSize: 11, color: Brand.amber, lineHeight: 16 },
-  warningAction: { fontSize: 11, fontWeight: '700', color: Brand.amber },
+  warningText: {
+    flex: 1,
+  },
   addressRow: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: Space.sm,
-    marginTop: Space.md,
+    flexDirection: 'row' as const,
+    alignItems: 'flex-start' as const,
+    gap: theme.spacing.sm,
+    marginTop: theme.spacing.md,
   },
-  address: { flex: 1, fontSize: 12.5, color: Brand.text, lineHeight: 18 },
-  steps: { flexDirection: 'row', alignItems: 'center', marginTop: Space.lg },
-  step: { flexDirection: 'row', alignItems: 'center', gap: 5, flex: 1 },
+  address: {
+    flex: 1,
+  },
+  steps: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    marginTop: theme.spacing.lg,
+  },
+  step: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: 4,
+    flex: 1,
+  },
   stepDot: {
     width: 14,
     height: 14,
     borderRadius: 7,
     borderWidth: 1.5,
-    borderColor: Brand.border,
-    alignItems: 'center',
-    justifyContent: 'center',
+    borderColor: theme.colors.borderInput,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
   },
-  stepDotDone: { backgroundColor: Brand.primary, borderColor: Brand.primary },
-  stepDotActive: { borderColor: Brand.primary, backgroundColor: Brand.white },
-  stepLabel: { fontSize: 10.5, fontWeight: '600', color: Brand.textMuted },
-  stepLabelActive: { color: Brand.text },
-  stepLine: { flex: 1, height: 2, backgroundColor: Brand.divider, marginLeft: 2 },
-  stepLineDone: { backgroundColor: Brand.primary },
-  actionsWrap: { marginTop: Space.lg },
+  stepDotDone: {
+    backgroundColor: theme.colors.actionPrimaryBg,
+    borderColor: theme.colors.actionPrimaryBg,
+  },
+  stepDotActive: {
+    borderColor: theme.colors.actionPrimaryBg,
+    backgroundColor: theme.colors.bgSurface,
+  },
+  stepLine: {
+    flex: 1,
+    height: 2,
+    backgroundColor: theme.colors.borderSubtle,
+    marginLeft: 2,
+  },
+  stepLineDone: {
+    backgroundColor: theme.colors.actionPrimaryBg,
+  },
+  actionsWrap: {
+    marginTop: theme.spacing.lg,
+  },
   nearby: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 5,
-    marginTop: Space.md,
-    paddingVertical: 6,
-    borderRadius: Radius.pill,
-    backgroundColor: Brand.greenSoft,
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+    gap: theme.spacing.xs,
+    marginTop: theme.spacing.md,
+    paddingVertical: theme.spacing.xs,
+    borderRadius: theme.radii.pill,
+    backgroundColor: theme.colors.statusSuccessBg,
   },
-  nearbyText: { fontSize: 11.5, fontWeight: '700', color: Brand.green },
-  cta: { marginTop: Space.md, minHeight: 52 },
-  hiddenDetails: { pointerEvents: 'none' },
-  pressed: { opacity: 0.75 },
+  cta: {
+    marginTop: theme.spacing.md,
+  },
+  hiddenDetails: {
+    pointerEvents: 'none' as const,
+  },
+  pressed: {
+    opacity: 0.75,
+  },
 });

@@ -1,55 +1,48 @@
 import { useCallback, useMemo, useState } from 'react';
-import { Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { FlatList, Pressable, RefreshControl, View } from 'react-native';
 import { useFocusEffect, useRouter } from 'expo-router';
+import { Ionicons, type IconName } from '@/components/ui/icon';
 import { ScreenHeader } from '@/components/ui/screen-header';
 import { EmptyState, ErrorState, LoadingState } from '@/components/ui/state';
-import { Ionicons, type IconName } from '@/components/ui/icon';
-import { Brand, Radius, ScreenPadding, Space, Type } from '@/constants/brand';
+import { Surface } from '@/components/ui/surface';
+import { AppText } from '@/components/ui/text';
 import { useMechanicAlerts } from '@/features/notifications/mechanic-alerts';
 import {
   listMyNotifications,
   markAllNotificationsRead,
   type AppNotification,
 } from '@/features/notifications/service';
+import { useAppTheme, useThemedStyles, type AppTheme, type SemanticTone } from '@/theme';
 import { formatDateTime } from '@/utils/format';
 
-interface Tone {
+interface NotificationMeta {
   icon: IconName;
-  color: string;
-  background: string;
+  tone: SemanticTone;
 }
 
-function toneFor(type: string): Tone {
+function metaFor(type: string): NotificationMeta {
   if (type === 'new_request') {
-    return { icon: 'flash-outline', color: Brand.primary, background: Brand.primarySoft };
+    return { icon: 'flash-outline', tone: 'info' };
   }
-  if (type === 'payment') {
-    return { icon: 'cash-outline', color: Brand.green, background: Brand.greenSoft };
-  }
-  if (type === 'assignment_requested') {
-    return { icon: 'hourglass-outline', color: Brand.amber, background: Brand.amberSoft };
-  }
-  if (type === 'assignment_confirmed') {
-    return {
-      icon: 'checkmark-circle-outline',
-      color: Brand.green,
-      background: Brand.greenSoft,
-    };
-  }
-  if (type === 'assignment_expired') {
-    return { icon: 'time-outline', color: Brand.amber, background: Brand.amberSoft };
+  if (type === 'payment' || type === 'assignment_confirmed' || type === 'quote_approved') {
+    return { icon: 'checkmark-circle-outline', tone: 'success' };
   }
   if (
-    type === 'assignment_rejected' ||
-    type === 'assignment_cancelled'
+    type === 'assignment_requested' ||
+    type === 'assignment_expired' ||
+    type === 'quote_submitted' ||
+    type === 'quote_revision_requested' ||
+    type === 'quote_addon_requested'
   ) {
-    return { icon: 'close-circle-outline', color: Brand.red, background: Brand.redSoft };
+    return { icon: 'time-outline', tone: 'warning' };
   }
-  return {
-    icon: 'notifications-outline',
-    color: Brand.textSecondary,
-    background: Brand.background,
-  };
+  if (type === 'assignment_rejected' || type === 'assignment_cancelled') {
+    return { icon: 'close-circle-outline', tone: 'danger' };
+  }
+  if (type === 'quote_callout_only' || type === 'quote_withdrawn') {
+    return { icon: 'receipt-outline', tone: 'neutral' };
+  }
+  return { icon: 'notifications-outline', tone: 'neutral' };
 }
 
 function dayKey(iso: string): string {
@@ -64,7 +57,11 @@ function dayLabel(iso: string): string {
   yesterday.setDate(today.getDate() - 1);
   if (dayKey(iso) === dayKey(today.toISOString())) return 'Hari ini';
   if (dayKey(iso) === dayKey(yesterday.toISOString())) return 'Kemarin';
-  return d.toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' });
+  return d.toLocaleDateString('id-ID', {
+    day: 'numeric',
+    month: 'long',
+    year: 'numeric',
+  });
 }
 
 interface DayGroup {
@@ -76,6 +73,9 @@ interface DayGroup {
 export default function MechanicNotificationsScreen() {
   const router = useRouter();
   const { refresh } = useMechanicAlerts();
+  const { theme } = useAppTheme();
+  const styles = useThemedStyles(createStyles);
+
   const [items, setItems] = useState<AppNotification[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -86,11 +86,12 @@ export default function MechanicNotificationsScreen() {
       const rows = await listMyNotifications();
       setItems(rows);
       setError(false);
-      // Tandai sudah dibaca saat layar dibuka; kegagalan tidak mengganggu tampilan.
       if (rows.some((row) => !row.is_read)) {
         markAllNotificationsRead()
           .then(() => {
-            setItems((current) => current.map((row) => ({ ...row, is_read: true })));
+            setItems((current) =>
+              current.map((row) => ({ ...row, is_read: true })),
+            );
             return refresh();
           })
           .catch(() => {});
@@ -105,7 +106,7 @@ export default function MechanicNotificationsScreen() {
 
   useFocusEffect(
     useCallback(() => {
-      load();
+      void load();
     }, [load]),
   );
 
@@ -125,8 +126,6 @@ export default function MechanicNotificationsScreen() {
 
   const openNotification = (item: AppNotification) => {
     if (item.related_entity_type === 'service_request' && item.related_entity_id) {
-      // Notifikasi request baru membuka detail request; sisanya (pengajuan,
-      // konfirmasi, pembayaran) membuka detail order aktif.
       if (item.type === 'new_request') {
         router.push({
           pathname: '/(mechanic)/request/[id]',
@@ -141,125 +140,163 @@ export default function MechanicNotificationsScreen() {
     }
   };
 
+  const emptyContent = error ? (
+    <ErrorState onRetry={() => void load()} />
+  ) : (
+    <EmptyState
+      icon="notifications-outline"
+      message="Belum ada notifikasi"
+      hint="Saat ada request baru atau pembaruan estimasi, pemberitahuannya muncul di sini."
+    />
+  );
+
   return (
     <View style={styles.screen}>
-      <ScreenHeader title="Notifikasi" subtitle="Request baru & info terbaru" />
+      <ScreenHeader
+        title="Notifikasi"
+        subtitle="Request baru & info terbaru"
+      />
 
       {loading ? (
         <LoadingState message="Memuat notifikasi..." />
       ) : (
-        <ScrollView
+        <FlatList
+          data={error ? [] : groups}
+          keyExtractor={(group) => group.key}
           contentContainerStyle={styles.content}
+          showsVerticalScrollIndicator={false}
+          ListEmptyComponent={emptyContent}
           refreshControl={
             <RefreshControl
               refreshing={refreshing}
               onRefresh={() => {
                 setRefreshing(true);
-                load();
+                void load();
               }}
-              tintColor={Brand.primary}
-              colors={[Brand.primary]}
+              tintColor={theme.colors.actionPrimaryBg}
+              colors={[theme.colors.actionPrimaryBg]}
             />
           }
-        >
-          {error ? (
-            <ErrorState onRetry={load} />
-          ) : items.length === 0 ? (
-            <EmptyState
-              icon="notifications-outline"
-              message="Belum ada notifikasi"
-              hint="Saat ada request baru di sekitarmu, pemberitahuannya muncul di sini."
-            />
-          ) : (
-            groups.map((group) => (
-              <View key={group.key} style={styles.group}>
-                <Text style={styles.groupLabel}>{group.label}</Text>
-                <View style={styles.inbox}>
-                  {group.items.map((item, index) => {
-                    const tone = toneFor(item.type);
-                    const actionable =
-                      item.related_entity_type === 'service_request' &&
-                      item.related_entity_id != null;
-                    return (
-                      <Pressable
-                        key={item.id}
-                        accessibilityRole={actionable ? 'button' : undefined}
-                        disabled={!actionable}
-                        onPress={() => openNotification(item)}
-                        style={({ pressed }) => [
-                          styles.row,
-                          index > 0 && styles.rowBorder,
-                          !item.is_read && styles.rowUnread,
-                          pressed && actionable && styles.pressed,
-                        ]}
+          renderItem={({ item: group }) => (
+            <View style={styles.group}>
+              <AppText variant="overline" tone="muted" style={styles.groupLabel}>
+                {group.label}
+              </AppText>
+              <Surface variant="default" padding="none" style={styles.inbox}>
+                {group.items.map((item, index) => {
+                  const meta = metaFor(item.type);
+                  const palette = theme.tones[meta.tone];
+                  const actionable =
+                    item.related_entity_type === 'service_request' &&
+                    item.related_entity_id != null;
+                  return (
+                    <Pressable
+                      key={item.id}
+                      accessibilityRole={actionable ? 'button' : undefined}
+                      disabled={!actionable}
+                      onPress={() => openNotification(item)}
+                      style={({ pressed }) => [
+                        styles.row,
+                        index > 0 && styles.rowBorder,
+                        !item.is_read && styles.rowUnread,
+                        pressed && actionable && styles.pressed,
+                      ]}
+                    >
+                      <View
+                        style={[styles.iconBox, { backgroundColor: palette.bg }]}
                       >
-                        <View style={[styles.iconBox, { backgroundColor: tone.background }]}>
-                          <Ionicons name={tone.icon} size={17} color={tone.color} />
-                        </View>
-                        <View style={styles.copy}>
-                          <Text style={styles.title}>{item.title}</Text>
-                          {item.body ? (
-                            <Text style={styles.body} numberOfLines={3}>
-                              {item.body}
-                            </Text>
-                          ) : null}
-                          <Text style={styles.time}>{formatDateTime(item.created_at)}</Text>
-                        </View>
-                        {!item.is_read ? (
-                          <View style={styles.unreadDot} />
-                        ) : actionable ? (
-                          <Ionicons name="chevron-forward" size={15} color={Brand.textMuted} />
+                        <Ionicons
+                          name={meta.icon}
+                          size={18}
+                          color={palette.fg}
+                        />
+                      </View>
+                      <View style={styles.copy}>
+                        <AppText variant="bodyStrong">{item.title}</AppText>
+                        {item.body ? (
+                          <AppText
+                            variant="caption"
+                            tone="secondary"
+                            numberOfLines={3}
+                          >
+                            {item.body}
+                          </AppText>
                         ) : null}
-                      </Pressable>
-                    );
-                  })}
-                </View>
-              </View>
-            ))
+                        <AppText variant="caption" tone="muted">
+                          {formatDateTime(item.created_at)}
+                        </AppText>
+                      </View>
+                      {!item.is_read ? (
+                        <View style={styles.unreadDot} />
+                      ) : actionable ? (
+                        <Ionicons
+                          name="chevron-forward"
+                          size={16}
+                          color={theme.colors.textMuted}
+                        />
+                      ) : null}
+                    </Pressable>
+                  );
+                })}
+              </Surface>
+            </View>
           )}
-        </ScrollView>
+        />
       )}
     </View>
   );
 }
 
-const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: Brand.background },
-  content: { padding: ScreenPadding, paddingBottom: Space.xxxl },
-  group: { marginBottom: Space.xl },
-  groupLabel: { ...Type.micro, color: Brand.textMuted, marginBottom: Space.sm },
+const createStyles = (theme: AppTheme) => ({
+  screen: {
+    flex: 1,
+    backgroundColor: theme.colors.bgCanvas,
+  },
+  content: {
+    padding: theme.spacing.screenPadding,
+    paddingBottom: theme.spacing.xxxl,
+  },
+  group: {
+    marginBottom: theme.spacing.lg,
+  },
+  groupLabel: {
+    marginBottom: theme.spacing.sm,
+  },
   inbox: {
-    backgroundColor: Brand.surface,
-    borderRadius: Radius.lg,
-    borderWidth: 1,
-    borderColor: Brand.border,
-    overflow: 'hidden',
+    overflow: 'hidden' as const,
   },
   row: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: Space.md,
-    padding: Space.md,
+    flexDirection: 'row' as const,
+    alignItems: 'flex-start' as const,
+    gap: theme.spacing.md,
+    padding: theme.spacing.md,
   },
-  rowBorder: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: Brand.divider },
-  rowUnread: { backgroundColor: Brand.primarySoft },
-  pressed: { opacity: 0.75 },
+  rowBorder: {
+    borderTopWidth: 1,
+    borderTopColor: theme.colors.borderSubtle,
+  },
+  rowUnread: {
+    backgroundColor: theme.colors.statusInfoBg,
+  },
+  pressed: {
+    opacity: 0.78,
+  },
   iconBox: {
-    width: 36,
-    height: 36,
-    borderRadius: Radius.sm,
-    alignItems: 'center',
-    justifyContent: 'center',
+    width: 38,
+    height: 38,
+    borderRadius: theme.radii.sm,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
   },
-  copy: { flex: 1 },
-  title: { ...Type.bodyStrong, color: Brand.text, fontWeight: '700' },
-  body: { ...Type.meta, color: Brand.textSecondary, marginTop: 2, lineHeight: 17 },
-  time: { ...Type.meta, color: Brand.textMuted, marginTop: 6, fontSize: 10 },
+  copy: {
+    flex: 1,
+    gap: 2,
+  },
   unreadDot: {
     width: 8,
     height: 8,
     borderRadius: 4,
-    backgroundColor: Brand.primary,
+    backgroundColor: theme.colors.actionPrimaryBg,
     marginTop: 6,
   },
 });

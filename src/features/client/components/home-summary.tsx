@@ -1,6 +1,7 @@
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, View } from 'react-native';
 import { Ionicons, type IconName } from '@/components/ui/icon';
-import { Brand, Radius, Space, Tabular, Type } from '@/constants/brand';
+import { AppText } from '@/components/ui/text';
+import { useAppTheme, useThemedStyles, type AppTheme } from '@/theme';
 
 interface HomeSummaryProps {
   activeOrders: number;
@@ -10,8 +11,7 @@ interface HomeSummaryProps {
 }
 
 /**
- * Ringkasan aktivitas client — panel yang sama perannya dengan kartu performa
- * di Beranda montir: satu permukaan, angka nyata, dan tautan ke rincian.
+ * Ringkasan aktivitas client dalam satu kartu tenang dengan `tabular-nums`.
  */
 export function HomeSummary({
   activeOrders,
@@ -19,21 +19,28 @@ export function HomeSummary({
   onlineMechanics,
   onPressOrders,
 }: HomeSummaryProps) {
+  const { theme } = useAppTheme();
+  const styles = useThemedStyles(createStyles);
+
   return (
     <Pressable
       accessibilityRole="button"
       accessibilityLabel="Lihat pesanan saya"
       onPress={onPressOrders}
-      style={({ pressed }) => [styles.card, pressed && styles.pressed]}
+      style={({ pressed }) => [styles.card, theme.elevation.card, pressed && styles.pressed]}
     >
       <View style={styles.topRow}>
         <View style={styles.labelRow}>
           <View style={styles.dot} />
-          <Text style={styles.label}>Ringkasan aktivitas</Text>
+          <AppText variant="label" tone="secondary">
+            Ringkasan aktivitas
+          </AppText>
         </View>
         <View style={styles.link}>
-          <Text style={styles.linkText}>Pesanan</Text>
-          <Ionicons name="arrow-forward" size={14} color={Brand.primary} />
+          <AppText variant="label" tone="info">
+            Pesanan
+          </AppText>
+          <Ionicons name="arrow-forward" size={14} color={theme.colors.statusInfoFg} />
         </View>
       </View>
 
@@ -49,44 +56,75 @@ export function HomeSummary({
 }
 
 function Stat({ icon, value, label }: { icon: IconName; value: number; label: string }) {
+  const { theme } = useAppTheme();
+  const styles = useThemedStyles(createStyles);
+
   return (
     <View style={styles.stat}>
       <View style={styles.statIcon}>
-        <Ionicons name={icon} size={15} color={Brand.textMuted} />
+        <Ionicons name={icon} size={16} color={theme.colors.textMuted} />
       </View>
-      <Text style={[styles.statValue, Tabular]}>{value}</Text>
-      <Text style={styles.statLabel}>{label}</Text>
+      <AppText variant="h2" style={theme.tabularNums}>
+        {value}
+      </AppText>
+      <AppText variant="caption" tone="muted">
+        {label}
+      </AppText>
     </View>
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (theme: AppTheme) => ({
   card: {
-    backgroundColor: Brand.surface,
-    borderRadius: Radius.lg,
-    padding: Space.lg,
-    marginTop: Space.md,
+    backgroundColor: theme.colors.bgSurface,
+    borderRadius: theme.radii.lg,
+    borderCurve: theme.components.card.borderCurve,
+    padding: theme.spacing.lg,
     borderWidth: 1,
-    borderColor: Brand.border,
+    borderColor: theme.colors.borderSubtle,
   },
-  pressed: { opacity: 0.9 },
-  topRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  labelRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  dot: { width: 6, height: 6, borderRadius: 3, backgroundColor: Brand.primary },
-  label: { ...Type.meta, color: Brand.textSecondary, fontWeight: '600' },
-  link: { flexDirection: 'row', alignItems: 'center', gap: 3 },
-  linkText: { ...Type.label, color: Brand.primary, fontWeight: '700' },
+  pressed: { opacity: 0.85 },
+  topRow: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    justifyContent: 'space-between' as const,
+  },
+  labelRow: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: theme.spacing.xs,
+  },
+  dot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: theme.colors.actionPrimaryAltBg,
+  },
+  link: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: theme.spacing.xxs,
+  },
   statsRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginTop: Space.lg,
-    paddingTop: Space.md,
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    marginTop: theme.spacing.lg,
+    paddingTop: theme.spacing.md,
     borderTopWidth: 1,
-    borderTopColor: Brand.divider,
+    borderTopColor: theme.colors.borderSubtle,
   },
-  stat: { flex: 1, alignItems: 'center' },
-  statIcon: { height: 18, justifyContent: 'center' },
-  statValue: { ...Type.h2, color: Brand.text, marginTop: 2 },
-  statLabel: { ...Type.meta, color: Brand.textMuted, marginTop: 1, fontSize: 10 },
-  divider: { width: 1, height: 34, backgroundColor: Brand.divider },
+  stat: {
+    flex: 1,
+    alignItems: 'center' as const,
+    gap: theme.spacing.xxs,
+  },
+  statIcon: {
+    height: 18,
+    justifyContent: 'center' as const,
+  },
+  divider: {
+    width: 1,
+    height: 36,
+    backgroundColor: theme.colors.borderSubtle,
+  },
 });

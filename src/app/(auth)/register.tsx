@@ -1,12 +1,14 @@
-import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useState } from 'react';
+import { Pressable, View } from 'react-native';
 import { Link, useLocalSearchParams, useRouter } from 'expo-router';
 import { Button } from '@/components/ui/button';
 import { Ionicons, type IconName } from '@/components/ui/icon';
+import { AppText } from '@/components/ui/text';
+import { useToast } from '@/components/ui/toast';
 import { AuthField } from '@/features/auth/components/auth-field';
 import { AuthScreen } from '@/features/auth/components/auth-screen';
 import { getAuthErrorMessage, useAuth, type UserRole } from '@/features/auth/service';
-import { Brand, Radius, Space, Type } from '@/constants/brand';
+import { useAppTheme, useThemedStyles, type AppTheme } from '@/theme';
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -31,6 +33,9 @@ const ROLE_OPTIONS: {
 ];
 
 export default function RegisterScreen() {
+  const { theme } = useAppTheme();
+  const styles = useThemedStyles(createStyles);
+  const { showToast } = useToast();
   const params = useLocalSearchParams<{ role?: string }>();
   const initialRole: UserRole =
     typeof params.role === 'string' && params.role.toUpperCase() === 'MONTIR' ? 'MONTIR' : 'CLIENT';
@@ -41,30 +46,31 @@ export default function RegisterScreen() {
   const [phone, setPhone] = useState('');
   const [identityNumber, setIdentityNumber] = useState('');
   const [role, setRole] = useState<UserRole>(initialRole);
+  const [submitted, setSubmitted] = useState(false);
   const [loading, setLoading] = useState(false);
   const { register } = useAuth();
   const router = useRouter();
 
+  const nameError = !name.trim() ? 'Nama lengkap wajib diisi.' : null;
+  const emailError = !EMAIL_RE.test(email.trim()) ? 'Masukkan alamat email yang valid.' : null;
+  const identityError = !/^\d{16}$/.test(identityNumber)
+    ? 'Nomor identitas (KTP) wajib diisi 16 digit angka.'
+    : null;
+  const passwordError = password.length < 6 ? 'Kata sandi minimal 6 karakter.' : null;
+
   const handleRegister = async () => {
-    if (!name.trim()) {
-      Alert.alert('Gagal', 'Nama lengkap wajib diisi.');
+    setSubmitted(true);
+    if (nameError || emailError || identityError || passwordError) {
+      showToast({
+        tone: 'warning',
+        title: 'Periksa formulir',
+        message: nameError ?? emailError ?? identityError ?? passwordError ?? 'Lengkapi kolom wajib.',
+      });
       return;
     }
-    if (!EMAIL_RE.test(email.trim())) {
-      Alert.alert('Gagal', 'Email tidak valid.');
-      return;
-    }
-    if (!/^\d{16}$/.test(identityNumber)) {
-      Alert.alert('Gagal', 'Nomor identitas (KTP) wajib diisi 16 digit angka.');
-      return;
-    }
-    if (password.length < 6) {
-      Alert.alert('Gagal', 'Kata sandi minimal 6 karakter.');
-      return;
-    }
+
     setLoading(true);
     try {
-      // Tersimpan ke Supabase Auth + tabel profiles (via trigger handle_new_user).
       const { user, needsConfirmation } = await register({
         name: name.trim(),
         email: email.trim().toLowerCase(),
@@ -74,19 +80,25 @@ export default function RegisterScreen() {
         role,
       });
       if (needsConfirmation || !user) {
-        Alert.alert(
-          'Cek Email',
-          'Akun dibuat. Verifikasi email kamu terlebih dahulu, lalu silakan login.',
-        );
+        showToast({
+          tone: 'info',
+          title: 'Cek email kamu',
+          message: 'Akun dibuat. Verifikasi email terlebih dahulu lalu login.',
+        });
       } else {
-        Alert.alert(
-          'Berhasil',
-          `Akun ${user.role === 'MONTIR' ? 'Montir' : 'Client'} berhasil dibuat. Silakan login.`,
-        );
+        showToast({
+          tone: 'success',
+          title: 'Pendaftaran berhasil',
+          message: `Akun ${user.role === 'MONTIR' ? 'Montir' : 'Client'} siap digunakan.`,
+        });
       }
       router.replace('/(auth)/login');
     } catch (error) {
-      Alert.alert('Gagal', getAuthErrorMessage(error, 'Terjadi kesalahan saat pendaftaran.'));
+      showToast({
+        tone: 'danger',
+        title: 'Gagal mendaftar',
+        message: getAuthErrorMessage(error, 'Terjadi kesalahan saat pendaftaran.'),
+      });
     } finally {
       setLoading(false);
     }
@@ -98,60 +110,68 @@ export default function RegisterScreen() {
       title="Buat akun baru"
       subtitle="Pilih peranmu, lalu lengkapi data untuk mulai menggunakan MontirGo."
     >
-      <Text style={styles.label}>Daftar sebagai</Text>
-      <View style={styles.roleRow}>
-        {ROLE_OPTIONS.map((option) => {
-          const active = role === option.key;
-          return (
-            <Pressable
-              key={option.key}
-              accessibilityRole="button"
-              accessibilityState={{ selected: active }}
-              accessibilityLabel={`Daftar sebagai ${option.title}`}
-              onPress={() => setRole(option.key)}
-              style={({ pressed }) => [
-                styles.roleCard,
-                active && styles.roleCardActive,
-                pressed && styles.pressed,
-              ]}
-            >
-              <View style={[styles.roleIcon, active && styles.roleIconActive]}>
-                <Ionicons
-                  name={option.icon}
-                  size={18}
-                  color={active ? Brand.volt : Brand.textSecondary}
-                />
-              </View>
-              {active ? (
-                <Ionicons
-                  name="checkmark-circle"
-                  size={16}
-                  color={Brand.primary}
-                  style={styles.roleCheck}
-                />
-              ) : null}
-              <Text style={[styles.roleTitle, active && styles.roleTitleActive]}>
-                {option.title}
-              </Text>
-              <Text style={styles.roleDescription}>{option.description}</Text>
-            </Pressable>
-          );
-        })}
+      <View style={styles.block}>
+        <AppText variant="label">Daftar sebagai</AppText>
+        <View style={styles.roleRow}>
+          {ROLE_OPTIONS.map((option) => {
+            const active = role === option.key;
+            return (
+              <Pressable
+                key={option.key}
+                accessibilityRole="button"
+                accessibilityState={{ selected: active }}
+                accessibilityLabel={`Daftar sebagai ${option.title}`}
+                onPress={() => setRole(option.key)}
+                style={({ pressed }) => [
+                  styles.roleCard,
+                  active && styles.roleCardActive,
+                  pressed && styles.pressed,
+                ]}
+              >
+                <View style={[styles.roleIcon, active && styles.roleIconActive]}>
+                  <Ionicons
+                    name={option.icon}
+                    size={18}
+                    color={
+                      active ? theme.colors.actionPrimaryFg : theme.colors.textSecondary
+                    }
+                  />
+                </View>
+                {active ? (
+                  <Ionicons
+                    name="checkmark-circle"
+                    size={18}
+                    color={theme.colors.actionPrimaryAltBg}
+                    style={styles.roleCheck}
+                  />
+                ) : null}
+                <AppText variant="label">{option.title}</AppText>
+                <AppText variant="caption" tone="secondary">
+                  {option.description}
+                </AppText>
+              </Pressable>
+            );
+          })}
+        </View>
       </View>
 
       <AuthField
         label="Nama lengkap"
         icon="person-outline"
+        required
         placeholder="Contoh: Budi Santoso"
         value={name}
         onChangeText={setName}
         autoComplete="name"
         textContentType="name"
         returnKeyType="next"
+        error={nameError}
+        showError={submitted}
       />
       <AuthField
         label="Email"
         icon="mail-outline"
+        required
         placeholder="nama@email.com"
         value={email}
         onChangeText={setEmail}
@@ -160,6 +180,8 @@ export default function RegisterScreen() {
         keyboardType="email-address"
         textContentType="emailAddress"
         returnKeyType="next"
+        error={emailError}
+        showError={submitted}
       />
       <AuthField
         label="Nomor WhatsApp (opsional)"
@@ -175,6 +197,7 @@ export default function RegisterScreen() {
       <AuthField
         label="Nomor identitas (KTP)"
         icon="card-outline"
+        required
         placeholder="16 digit sesuai KTP"
         value={identityNumber}
         onChangeText={(text) => setIdentityNumber(text.replace(/\D/g, '').slice(0, 16))}
@@ -182,10 +205,13 @@ export default function RegisterScreen() {
         keyboardType="number-pad"
         maxLength={16}
         returnKeyType="next"
+        error={identityError}
+        showError={submitted}
       />
       <AuthField
         label="Kata sandi"
         icon="lock-closed-outline"
+        required
         placeholder="Minimal 6 karakter"
         value={password}
         onChangeText={setPassword}
@@ -194,19 +220,23 @@ export default function RegisterScreen() {
         autoComplete="new-password"
         textContentType="newPassword"
         returnKeyType="done"
-        onSubmitEditing={handleRegister}
+        error={passwordError}
+        showError={submitted}
+        onSubmitEditing={() => void handleRegister()}
       />
 
       <Button
         label="Daftar"
         icon="person-add-outline"
+        size="cta"
         loading={loading}
-        onPress={handleRegister}
-        style={styles.submit}
+        onPress={() => void handleRegister()}
       />
 
       <View style={styles.footer}>
-        <Text style={styles.footerText}>Sudah punya akun?</Text>
+        <AppText variant="body" tone="secondary">
+          Sudah punya akun?
+        </AppText>
         <Link href="/(auth)/login" style={styles.link}>
           Masuk
         </Link>
@@ -215,56 +245,61 @@ export default function RegisterScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  label: { ...Type.label, fontSize: 12.5, fontWeight: '700', color: Brand.text, marginBottom: Space.sm },
-  roleRow: { flexDirection: 'row', gap: Space.sm },
+const createStyles = (theme: AppTheme) => ({
+  block: {
+    gap: theme.spacing.sm,
+  },
+  roleRow: {
+    flexDirection: 'row' as const,
+    gap: theme.spacing.sm,
+  },
   roleCard: {
     flex: 1,
-    padding: Space.md,
-    borderRadius: Radius.md,
-    borderWidth: 1,
-    borderColor: Brand.border,
-    backgroundColor: Brand.background,
+    padding: theme.spacing.md,
+    borderRadius: theme.radii.md,
+    borderWidth: 1.5,
+    borderColor: theme.colors.borderDefault,
+    backgroundColor: theme.colors.bgCanvas,
+    gap: theme.spacing.xs,
   },
-  roleCardActive: { borderColor: Brand.ink, backgroundColor: Brand.surface },
+  roleCardActive: {
+    borderColor: theme.colors.borderFocus,
+    backgroundColor: theme.colors.statusInfoBg,
+  },
   roleIcon: {
-    width: 34,
-    height: 34,
-    borderRadius: Radius.sm,
-    backgroundColor: Brand.surface,
+    width: 36,
+    height: 36,
+    borderRadius: theme.radii.sm,
+    backgroundColor: theme.colors.bgSurface,
     borderWidth: 1,
-    borderColor: Brand.border,
-    alignItems: 'center',
-    justifyContent: 'center',
+    borderColor: theme.colors.borderSubtle,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
   },
-  roleIconActive: { backgroundColor: Brand.ink, borderColor: Brand.ink },
-  roleCheck: { position: 'absolute', top: Space.sm, right: Space.sm },
-  roleTitle: {
-    ...Type.label,
-    fontSize: 13,
-    fontWeight: '700',
-    color: Brand.text,
-    marginTop: Space.sm,
+  roleIconActive: {
+    backgroundColor: theme.colors.actionPrimaryAltBg,
+    borderColor: theme.colors.actionPrimaryAltBg,
   },
-  roleTitleActive: { color: Brand.text },
-  roleDescription: {
-    fontSize: 10.5,
-    lineHeight: 14,
-    color: Brand.textSecondary,
-    marginTop: 2,
+  roleCheck: {
+    position: 'absolute' as const,
+    top: theme.spacing.sm,
+    right: theme.spacing.sm,
   },
   pressed: { opacity: 0.8 },
-  submit: { marginTop: Space.xl },
   footer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 6,
-    marginTop: Space.xxl,
-    paddingTop: Space.lg,
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+    gap: theme.spacing.xs,
+    marginTop: theme.spacing.md,
+    paddingTop: theme.spacing.lg,
     borderTopWidth: 1,
-    borderTopColor: Brand.divider,
+    borderTopColor: theme.colors.borderSubtle,
   },
-  footerText: { fontSize: 12.5, color: Brand.textSecondary },
-  link: { fontSize: 12.5, fontWeight: '700', color: Brand.primary },
+  link: {
+    fontFamily: theme.fontFamily.bold,
+    fontSize: 14,
+    lineHeight: 20,
+    color: theme.colors.actionPrimaryAltBg,
+  },
 });
