@@ -21,7 +21,7 @@ jobs:
       - run: npx tsc --noEmit
       - run: npm run lint
       - run: deno check supabase/functions/analyze-request/index.ts supabase/functions/ai-assistant/index.ts supabase/functions/xendit-create-payment/index.ts supabase/functions/xendit-sync-payment/index.ts supabase/functions/xendit-request-withdrawal/index.ts supabase/functions/xendit-sync-withdrawal/index.ts supabase/functions/confirm-cash-payment/index.ts supabase/functions/xendit-webhook/index.ts supabase/functions/xendit-payout-webhook/index.ts supabase/functions/send-push-notification/index.ts
-      - run: deno test supabase/functions/tests/xendit_and_ai_test.ts
+      - run: deno test --allow-net --allow-env supabase/functions/tests/
 
   supabase-integration:
     runs-on: ubuntu-latest
