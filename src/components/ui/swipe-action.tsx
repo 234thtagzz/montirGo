@@ -90,7 +90,7 @@ export function SwipeAction({
 
   const panGesture = usePanGesture({
     enabled: !isLocked,
-    activeOffsetX: [12, 999],
+    activeOffsetX: [-12, 12],
     failOffsetY: [-18, 18],
     onBegin: () => {
       startX.set(translateX.get());

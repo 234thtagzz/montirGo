@@ -1,5 +1,4 @@
 import { File } from 'expo-file-system';
-import { ImageManipulator, SaveFormat } from 'expo-image-manipulator';
 import * as ImagePicker from 'expo-image-picker';
 import { Platform } from 'react-native';
 import {
@@ -34,6 +33,7 @@ async function compressToJpeg(
   maxWidth: number,
   compress: number,
 ): Promise<{ uri: string; bytes: ArrayBuffer }> {
+  const { ImageManipulator, SaveFormat } = await import('expo-image-manipulator');
   const ctx = ImageManipulator.manipulate(uri, { maxWidth });
   const rendered = await ctx.renderAsync();
   const saved = await rendered.saveAsync({

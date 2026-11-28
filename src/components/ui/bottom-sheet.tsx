@@ -105,7 +105,7 @@ export function BottomSheet({
 
   const panGesture = usePanGesture({
     enabled: dismissible && visible,
-    activeOffsetY: [8, 999],
+    activeOffsetY: [-999, 8],
     failOffsetX: [-24, 24],
     onUpdate: (event) => {
       translateY.set(Math.max(0, event.translationY));
