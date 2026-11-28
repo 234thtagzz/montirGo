@@ -9,12 +9,22 @@
       "distribution": "internal",
       "android": {
         "buildType": "apk"
+      },
+      "env": {
+        "EXPO_PUBLIC_SUPABASE_URL": "https://biifjpuvbwdwrstkatem.supabase.co",
+        "EXPO_PUBLIC_SUPABASE_ANON_KEY": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJpaWZqcHV2Yndkd3JzdGthdGVtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTE5ODc5OTMsImV4cCI6MjEwNzU2Mzk5M30.iK-arFSaBeSIpy4KYeyw6vIJty-LXpOBYY8OZvMce7I",
+        "EXPO_PUBLIC_MAPS_API_KEY": "AIzaSyAH7TKKcQktFOJ_GAXfbCSjZaPJ3i-_jo8"
       }
     },
     "preview": {
       "distribution": "internal",
       "android": {
         "buildType": "apk"
+      },
+      "env": {
+        "EXPO_PUBLIC_SUPABASE_URL": "https://biifjpuvbwdwrstkatem.supabase.co",
+        "EXPO_PUBLIC_SUPABASE_ANON_KEY": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJpaWZqcHV2Yndkd3JzdGthdGVtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTE5ODc5OTMsImV4cCI6MjEwNzU2Mzk5M30.iK-arFSaBeSIpy4KYeyw6vIJty-LXpOBYY8OZvMce7I",
+        "EXPO_PUBLIC_MAPS_API_KEY": "AIzaSyAH7TKKcQktFOJ_GAXfbCSjZaPJ3i-_jo8"
       }
     },
     "production": {
